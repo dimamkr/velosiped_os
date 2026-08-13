@@ -54,7 +54,6 @@ static inline void heap_del(heap_node_t *curr)
 
 static inline heap_node_t *heap_process_first_fit_addr(uint32_t size)
 {
-    BARRIER;
     heap_node_t *n = heap_root;
     n = n->right;
     for (; n != NULL; n = n->right)
@@ -89,29 +88,47 @@ void heap_init()
     heap_add(heap_root, (uint32_t)HEAP_END_BLOCK);
 }
 
-void *malloc(uint32_t value_size)
+void *malloc(uint32_t size)
 {
-    BARRIER;
-    heap_node_t *node = heap_process_first_fit_addr(value_size + sizeof(heap_node_t));
+    heap_node_t *node = heap_process_first_fit_addr(size + sizeof(heap_node_t));
 
-    // konsole_printf("%s%x\n", "MALLOC PTR ", node->start_addr + sizeof(heap_node_t));
     return (void *)(node->start_addr + sizeof(heap_node_t));
+}
+
+void *realloc(void *ptr, uint32_t size)
+{
+    if (ptr == NULL)
+        return malloc(size);
+
+    heap_node_t *node = (heap_node_t*)((byte_t*)ptr - sizeof(heap_node_t));
+
+    if (node->signature != HEAP_MAGIC)
+        PANIC("BAD REALLOC");
+    
+    if (((node->start_addr + sizeof(heap_node_t) + size) < node->right->start_addr))
+    {
+        heap_memory_size_left -= size - node->size;
+        node->size = size;
+    }
+    else
+    {
+        void *new_space = malloc(size);
+        memcpy(new_space, ptr, node->size);
+        free(ptr);
+
+        return new_space;
+    }
+
+    return ptr;
 }
 
 void free(void *ptr)
 {
-    BARRIER;
-    // konsole_printf("%s%x\n", "FREE PTR ", ptr);
-    for (heap_node_t *n = heap_root; n != NULL; n = n->right)
-    {
-        // konsole_printf("%s%x\n", "CHECK PTR ", n->start_addr + sizeof(heap_node_t));
-        if ((uint32_t)ptr == n->start_addr + sizeof(heap_node_t))
-        {
-            heap_memory_size_left += n->size;
-            heap_del(n);
-            return;
-        }
-    }
+    heap_node_t *node = (heap_node_t*)((byte_t*)ptr - sizeof(heap_node_t));
 
-    PANIC("BAD FREE");
+    if (node->signature != HEAP_MAGIC)
+        PANIC("BAD FREE");
+
+    heap_memory_size_left += node->size;
+    heap_del(node);
 }

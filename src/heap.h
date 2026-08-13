@@ -17,6 +17,7 @@ typedef volatile struct _heap_node
 } __attribute__((packed)) heap_node_t;
 
 void *malloc(uint32_t size);
+void *realloc(void *ptr, uint32_t size);
 void free(void *ptr);
 void heap_init();
 
