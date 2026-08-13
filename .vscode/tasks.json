@@ -1,0 +1,57 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-debug",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "build-debug"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "run-qemu",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "run-debug"
+            ],
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "beginsPattern": "^Starting QEMU with GDB server",
+                    "endsPattern": "^✅ QEMU started and port 1234 is open\\. You can now attach GDB\\.$"
+                }
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "kill-qemu",
+            "type": "shell",
+            "command": "kill",
+            "args": [
+                "$(cat /tmp/qemu.pid)"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "debug-setup",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build-debug",
+                "run-qemu"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}

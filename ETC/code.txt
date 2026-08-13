@@ -1,0 +1,2337 @@
+#terminal.c
+#include "konsole.h"
+#include "terminal.h"
+#include "keyboard.h"
+#include "system.h"
+#include "timer.h"
+#include "types.h"
+#include "datetime.h"
+
+static char terminal_input_buff[256];
+static int terminal_input_buff_lenght;
+static bool terminal_EOI_flag;
+
+static inline void terminal_buff_add_symbol(char symbol)
+{
+    terminal_input_buff[terminal_input_buff_lenght] = symbol;
+    terminal_input_buff_lenght++;
+}
+
+// сюда ведет прерывание клавиатуры
+void terminal_read_symbol(char symbol)
+{
+    switch (symbol)
+    {
+    case '\n':
+        terminal_buff_add_symbol(0);
+        terminal_EOI_flag = true;
+        break;
+
+    case '\b':
+        if (terminal_input_buff_lenght > 0)
+        {
+            konsole_putch('\b');
+            terminal_input_buff[--terminal_input_buff_lenght] = 0;
+        }
+        break;
+
+    default:
+        terminal_buff_add_symbol(symbol);
+        konsole_putch(symbol);
+    }
+}
+
+// получает ввод и выводит все символы кроме переноса строки
+static inline void terminal_wait_for_input_line()
+{
+    terminal_input_buff_lenght = 0;
+    terminal_EOI_flag = false;
+
+    // каждое прерывание проверяем флаг
+    while (!terminal_EOI_flag)
+    {
+        asm volatile("hlt");
+    }
+
+    konsole_println("");
+
+    return;
+}
+
+void terminal_print_datetime()
+{
+    uint16_t year;
+    uint8_t month, day, hour, minute, second;
+    system_get_datetime(&year, &month, &day, &hour, &minute, &second);
+    konsole_printf("%d-%d-%d %d:%d:%d",
+                   year, month, day, hour, minute, second);
+}
+
+void terminal_print_time()
+{
+    uint32_t milis_time = timer_get_time();
+    konsole_printf("%d%s%d%s\n", milis_time / 1000, " s ", milis_time % 1000, " ms");
+}
+
+void terminal_handle_command_from_buff()
+{
+    if (strcmp(terminal_input_buff, "help"))
+    {
+        konsole_println("i can not help you");
+    }
+    else if (strcmp(terminal_input_buff, "time"))
+    {
+        terminal_print_time();
+    }
+    else if (strcmp(terminal_input_buff, "clear"))
+    {
+        konsole_clear();
+    }
+    else if (strcmp(terminal_input_buff, "ticks"))
+    {
+        char ticks[10] = {0};
+        uint32_to_string(timer_get_ticks(), ticks);
+        konsole_println(ticks);
+    }
+    else if (strcmp(terminal_input_buff, "datetime"))
+    {
+        terminal_print_datetime();
+        konsole_printf("\n");
+    }
+    else
+    {
+        konsole_println("i can not understand your text");
+    }
+}
+
+void terminal_main_loop()
+{
+    konsole_println("");
+    while (1)
+    {
+        terminal_print_datetime();
+        konsole_print(">");
+
+        terminal_wait_for_input_line();
+
+        terminal_handle_command_from_buff();
+
+        konsole_println("");
+    }
+}
+
+============================================================
+
+#dynamic_array.c
+
+============================================================
+
+#linked_list.c
+#include "linked_list.h"
+
+static inline linked_list_node_t *linked_list_create_node_default(uint32_t value, uint32_t size)
+{
+    linked_list_node_t *n = malloc(size);
+
+    n->value = value;
+    n->right = NULL;
+    n->left = NULL;
+
+    return n;
+}
+
+linked_list_node_t *linked_list_create_root(uint32_t value, uint32_t value_size)
+{
+    return linked_list_create_node_default(value, value_size + sizeof(linked_list_node_t));
+}
+
+linked_list_node_t *linked_list_add(linked_list_node_t *left, uint32_t value, uint32_t value_size)
+{
+    linked_list_node_t *right = left->right;
+
+    linked_list_node_t *new = linked_list_create_node_default(value, value_size + sizeof(linked_list_node_t));
+
+    left->right = new;
+    new->left = left;
+
+    new->right = right;
+    if (right)
+    {
+        right->left = new;
+    }
+
+    return new;
+}
+
+void linked_list_del(linked_list_node_t *curr)
+{
+    linked_list_node_t *left = curr->left;
+    linked_list_node_t *right = curr->right;
+
+    if (left)
+    {
+        left->right = right;
+    }
+    if (right)
+    {
+        right->left = left;
+    }
+
+    free(curr);
+}
+
+============================================================
+
+#konsole.h
+#ifndef KONSOLE_H
+#define KONSOLE_H
+
+#define COLOR_BLACK 0x0
+#define COLOR_BLUE 0x1
+#define COLOR_GREEN 0x2
+#define COLOR_CYAN 0x3
+#define COLOR_RED 0x4
+#define COLOR_MAGENTA 0x5
+#define COLOR_BROWN 0x6
+#define COLOR_LIGHT_GRAY 0x7
+#define COLOR_DARK_GRAY 0x8
+#define COLOR_LIGHT_BLUE 0x9
+#define COLOR_LIGHT_GREEN 0xA
+#define COLOR_LIGHT_CYAN 0xB
+#define COLOR_LIGHT_RED 0xC
+#define COLOR_LIGHT_MAGENTA 0xD
+#define COLOR_YELLOW 0xE
+#define COLOR_WHITE 0xF
+
+#include "types.h"
+
+extern volatile char *const konsole_start;
+extern int const konsole_w;
+extern int const konsole_h;
+extern int const konsole_line_offset;
+
+void konsole_clear();
+void konsole_putch(char ch);
+void konsole_print(const char *text);
+void konsole_println(const char *text);
+void konsole_set_color(uint32_t fg, uint32_t bg);
+void konsole_scroll();
+void konsole_printf(const char *format, ...);
+void konsole_printfln(const char *format, ...);
+
+void konsole_set_preambula_color();
+void konsole_set_good_result_color();
+void konsole_set_bad_result_color();
+void konsole_set_panic_color();
+void konsole_set_base_color();
+
+#endif
+
+============================================================
+
+#linked_list.h
+#ifndef LINKED_LIST
+#define LINKED_LIST
+
+#include "types.h"
+#include "heap.h"
+
+typedef struct _linked_list_node
+{
+    void *value;
+    struct _linked_list_node *left, *right;
+} linked_list_node_t;
+
+linked_list_node_t *linked_list_create_root(uint32_t value, uint32_t value_size);
+
+linked_list_node_t *linked_list_add(linked_list_node_t *left, uint32_t value, uint32_t value_size);
+
+void linked_list_del(linked_list_node_t *curr);
+
+#endif
+
+============================================================
+
+#datetime.h
+#ifndef DATETIME
+#define DATETIME
+
+#include "types.h"
+
+void system_get_datetime(uint16_t *year, uint8_t *month, uint8_t *day,
+                         uint8_t *hour, uint8_t *minute, uint8_t *second);
+
+#endif
+============================================================
+
+#types.h
+#ifndef TYPES
+#define TYPES
+#endif
+
+// Типы данных
+typedef unsigned char byte_t;
+typedef unsigned char uint8_t;
+typedef signed char int8_t;
+typedef unsigned short int uint16_t;
+typedef signed short int int16_t;
+typedef unsigned long int uint32_t;
+typedef signed long int int32_t;
+typedef unsigned long long uint64_t;
+typedef signed long long int64_t;
+
+typedef _Bool bool_t;
+
+#define NULL 0
+#define KB 0x400
+#define MB 0x100000
+#define GB 0x40000000
+
+// #define func_ptr(a, b) (a (*)(b))
+============================================================
+
+#link.ld
+ENTRY(kernel_main)
+
+SECTIONS {
+    . = 0x10000;
+
+    .text : {
+        *(.text.start)
+        *(.text)
+    }
+
+    .rodata : {
+        *(.rodata)
+    }
+
+    .data : {
+        *(.data)
+    }
+
+    .bss : {
+        *(.bss)
+    }
+
+    /DISCARD/ : {
+        *(.comment)
+        *(.note.*)
+    }
+}
+
+============================================================
+
+#dynamic_array.h
+
+============================================================
+
+#gdt_initialiser.c
+#include "gdt_initialiser.h"
+#include "konsole.h"
+#include "system.h"
+
+#pragma GCC optimize("no-optimize-sibling-calls")
+
+// Number of GDT entries
+#define GDT_COUNT 5
+// Number of IDT entries
+#define IDT_COUNT 256
+
+static void gdt_set_gate(int32_t, uint32_t, uint32_t, uint8_t, uint8_t);
+
+gdt_entry_t gdt_entries[GDT_COUNT];
+gdt_ptr_t gdt_ptr;
+
+static void gdt_flush(uint32_t gdt_ptr)
+{
+    asm volatile(
+        "lgdt (%0)\n\t"       // Загружаем новый GDT-дескриптор из памяти
+        "mov $0x10, %%ax\n\t" // 0x10 — селектор сегмента данных в новой GDT
+        "mov %%ax, %%ds\n\t"  // Загружаем сегменты данных
+        "mov %%ax, %%es\n\t"
+        "mov %%ax, %%fs\n\t"
+        "mov %%ax, %%gs\n\t"
+        "mov %%ax, %%ss\n\t"
+        "ljmp $0x08, $1f\n\t" // Дальний прыжок для перезагрузки CS с селектором 0x08 (селектор кода)
+        "1:\n\t"              // Метка, куда прыгаем
+        :
+        : "r"(gdt_ptr)    // Передаём указатель в любой свободный регистр
+        : "eax", "memory" // Регистр eax изменён, память изменена (GDT)
+    );
+}
+
+void gdt_init(void)
+{
+    gdt_ptr.limit = (sizeof(gdt_entry_t) * GDT_COUNT) - 1;
+    gdt_ptr.base = (uint32_t)&gdt_entries;
+
+    // ------------------------------------------------------------------
+    // Инициализация дескрипторов GDT
+    // Каждый дескриптор описывает сегмент: базовый адрес, лимит, права.
+    // Все сегменты используют плоскую модель: база = 0, лимит = 4 ГБ,
+    // но отличаются правами доступа и уровнями привилегий (DPL).
+    // ------------------------------------------------------------------
+
+    // Нулевой дескриптор (обязателен по архитектуре x86).
+    // Селектор 0x00 никогда не должен загружаться в сегментный регистр,
+    // иначе процессор сгенерирует исключение #GP (General Protection Fault).
+    // Все поля равны 0.
+    gdt_set_gate(0, 0, 0, 0, 0);
+
+    // ------------------------------------------------------------------
+    // Сегмент кода ядра (Ring 0)
+    // Индекс в GDT = 1, селектор = 0x08 (0x01 << 3, RPL=0)
+    // Используется для выполнения кода операционной системы.
+    // ------------------------------------------------------------------
+    gdt_set_gate(1,          // номер дескриптора
+                 0,          // база = 0 (линейный адрес начала сегмента)
+                 0xFFFFFFFF, // лимит = 4 ГБ (максимальный размер сегмента)
+                 0x9A,       // байт доступа (access)
+                 0xCF);      // байт гранулярности (granularity)
+
+    /* РАСШИФРОВКА access = 0x9A (1001 1010):
+       - Бит 7 (P)    = 1 → сегмент присутствует в памяти (Present).
+       - Биты 6-5     = 00 → DPL = 0 (привилегированный уровень ядра).
+       - Бит 4 (S)    = 1 → дескриптор сегмента кода/данных (не системный).
+       - Бит 3 (EX)   = 1 → сегмент исполняемый (код).
+       - Бит 2 (DC)   = 0 → сегмент не подчиняющийся (non-conforming):
+                              переход из менее привилегированного кода запрещён.
+       - Бит 1 (RW)   = 1 → сегмент доступен для чтения (чтение данных из сегмента кода разрешено).
+       - Бит 0 (AC)   = 0 → Accessed (устанавливается процессором, изначально 0).
+    */
+
+    /* РАСШИФРОВКА granularity = 0xCF (1100 1111):
+       - Бит 7 (G)    = 1 → гранулярность 4 КБ (лимит умножается на 4096).
+                              Тогда лимит 0xFFFFF * 4096 = 4 ГБ.
+       - Бит 6 (D/B)  = 1 → 32-битный сегмент (используются EIP, ESP и 32-битные операнды по умолчанию).
+       - Бит 5 (L)    = 0 → не 64-битный (для IA-32e не используется).
+       - Бит 4 (AVL)  = 0 → зарезервировано для ОС (игнорируется процессором).
+       - Биты 3-0     = 0xF → старшие 4 бита лимита (дополняют 20-битный лимит).
+    */
+
+    // ------------------------------------------------------------------
+    // Сегмент данных ядра (Ring 0)
+    // Индекс = 2, селектор = 0x10 (0x02 << 3)
+    // Используется для данных, стека, глобальных переменных ядра.
+    // ------------------------------------------------------------------
+    gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
+
+    /* access = 0x92 (1001 0010):
+       - Бит 7 (P)    = 1 → Present.
+       - Биты 6-5     = 00 → DPL = 0 (ядро).
+       - Бит 4 (S)    = 1 → сегмент данных/кода.
+       - Бит 3 (EX)   = 0 → сегмент данных (не исполняемый).
+       - Бит 2 (DC)   = 0 → направление роста вверх (обычный сегмент данных).
+       - Бит 1 (RW)   = 1 → запись разрешена (Read/Write).
+       - Бит 0 (AC)   = 0 → Accessed = 0.
+    */
+
+    // ------------------------------------------------------------------
+    // Сегмент кода пользовательского режима (Ring 3)
+    // Индекс = 3, селектор = 0x1B (0x03 << 3 | 0x03, если RPL=3)
+    // Используется для выполнения приложений в кольце 3.
+    // ------------------------------------------------------------------
+    gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);
+
+    /* access = 0xFA (1111 1010):
+       - Бит 7 (P)    = 1 → Present.
+       - Биты 6-5     = 11 → DPL = 3 (пользовательский режим).
+       - Бит 4 (S)    = 1 → сегмент кода/данных.
+       - Бит 3 (EX)   = 1 → исполняемый (код).
+       - Бит 2 (DC)   = 0 → не подчиняющийся (переход из кольца 3 в это сегмент разрешён только через шлюз).
+       - Бит 1 (RW)   = 1 → чтение разрешено.
+       - Бит 0 (AC)   = 0 → Accessed = 0.
+    */
+
+    // ------------------------------------------------------------------
+    // Сегмент данных пользовательского режима (Ring 3)
+    // Индекс = 4, селектор = 0x23 (0x04 << 3 | 0x03)
+    // Используется для данных, стека пользовательских процессов.
+    // ------------------------------------------------------------------
+    gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
+
+    /* access = 0xF2 (1111 0010):
+       - Бит 7 (P)    = 1 → Present.
+       - Биты 6-5     = 11 → DPL = 3 (пользовательский).
+       - Бит 4 (S)    = 1 → сегмент данных.
+       - Бит 3 (EX)   = 0 → данные.
+       - Бит 2 (DC)   = 0 → рост вверх.
+       - Бит 1 (RW)   = 1 → запись разрешена.
+       - Бит 0 (AC)   = 0 → Accessed = 0.
+    */
+
+    /*
+       Примечание:
+       - Сегменты кода с DPL=3 позволяют пользовательскому коду выполняться,
+         но для переключения из кольца 3 в кольцо 0 (например, для системных вызовов)
+         необходимо использовать шлюзы прерываний (IDT) или инструкции sysenter/sysexit.
+       - Сегменты данных с DPL=3 используются для пользовательских данных и стека.
+       - Селекторы для пользовательского режима будут иметь RPL=3 (т.е. 0x1B и 0x23).
+    */
+
+    gdt_flush((uint32_t)&gdt_ptr);
+}
+
+static void gdt_set_gate(int32_t number, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity)
+{
+    gdt_entries[number].base_low = (base & 0xFFFF);
+    gdt_entries[number].base_middle = (base >> 16) & 0xFF;
+    gdt_entries[number].base_high = (base >> 24) & 0xFF;
+
+    gdt_entries[number].limit_low = (limit & 0xFFFF);
+
+    gdt_entries[number].granularity = (limit >> 16) & 0x0F;
+    gdt_entries[number].granularity |= granularity & 0xF0;
+
+    gdt_entries[number].access = access;
+}
+============================================================
+
+#idt_initialiser.h
+#ifndef IDT_INITIALISER
+#define IDT_INITIALISER
+
+#include "types.h"
+
+// Describes one IDT entry
+typedef struct
+{
+    uint16_t base_low;  // the lower 16 bits of the address to jump on interrupt
+    uint16_t selector;  // kernel segment selector
+    uint8_t zero;       // always zero
+    uint8_t flags;      // more flags
+    uint16_t base_high; // the upper 16 bits of the address to jump on interrupt
+} __attribute__((packed)) idt_entry_t;
+
+// Describes a pointer to the IDT
+typedef struct
+{
+    uint16_t limit;
+    uint32_t base; // the address of the first IDT entry
+} __attribute__((packed)) idt_ptr_t;
+
+void idt_init(void);
+
+// ISR handlers
+extern void isr0(void);
+extern void isr1(void);
+extern void isr2(void);
+extern void isr3(void);
+extern void isr4(void);
+extern void isr5(void);
+extern void isr6(void);
+extern void isr7(void);
+extern void isr8(void);
+extern void isr9(void);
+extern void isr10(void);
+extern void isr11(void);
+extern void isr12(void);
+extern void isr13(void);
+extern void isr14(void);
+extern void isr15(void);
+extern void isr16(void);
+extern void isr17(void);
+extern void isr18(void);
+extern void isr19(void);
+extern void isr20(void);
+extern void isr21(void);
+extern void isr22(void);
+extern void isr23(void);
+extern void isr24(void);
+extern void isr25(void);
+extern void isr26(void);
+extern void isr27(void);
+extern void isr28(void);
+extern void isr29(void);
+extern void isr30(void);
+extern void isr31(void);
+
+// IRQ handlers (ISR 32-47)
+extern void irq0(void);
+extern void irq1(void);
+extern void irq2(void);
+extern void irq3(void);
+extern void irq4(void);
+extern void irq5(void);
+extern void irq6(void);
+extern void irq7(void);
+extern void irq8(void);
+extern void irq9(void);
+extern void irq10(void);
+extern void irq11(void);
+extern void irq12(void);
+extern void irq13(void);
+extern void irq14(void);
+extern void irq15(void);
+
+#endif
+============================================================
+
+#boot.asm
+[BITS 16]                  ; Режим реального адреса (16 бит)
+[ORG 0x7C00]               ; BIOS загружает нас по адресу 0x7C00
+
+; ------------------------------------------------------------
+; Константы
+; ------------------------------------------------------------
+KERNEL_LBA_START equ 1     ; Номер первого сектора ядра (LBA) – сразу после загрузчика
+KERNEL_SECTOR_COUNT equ 64 ; Сколько секторов читать (по 512 байт) – можно увеличить
+KERNEL_LOAD_SEG    equ 0x1000 ; Сегмент, куда грузим ядро (0x1000:0x0000)
+KERNEL_LOAD_OFF    equ 0x0000 ; Смещение (в итоге физический адрес 0x10000)
+STACK_TOP          equ 0x90000 ; Верхушка стека в защищённом режиме
+
+; ------------------------------------------------------------
+; Точка входа
+; ------------------------------------------------------------
+start:
+    cli                      ; Запрещаем прерывания – пока не настроим стек и GDT
+    xor ax, ax               ; Обнуляем AX
+    mov ds, ax               ; DS = 0 (сегмент данных – на начало памяти)
+    mov es, ax               ; ES = 0 (для работы с LBA-пакетом)
+    mov ss, ax               ; SS = 0
+    mov sp, 0x7C00           ; Временный стек (растёт вниз от 0x7C00)
+    sti                      ; Разрешаем прерывания (можно, т.к. стек уже есть)
+
+    ; Сохраняем номер диска, с которого нас загрузили (в DL)
+    mov [boot_drive], dl
+
+    ; Очищаем экран (видеорежим 80x25)
+    mov ax, 0x0003
+    int 0x10                 ; Прерывание BIOS: установить текстовый режим 3
+
+    mov si, msg_loading
+    call print_string_16
+
+    ; --------------------------------------------------------
+    ; Загрузка ядра через LBA (расширение Int 13h, AH=0x42)
+    ; --------------------------------------------------------
+    ; Проверяем, поддерживает ли BIOS расширения LBA
+    ; Вызов: AH=0x41, BX=0x55AA, DL=диск
+    mov ah, 0x41
+    mov bx, 0x55AA
+    mov dl, [boot_drive]
+    int 0x13
+    jc .no_lba               ; Если CF=1 – LBA не поддерживается
+    cmp bx, 0xAA55           ; Расширение должно вернуть 0xAA55 в BX
+    jne .no_lba
+
+    ; Поддерживается – используем функцию 0x42 (чтение с LBA)
+    mov si, lba_packet       ; DS:SI указывает на структуру пакета
+    mov ah, 0x42
+    mov dl, [boot_drive]
+    int 0x13
+    jc disk_error            ; Если ошибка – сообщаем и зависаем
+    jmp .lba_ok
+
+.no_lba:
+    ; Если LBA не поддерживается – падаем с сообщением
+    mov si, msg_no_lba
+    call print_string_16
+    jmp $
+
+.lba_ok:
+    ; Успешно загрузили ядро. Теперь переходим в защищённый режим.
+    cli
+    lgdt [gdt_descriptor]    ; Загружаем таблицу GDT
+
+    ; Включаем защищённый режим (устанавливаем бит PE в CR0)
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+
+    ; Дальний прыжок для перезагрузки сегментных регистров
+    ; После этого процессор работает в 32-битном режиме
+
+    jmp CODE_SEG:protected_mode
+
+; ------------------------------------------------------------
+; 16-битные подпрограммы
+; ------------------------------------------------------------
+
+; отладчик
+debug:
+    mov si, msg_her
+    call print_string_16
+    ret
+
+; Печать строки с нулевым терминатором (через BIOS)
+print_string_16:
+    pusha
+    mov ah, 0x0E             ; Функция BIOS: телетайпный вывод
+.loop:
+    lodsb                    ; Загружаем байт из [SI] в AL, увеличиваем SI
+    test al, al              ; Проверяем, не конец строки (AL == 0)?
+    jz .done
+    int 0x10                 ; Вызов BIOS для печати символа
+    jmp .loop
+.done:
+    popa
+    ret
+
+; Обработчик ошибки чтения диска
+disk_error:
+    mov si, msg_disk_error
+    call print_string_16
+    jmp $                    ; Бесконечный цикл
+
+; ------------------------------------------------------------
+; Данные (в реальном режиме)
+; ------------------------------------------------------------
+boot_drive  db 0
+msg_loading db "Loading kernel via LBA...", 0x0D, 0x0A, 0
+msg_no_lba  db "LBA not supported!", 0x0D, 0x0A, 0
+msg_disk_error db "Disk read error!", 0x0D, 0x0A, 0
+msg_her db "хер", 0x0D, 0x0A, 0
+
+; ------------------------------------------------------------
+; Структура LBA-пакета для Int 0x13 AH=0x42
+; ------------------------------------------------------------
+; Формат (16 байт):
+;   Offset 0:  размер пакета (16)
+;   Offset 2:  количество секторов для чтения
+;   Offset 4:  смещение буфера (сегмент:смещение)
+;   Offset 6:  сегмент буфера
+;   Offset 8:  LBA (нижние 32 бита)
+;   Offset 12: LBA (верхние 32 бита – для 64-битных LBA, обычно 0)
+; ------------------------------------------------------------
+lba_packet:
+    db 0x10                  ; Размер пакета (16 байт)
+    db 0x00                  ; Зарезервировано (0)
+    dw KERNEL_SECTOR_COUNT   ; Количество секторов для чтения
+    dw KERNEL_LOAD_OFF       ; Смещение буфера (0x0000)
+    dw KERNEL_LOAD_SEG       ; Сегмент буфера (0x1000)
+    dd KERNEL_LBA_START      ; Номер начального LBA (младшие 32 бита)
+    dd 0x00000000            ; Старшие 32 бита LBA (не нужны)
+
+; ------------------------------------------------------------
+; GDT (Global Descriptor Table) – минимальная для защищённого режима
+; ------------------------------------------------------------
+gdt_start:
+    ; Нулевой дескриптор (обязателен)
+    dd 0x00000000
+    dd 0x00000000
+
+; Дескриптор сегмента кода (32-битный, исполняемый, не системный)
+gdt_code:
+    dw 0xFFFF                ; Лимит (биты 0-15) – 4 ГБ
+    dw 0x0000                ; База (биты 0-15)
+    db 0x00                  ; База (биты 16-23)
+    db 10011010b             ; Флаги доступа: Present, Privilege 0, Code, Readable
+    db 11001111b             ; Флаги: 32-битный, гранулярность 4 КБ
+    db 0x00                  ; База (биты 24-31)
+
+; Дескриптор сегмента данных (32-битный, читаемый/записываемый)
+gdt_data:
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 10010010b             ; Present, Privilege 0, Data, Writable
+    db 11001111b
+    db 0x00
+
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1 ; Размер GDT (в байтах - 1)
+    dd gdt_start               ; Адрес начала GDT
+
+; Селекторы для загрузки в CS и другие сегментные регистры
+CODE_SEG equ gdt_code - gdt_start
+DATA_SEG equ gdt_data - gdt_start
+
+; ------------------------------------------------------------
+; 32-битный защищённый режим
+; ------------------------------------------------------------
+[BITS 32]
+
+%macro debug_P 0
+    ; --- ОТЛАДКА: выводим символ 'P' в левый верхний угол ---
+    mov word [0xB8000], 0x0F50   ; 'P' белым по чёрному
+%endmacro
+
+protected_mode:
+
+    ; Загружаем селекторы данных во все сегментные регистры
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    ; Настраиваем стек (растёт вниз)
+    mov ebp, STACK_TOP
+    mov esp, ebp
+
+
+    ; Передаём управление ядру (оно лежит по адресу 0x10000)
+    ; ВАЖНО: ядро должно быть скомпилировано как плоский двоичный файл
+    ; и его точка входа должна находиться по смещению 0 от начала.
+    call KERNEL_LOAD_SEG << 4   ; Эквивалент call 0x10000
+    ; (KERNEL_LOAD_SEG = 0x1000, смещение 0 -> физический адрес 0x10000)
+
+    ; Если ядро вернёт управление (не должно) – зависаем
+    cli
+.hang:
+    hlt
+    jmp .hang
+
+; ------------------------------------------------------------
+; Заполнение до 510 байт и сигнатура 0xAA55
+; ------------------------------------------------------------
+times 510 - ($-$$) db 0
+dw 0xAA55
+
+============================================================
+
+#gdt_initialiser.h
+#ifndef GDT_INITIALISER
+#define GDT_INITIALISER
+
+#include "types.h"
+
+// Describes one GDT entry
+typedef struct
+{
+    uint16_t limit_low;  // the lower 16 bits of the limit
+    uint16_t base_low;   // the lower 16 bits of the base
+    uint8_t base_middle; // the next 8 bits of the base
+    uint8_t access;      // access flags, determines the segment's ring
+    uint8_t granularity;
+    uint8_t base_high; // the last 8 bits of the base
+} __attribute__((packed)) gdt_entry_t;
+
+// Describes a pointer to the GDT
+typedef struct
+{
+    uint16_t limit; // the upper 16 bits of all selector limits
+    uint32_t base;  // the address of the first GDT entry
+} __attribute__((packed)) gdt_ptr_t;
+
+void gdt_init(void);
+
+#endif
+
+============================================================
+
+#keyboard.c
+#include "keyboard.h"
+#include "terminal.h"
+#include "system.h"
+#include "konsole.h"
+
+// иначе компилятор может заменить call и ret на jump + leave, и это сломает стек, поскольку он управляется полностью вручную на ассемблере
+#pragma GCC optimize("no-optimize-sibling-calls")
+
+const char keyboard_scancodes_map[] =
+    {
+        '\0',
+        0 /*escape*/,
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+        '0',
+        '-',
+        '=',
+        '\b' /*backspace*/,
+        '\t' /*tab*/,
+        'q',
+        'w',
+        'e',
+        'r',
+        't',
+        'y',
+        'u',
+        'i',
+        'o',
+        'p',
+        '[',
+        ']',
+        '\n' /*enter*/,
+        0 /*left control*/,
+        'a',
+        's',
+        'd',
+        'f',
+        'g',
+        'h',
+        'j',
+        'k',
+        'l',
+        ';',
+        '\'' /*single quote*/,
+        '`' /*back tick*/,
+        0 /*left shift*/,
+        '\\',
+        'z',
+        'x',
+        'c',
+        'v',
+        'b',
+        'n',
+        'm',
+        ',',
+        '.',
+        '/',
+        0 /*right shift*/,
+        '*' /*(keypad)*/,
+        0 /*left alt*/,
+        ' ' /*space*/,
+        0 /*CapsLock*/,
+        0 /*F1*/,
+        0 /*F2*/,
+        0 /*F3*/,
+        0 /*F4*/,
+        0 /*F5*/,
+        0 /*F6*/,
+        0 /*F7*/,
+        0 /*F8*/,
+        0 /*F9*/,
+        0 /*F10*/,
+        0 /*NumberLock*/,
+        0 /*ScrollLock*/,
+        '7' /*(keypad)*/,
+        '8' /*(keypad)*/,
+        '9' /*(keypad)*/,
+        '-' /*(keypad)*/,
+        '4' /*(keypad)*/,
+        '5' /*(keypad)*/,
+        '6' /*(keypad)*/,
+        '+' /*(keypad)*/,
+        '1' /*(keypad)*/,
+        '2' /*(keypad)*/,
+        '3' /*(keypad)*/,
+        '0' /*(keypad)*/,
+        '.' /*(keypad)*/,
+        0 /*F11*/,
+        0 /*F12*/
+};
+
+// Максимально простой драйвер клавиатуры
+
+// если забыть считать хоть при одном прерывании клавиатуры, они будут запрещены
+static uint8_t keyboard_read_scancode(void)
+{
+    uint8_t scancode = 0;
+
+    // Проверяем, есть ли данные в буфере
+    uint8_t status = inb(KEYBOARD_STATUS_PORT);
+
+    if (status & 0x01)
+    { // Данные есть
+        scancode = inb(KEYBOARD_DATA_PORT);
+    }
+
+    return scancode;
+}
+
+static char keyboard_scancode_to_ascii(uint8_t scancode)
+{
+    // Игнорируем отпускание клавиш (старший бит = 1)
+    if (scancode & 0x80)
+    {
+        return 0;
+    }
+
+    if (scancode < sizeof(keyboard_scancodes_map))
+    {
+        return keyboard_scancodes_map[scancode];
+    }
+
+    return 0;
+}
+
+// 0 в случае отсутствия ввода
+// также 0 при поднятии клавиши
+char keyboard_get_input()
+{
+    uint8_t scancode = keyboard_read_scancode();
+    if (scancode == 0)
+    {
+        return 0;
+    }
+    return keyboard_scancode_to_ascii(scancode);
+}
+
+static volatile void keyboard_callback(isr_data_t data)
+{
+    char symbol = keyboard_get_input();
+    if (symbol != 0)
+    {
+        terminal_read_symbol(symbol);
+    }
+    // asm volatile("" ::: "memory");
+}
+
+void keyboard_init()
+{
+    outb(0x64, 0xAE);
+    interrupt_register(IRQ1, keyboard_callback);
+}
+
+============================================================
+
+#timer.h
+#ifndef TIMER
+#define TIMER
+
+#include "types.h"
+#include "isr.h"
+#include "system.h"
+#include "pic.h"
+
+#define TIMER0 0x43
+#define TIMER0_DATA 0x40
+
+void timer_callback(isr_data_t data);
+void timer_init(uint32_t);
+uint32_t timer_get_ticks();
+uint32_t timer_get_time();
+
+#endif
+============================================================
+
+#system.h
+#ifndef SYSTEM
+#define SYSTEM
+
+#include "types.h"
+
+#define BARRIER asm volatile("" ::: "memory")
+
+void outb(uint16_t port, byte_t value);
+byte_t inb(uint16_t port);
+void uint32_to_string(uint32_t number, char *result);
+bool_t strcmp(const char *a, const char *b);
+
+void memcpy(void *dst, const void *src, uint32_t size);
+
+#define PANIC(msg) panic(msg, __FILE__, __LINE__);
+#define ASSERT(b) ((b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))
+
+void panic(char *msg, char *file, uint32_t line);
+void panic_assert(char *msg, char *file, uint32_t line);
+
+#endif
+============================================================
+
+#konsole.c
+#include "konsole.h"
+#include "system.h"
+
+#include <stdarg.h>
+
+volatile char *const konsole_start = (char *)0xB8000;
+int const konsole_w = 80;
+int const konsole_h = 25;
+int const konsole_line_offset = konsole_w * 2;
+
+int konsole_curr_x = 0;
+int konsole_curr_y = 0;
+uint32_t konsole_current_color = 0x0F; // Белый на черном
+
+static char *konsole_pos_get()
+{
+    return konsole_start + (konsole_curr_y * konsole_line_offset) + (konsole_curr_x * 2);
+}
+
+void konsole_cursor_set_position(uint16_t position)
+{
+    // Установить младший байт (регистр 0x0F)
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(position & 0xFF));
+
+    // Установить старший байт (регистр 0x0E)
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((position >> 8) & 0xFF));
+}
+
+// сдвижка позиции
+void konsole_pos_shift(int delta_x)
+{
+    konsole_curr_y += delta_x / konsole_w;
+    konsole_curr_x += delta_x % konsole_w;
+    konsole_curr_y += konsole_curr_x / konsole_w;
+    konsole_curr_x %= konsole_w;
+
+    if (konsole_curr_y >= konsole_h)
+    {
+        konsole_scroll();
+    }
+
+    konsole_cursor_set_position(konsole_curr_y * konsole_w + konsole_curr_x);
+}
+
+void konsole_clear()
+{
+    for (int y = 0; y < konsole_h; y++)
+    {
+        for (int x = 0; x < konsole_w; x++)
+        {
+            int offset = (y * konsole_line_offset) + (x * 2);
+            konsole_start[offset] = ' ';
+            konsole_start[offset + 1] = konsole_current_color;
+        }
+    }
+    konsole_curr_x = 0;
+    konsole_curr_y = 0;
+}
+
+void konsole_putch(char ch)
+{
+    switch (ch)
+    {
+    case '\n':
+        konsole_curr_x = 0;
+        konsole_curr_y++;
+        if (konsole_curr_y >= konsole_h)
+        {
+            konsole_scroll();
+        }
+        break;
+
+    case '\b':
+        if (konsole_curr_x > 0)
+        {
+            konsole_pos_shift(-1);
+            konsole_pos_get()[0] = 0;
+        }
+        break;
+
+    default:
+        konsole_pos_get()[0] = ch;
+        konsole_pos_get()[1] = konsole_current_color;
+        konsole_pos_shift(1);
+    }
+}
+
+void konsole_print(const char *text)
+{
+    for (int i = 0; text[i] != 0; ++i)
+    {
+        konsole_putch(text[i]);
+    }
+}
+
+void konsole_println(const char *text)
+{
+    konsole_print(text);
+    konsole_print("\n");
+}
+
+void konsole_printf(const char *format, ...)
+{
+    char buffer[1024]; // достаточно для большинства сообщений
+    int pos = 0;
+    va_list args;
+    va_start(args, format);
+
+    while (*format && pos < sizeof(buffer) - 1)
+    {
+        if (*format == '%')
+        {
+            format++;
+            switch (*format)
+            {
+            case 's':
+            {
+                const char *str = va_arg(args, const char *);
+                while (*str && pos < sizeof(buffer) - 1)
+                {
+                    buffer[pos++] = *str++;
+                }
+                break;
+            }
+            case 'd':
+            {
+                int num = va_arg(args, int);
+                if (num < 0)
+                {
+                    buffer[pos++] = '-';
+                    num = -num;
+                }
+                char tmp[12];
+                int len = 0;
+                do
+                {
+                    tmp[len++] = '0' + (num % 10);
+                    num /= 10;
+                } while (num > 0);
+                while (len > 0)
+                {
+                    buffer[pos++] = tmp[--len];
+                }
+                break;
+            }
+            case 'x':
+            {
+                uint32_t num = va_arg(args, uint32_t);
+                buffer[pos++] = '0';
+                buffer[pos++] = 'x';
+                char tmp[12];
+                int len = 0;
+                do
+                {
+                    int digit = num % 16;
+                    if (digit < 10)
+                        tmp[len++] = '0' + digit;
+                    else
+                        tmp[len++] = 'a' + digit - 10;
+                    num /= 16;
+                } while (num > 0);
+                while (len > 0)
+                {
+                    buffer[pos++] = tmp[--len];
+                }
+                break;
+            }
+            case '%':
+            {
+                buffer[pos++] = '%';
+                break;
+            }
+            default:
+            {
+                buffer[pos++] = '%';
+                buffer[pos++] = *format;
+                break;
+            }
+            }
+        }
+        else
+        {
+            buffer[pos++] = *format;
+        }
+        format++;
+    }
+    buffer[pos] = '\0';
+    konsole_print(buffer);
+    va_end(args);
+}
+
+void konsole_set_color(uint32_t fg, uint32_t bg)
+{
+    konsole_current_color = (bg << 4) | (fg & 0x0F);
+}
+
+void konsole_scroll()
+{
+    // Простая реализация скроллинга
+    for (int y = 0; y < konsole_h - 1; y++)
+    {
+        for (int x = 0; x < konsole_w; x++)
+        {
+            int src_offset = ((y + 1) * konsole_line_offset) + (x * 2);
+            int dst_offset = (y * konsole_line_offset) + (x * 2);
+            konsole_start[dst_offset] = konsole_start[src_offset];
+            konsole_start[dst_offset + 1] = konsole_start[src_offset + 1];
+        }
+    }
+    // Очищаем последнюю строку
+    for (int x = 0; x < konsole_w; x++)
+    {
+        int offset = ((konsole_h - 1) * konsole_line_offset) + (x * 2);
+        konsole_start[offset] = ' ';
+        konsole_start[offset + 1] = konsole_current_color;
+    }
+
+    konsole_curr_y = konsole_h - 1;
+}
+
+// COLORS
+void konsole_set_preambula_color()
+{
+    konsole_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
+}
+
+void konsole_set_good_result_color()
+{
+    konsole_set_color(COLOR_LIGHT_GREEN, COLOR_BLACK);
+}
+
+void konsole_set_bad_result_color()
+{
+    konsole_set_color(COLOR_RED, COLOR_BLACK);
+}
+
+void konsole_set_panic_color()
+{
+    konsole_set_color(COLOR_LIGHT_RED, COLOR_BLACK);
+}
+
+void konsole_set_base_color()
+{
+    konsole_set_color(COLOR_WHITE, COLOR_BLACK);
+}
+
+============================================================
+
+#heap.h
+#ifndef HEAP
+#define HEAP
+
+#include "types.h"
+
+#define HEAP_START_BLOCK 3 * MB
+#define HEAP_END_BLOCK 100 * MB
+#define HEAP_MAGIC 0x600DB10C
+
+typedef volatile struct _heap_node
+{
+    uint32_t signature;
+    uint32_t size;
+    uint32_t start_addr;
+    struct _heap_node *left;
+    struct _heap_node *right;
+} __attribute__((packed)) heap_node_t;
+
+void *malloc(uint32_t size);
+void free(void *ptr);
+void heap_init();
+
+uint32_t heap_memory_get_size_left();
+
+#endif
+============================================================
+
+#kernel.c
+#include "konsole.h"
+#include "terminal.h"
+#include "idt_initialiser.h"
+#include "gdt_initialiser.h"
+#include "timer.h"
+#include "keyboard.h"
+#include "heap.h"
+
+#define PRINT_INIT(x)                   \
+    do                                  \
+    {                                   \
+        konsole_set_preambula_color();  \
+        konsole_print("Initializing "); \
+        konsole_print(x);               \
+        konsole_print("...");           \
+    } while (0)
+#define PRINT_OK                         \
+    do                                   \
+    {                                    \
+        konsole_set_good_result_color(); \
+        konsole_println("OK");           \
+    } while (0)
+
+__attribute__((section(".text.start"))) void kernel_main(void)
+{
+    konsole_set_base_color();
+    konsole_println("\nWELCOME TO KERNEL");
+
+    PRINT_INIT("GDT");
+    gdt_init();
+    PRINT_OK;
+
+    PRINT_INIT("IDT");
+    idt_init();
+    PRINT_OK;
+
+    PRINT_INIT("timer");
+    timer_init(2500);
+    PRINT_OK;
+
+    PRINT_INIT("keyboard");
+    keyboard_init();
+    PRINT_OK;
+
+    PRINT_INIT("heap");
+    heap_init();
+    PRINT_OK;
+
+    interrupt_enable();
+
+    uint32_t size = 30 * MB;
+    char *a = malloc(size);
+    char *b = malloc(size);
+
+    terminal_print_time();
+    memcpy(a, b, size);
+    terminal_print_time();
+
+    // TODO std::vector
+    // TODO куча должна быть в области данных
+    // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
+    // TODO история команд и того что было на экране
+    // TODO листать вверх вниз вывод консоли
+    // TODO дамп памяти и HEAP MAGIC
+    // TODO увеличение размера кучи
+
+    konsole_set_base_color();
+
+    konsole_set_color(COLOR_GREEN, COLOR_LIGHT_BLUE);
+    konsole_printf("%s%d%s\n", "СОСАЛИ ", 100, " ХУЕВ");
+
+    konsole_set_base_color();
+    terminal_main_loop();
+}
+============================================================
+
+#pic.h
+#ifndef PIC
+#define PIC
+
+// Base address for master PIC
+#define PIC1 0x20
+// Base address for slave PIC
+#define PIC2 0xA0
+#define PIC1_CMD PIC1
+#define PIC1_DATA (PIC1_CMD + 1)
+#define PIC2_CMD PIC2
+#define PIC2_DATA (PIC2_CMD + 1)
+
+#define PIC_EOI 0x20
+#define PIC_READ_ISR 0x0B
+
+#endif
+============================================================
+
+#isr.c
+#include "isr.h"
+#include "pic.h"
+#include "konsole.h"
+#include "types.h"
+#include "system.h"
+
+// Number of spurious interrupts received
+uint64_t spurious_interrupts;
+
+isr_t interruption_handlers[256];
+
+static uint16_t get_pic_isr(void)
+{
+    // Read the In-Service Register (ISR) of the PICs.
+    // This is done by first writing the OCW3 command word
+    // to the PIC command port, then immediately reading from
+    // *command* (not data) port.
+    outb(PIC1_CMD, PIC_READ_ISR); // master
+    outb(PIC2_CMD, PIC_READ_ISR); // slave
+    return (inb(PIC2_CMD) << 8) | inb(PIC1_CMD);
+}
+
+static bool_t is_spurious(isr_data_t registers)
+{
+    uint16_t isr = get_pic_isr();
+    if (registers.int_no == IRQ7)
+    {
+        // Check the master PIC ISR
+        return (!(0x00FF & isr));
+    }
+    else if (registers.int_no == IRQ15)
+    {
+        // Check the slave PIC ISR
+        return (!(0xFF00 & isr));
+    }
+
+    return false;
+}
+
+static void invoke_handler(isr_data_t registers)
+{
+    if (interruption_handlers[registers.int_no] != 0)
+    {
+        isr_t handler = interruption_handlers[registers.int_no];
+        handler(registers);
+    }
+    else
+    {
+        char a[3] = {0};
+        uint32_to_string(registers.int_no, a);
+        konsole_print("Unhandled interrupt: ");
+        konsole_println(a);
+    }
+    // else
+    // {
+    //     konsole_println("unhandled interrupt: ");
+    //     // konsole_printlni(registers.int_no, 'd');
+    //     if (IRQ0 <= registers.int_no && registers.int_no <= IRQ15)
+    //     {
+    //         konsole_println(" (IRQ");
+    //         // konsole_printlni(registers.int_no - IRQ0, 'd');
+    //         konsole_println(")");
+    //     }
+    //     konsole_println("");
+    //     // PANIC("unhandled interrupt");
+    // }
+}
+
+void isr_handler(isr_data_t registers)
+{
+    invoke_handler(registers);
+}
+
+void irq_handler(isr_data_t registers)
+{
+    // Noise on the IRQ or INTR lines, or software sending
+    // an EOI at the wrong time can lead to spurious interrupts.
+    // We must check for spurious interrupts here so we can
+    // ignore them and *NOT* send an EOI.
+    if (is_spurious(registers))
+    {
+        spurious_interrupts++;
+        konsole_print("spurious interrupt: IRQ");
+        // konsole_print(registers.int_no - IRQ0, 'd');
+        return;
+    }
+
+    // Send an EOI (end of interrupt) signal to the PICs
+    if (registers.int_no >= IRQ8)
+    {
+        // Send reset signal to the slave
+        outb(PIC2_CMD, PIC_EOI);
+    }
+    // Send reset signal to the master
+    outb(PIC1_CMD, PIC_EOI);
+
+    invoke_handler(registers);
+}
+
+void interrupt_register(uint8_t n, isr_t handler)
+{
+    interruption_handlers[n] = handler;
+}
+
+void interrupt_enable()
+{
+    asm volatile("sti");
+}
+
+void interrupt_disable()
+{
+    asm volatile("cli");
+}
+============================================================
+
+#interrupts.asm
+; Defined in isr.c
+[EXTERN isr_handler]
+[EXTERN irq_handler]
+
+isr_common:
+	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
+
+	mov ax, ds           ; lower 16 bits of eax = ds
+	push eax             ; save the data segment descriptor
+
+	mov ax, 0x10         ; load the kernel data segment descriptor
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+
+	call isr_handler
+
+	pop eax              ; reload the original data segment descriptor
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+
+	popa                 ; pops edi,esi,ebp,esp,ebx,edx,ecx,eax
+	add esp, 8           ; clean up the pushed error code and pushed ISR number
+	sti                  ; enable interrupts
+	iret                 ; return from an interrupt..
+	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
+
+irq_common:
+	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
+
+	mov ax, ds           ; lower 16 bits of eax = ds
+	push eax             ; save the data segment descriptor
+
+	mov ax, 0x10         ; load the kernel data segment descriptor
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+
+	call irq_handler
+
+	pop eax              ; reload the original data segment descriptor
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+
+	popa                 ; pops edi,esi,ebp,esp,ebx,edx,ecx,eax
+	add esp, 8           ; clean up the pushed error code and pushed ISR number
+	sti                  ; enable interrupts
+	iret                 ; return from an interrupt..
+	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
+
+; Define macro for interrupt handler without an error code
+%macro ISR_NOERROR 1
+	[GLOBAL isr%1]
+	isr%1:
+		cli              ; disable interrupts
+		push byte 0      ; push a dummy error code
+		push byte %1     ; push the interrupt number
+		jmp isr_common   ; jump to the common handler
+%endmacro
+
+; Define macro for interrupt handler with an error code
+;  arg 0 : error code
+%macro ISR_ERROR 1
+	[GLOBAL isr%1]
+	isr%1:
+		cli              ; disable interrupts
+		push byte %1     ; push the interrupt number
+		jmp isr_common   ; jump to the common handler
+%endmacro
+
+; Define macro for IRQ interrupt handler
+;  arg 0 : IRQ number (0-15)
+;  arg 1 : ISR number (32-47)
+%macro IRQ 2
+	[GLOBAL irq%1]
+	irq%1:
+		cli              ; disable interrupts
+		push byte 0      ; push zero
+		push byte %2     ; push ISR number
+		jmp irq_common   ; jump to the common handler
+%endmacro
+
+; Set up ISRs 0 to 31
+ISR_NOERROR 0
+ISR_NOERROR 1
+ISR_NOERROR 2
+ISR_NOERROR 3
+ISR_NOERROR 4
+ISR_NOERROR 5
+ISR_NOERROR 6
+ISR_NOERROR 7
+ISR_ERROR   8
+ISR_NOERROR 9
+ISR_ERROR   10
+ISR_ERROR   11
+ISR_ERROR   12
+ISR_ERROR   13
+ISR_ERROR   14
+ISR_NOERROR 15
+ISR_NOERROR 16
+ISR_NOERROR 17
+ISR_NOERROR 18
+ISR_NOERROR 19
+ISR_NOERROR 20
+ISR_NOERROR 21
+ISR_NOERROR 22
+ISR_NOERROR 23
+ISR_NOERROR 24
+ISR_NOERROR 25
+ISR_NOERROR 26
+ISR_NOERROR 27
+ISR_NOERROR 28
+ISR_NOERROR 29
+ISR_NOERROR 30
+ISR_NOERROR 31
+
+; Set up IRQs 0 to 15 (ISR 32 to 47)
+IRQ  0, 32
+IRQ  1, 33
+IRQ  2, 34
+IRQ  3, 35
+IRQ  4, 36
+IRQ  5, 37
+IRQ  6, 38
+IRQ  7, 39
+IRQ  8, 40
+IRQ  9, 41
+IRQ 10, 42
+IRQ 11, 43
+IRQ 12, 44
+IRQ 13, 45
+IRQ 14, 46
+IRQ 15, 47
+
+============================================================
+
+#terminal.h
+#include "konsole.h"
+#include "keyboard.h"
+
+void terminal_main_loop(void);
+void terminal_read_symbol(char);
+void terminal_print_time();
+============================================================
+
+#heap.c
+#include "heap.h"
+#include "system.h"
+#include "konsole.h"
+
+heap_node_t *heap_root = NULL;
+uint32_t heap_memory_size_left = HEAP_END_BLOCK - HEAP_START_BLOCK;
+
+static inline heap_node_t *heap_node_create_default(uint32_t start_addr)
+{
+    heap_node_t *node = (heap_node_t *)start_addr;
+
+    node->signature = HEAP_MAGIC;
+    node->size = sizeof(heap_node_t);
+    node->start_addr = start_addr;
+    node->left = NULL;
+    node->right = NULL;
+
+    return node;
+}
+
+// изменяет лишь указатели на соседние блоки и start_addr у новосозданной
+static inline heap_node_t *heap_add(heap_node_t *left, uint32_t start_addr)
+{
+    heap_node_t *right = left->right;
+
+    heap_node_t *new = heap_node_create_default(start_addr);
+
+    left->right = new;
+    new->left = left;
+
+    new->right = right;
+    if (right)
+    {
+        right->left = new;
+    }
+
+    return new;
+}
+
+static inline void heap_del(heap_node_t *curr)
+{
+    heap_node_t *left = curr->left;
+    heap_node_t *right = curr->right;
+
+    if (left)
+    {
+        left->right = right;
+    }
+    if (right)
+    {
+        right->left = left;
+    }
+}
+
+static inline heap_node_t *heap_process_first_fit_addr(uint32_t size)
+{
+    BARRIER;
+    heap_node_t *n = heap_root;
+    n = n->right;
+    for (; n != NULL; n = n->right)
+    {
+        uint32_t end_of_left = n->left->start_addr + n->left->size;
+        // konsole_printf("%s%x%s%x\n", "CHECK ", n->start_addr, " ", end_of_left);
+        if (n->start_addr - end_of_left >= size)
+        {
+
+            heap_node_t *new = heap_add(n->left, end_of_left);
+            new->size = size;
+
+            heap_memory_size_left -= new->size;
+
+            // konsole_printf("%s%x%s%x\n", "NEW ", new->start_addr, " ", new->start_addr + sizeof(heap_node_t));
+
+            return new;
+        }
+    }
+
+    PANIC("BAD MALLOC");
+}
+
+uint32_t heap_memory_get_size_left()
+{
+    return heap_memory_size_left;
+}
+
+void heap_init()
+{
+    heap_root = heap_node_create_default(HEAP_START_BLOCK);
+    heap_add(heap_root, (uint32_t)HEAP_END_BLOCK);
+}
+
+void *malloc(uint32_t value_size)
+{
+    BARRIER;
+    heap_node_t *node = heap_process_first_fit_addr(value_size + sizeof(heap_node_t));
+
+    // konsole_printf("%s%x\n", "MALLOC PTR ", node->start_addr + sizeof(heap_node_t));
+    return (void *)(node->start_addr + sizeof(heap_node_t));
+}
+
+void free(void *ptr)
+{
+    BARRIER;
+    // konsole_printf("%s%x\n", "FREE PTR ", ptr);
+    for (heap_node_t *n = heap_root; n != NULL; n = n->right)
+    {
+        // konsole_printf("%s%x\n", "CHECK PTR ", n->start_addr + sizeof(heap_node_t));
+        if ((uint32_t)ptr == n->start_addr + sizeof(heap_node_t))
+        {
+            heap_memory_size_left += n->size;
+            heap_del(n);
+            return;
+        }
+    }
+
+    PANIC("BAD FREE");
+}
+
+============================================================
+
+#runner.sh
+#!/bin/bash
+echo "=== Keyboard Debug Test ==="
+echo "==========================="
+
+# Очистка
+rm -rf build
+mkdir -p build
+
+echo "1. Compiling C files..."
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/kernel.o kernel.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/konsole.o konsole.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/keyboard.o keyboard.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/terminal.o terminal.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/idt_initialiser.o idt_initialiser.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/system.o system.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/isr.o isr.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/timer.o timer.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/gdt_initialiser.o gdt_initialiser.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/datetime.o datetime.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/heap.o heap.c
+
+#
+
+#сброс если ошибки
+if [ $? -ne 0 ]; then
+    echo "✅ О НЕТ ВСЕ ПЛОХО!"
+    exit 1
+fi
+
+
+echo "1.1. Compiling interrupts.asm"
+
+nasm -f elf32 -o build/interrupts.o interrupts.asm
+
+echo "2. Linking..."
+ld -m elf_i386 -T link.ld -nostdlib -o build/kernel.elf \
+    build/kernel.o build/konsole.o build/keyboard.o build/terminal.o \
+    build/idt_initialiser.o build/isr.o build/interrupts.o build/system.o \
+    build/timer.o build/gdt_initialiser.o build/datetime.o build/heap.o
+
+echo "3. Creating binary..."
+objcopy -O binary -S build/kernel.elf build/kernel.bin
+
+echo "4. Checking kernel..."
+echo "Entry point address:"
+readelf -h build/kernel.elf
+echo ""
+echo "First 10 functions:"
+nm build/kernel.elf | head -10
+
+echo "5. Building bootloader..."
+nasm -f bin -o build/boot.bin boot.asm
+
+
+echo "6. Creating disk image..."
+# Создаем пустой образ
+dd if=/dev/zero of=build/myos.img bs=512 count=2880 2>/dev/null
+# Записываем загрузчик
+dd if=build/boot.bin of=build/myos.img conv=notrunc 2>/dev/null
+# Записываем ядро
+dd if=build/kernel.bin of=build/myos.img bs=512 seek=1 conv=notrunc 2>/dev/null
+
+echo "6. Creating .iso image..."
+#сделать .iso
+mkisofs -R -b myos.img -no-emul-boot -boot-load-size 4 -o build/myos.iso build/
+isohybrid build/myos.iso
+
+echo "7. Kernel size: $(wc -c < build/kernel.bin) bytes"
+
+echo ""
+echo "========================================="
+echo "Starting QEMU with PS/2 keyboard enabled"
+echo "========================================="
+echo "INSTRUCTIONS:"
+echo "1. Wait for '=== KEYBOARD TEST ===' message"
+echo "2. CLICK inside QEMU window with mouse"
+echo "3. Press keys to see scancodes"
+echo "4. Press ESC to exit test"
+echo "========================================="
+
+# Запускаем QEMU с правильными параметрами
+qemu-system-x86_64 \
+    -drive format=raw,file=build/myos.img,if=ide \
+    -monitor stdio \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -no-reboot \
+    -display sdl \
+    -vga std \
+    -d int \
+    -D ./build/qemu_console.log \
+    # -s -S \
+    -m 256
+
+============================================================
+
+#timer.c
+#include "timer.h"
+#include "konsole.h"
+
+// иначе компилятор может заменить call и ret на jump + leave, и это сломает стек, поскольку он управляется полностью вручную на ассемблере
+#pragma GCC optimize("no-optimize-sibling-calls")
+
+static volatile uint32_t timer_ticks_count = 0;
+
+void timer_callback(isr_data_t data)
+{
+    timer_ticks_count++;
+}
+
+static uint32_t timer_frequency;
+static const uint32_t timer_qartz_frequency = 1193180;
+
+// частота прерываний в ГЦ
+void timer_init(uint32_t frequency)
+{
+    timer_frequency = frequency;
+
+    uint32_t raw_period = timer_qartz_frequency / frequency;
+
+    if (raw_period < 1 || raw_period > 0xFFFF)
+    {
+        konsole_printf("\n%d\n", raw_period);
+        PANIC("BAD TIMER PERIOD");
+    }
+
+    uint16_t period = (uint16_t)raw_period;
+
+    outb(TIMER0, 0b00110110); // настройки таймера
+
+    outb(TIMER0_DATA, period);
+    outb(TIMER0_DATA, period >> 8);
+
+    interrupt_register(IRQ0, timer_callback);
+}
+
+// в милисекундах
+uint32_t timer_get_time()
+{
+    return 1000 * timer_ticks_count / timer_frequency;
+}
+
+uint32_t timer_get_ticks()
+{
+    return timer_ticks_count;
+}
+============================================================
+
+#datetime.c
+#include "types.h"
+#include "system.h"
+#include "datetime.h"
+
+// Чтение одного байта из CMOS
+static uint8_t cmos_read(uint8_t reg)
+{
+    outb(0x70, (reg | 0x80)); // 0x80 запрещает NMI
+    return inb(0x71);
+}
+
+// Проверка, идёт ли обновление (регистр 0x0A, бит 7)
+static void cmos_wait_update()
+{
+    while (cmos_read(0x0A) & 0x80)
+    {
+        // ждём, пока бит сбросится
+    }
+}
+
+// Преобразование BCD в двоичный (если нужно)
+static uint8_t bcd_to_bin(uint8_t bcd)
+{
+    return (bcd & 0x0F) + ((bcd >> 4) * 10);
+}
+
+// Чтение системной даты и времени
+void system_get_datetime(uint16_t *year, uint8_t *month, uint8_t *day,
+                         uint8_t *hour, uint8_t *minute, uint8_t *second)
+{
+    // Ждём окончания обновления
+    cmos_wait_update();
+
+    // Читаем регистры (порядок не важен, но обычно читают секунды, минуты, часы)
+    uint8_t _sec = cmos_read(0x00);
+    uint8_t _min = cmos_read(0x02);
+    uint8_t _hrs = cmos_read(0x04);
+    uint8_t _day = cmos_read(0x07);
+    uint8_t _mon = cmos_read(0x08);
+    uint8_t _yr = cmos_read(0x09);
+
+    // Определяем формат (BCD или двоичный) по биту 2 регистра 0x0B
+    uint8_t regB = cmos_read(0x0B);
+    if (!(regB & 0x04))
+    { // бит 2 = 0 → BCD
+        _sec = bcd_to_bin(_sec);
+        _min = bcd_to_bin(_min);
+        _hrs = bcd_to_bin(_hrs);
+        _day = bcd_to_bin(_day);
+        _mon = bcd_to_bin(_mon);
+        _yr = bcd_to_bin(_yr);
+    }
+
+    // Преобразуем год (обычно 0–99, добавляем 2000)
+    *year = 2000 + _yr;
+    *month = _mon;
+    *day = _day;
+    *hour = _hrs;
+    *minute = _min;
+    *second = _sec;
+}
+============================================================
+
+#system.c
+#include "types.h"
+#include "system.h"
+#include "konsole.h"
+
+void outb(uint16_t port, byte_t value)
+{
+    asm volatile("outb %1, %0" : : "dN"(port), "a"(value));
+}
+
+void halt()
+{
+    asm volatile("hlt");
+}
+
+byte_t inb(uint16_t port)
+{
+    byte_t ret;
+    asm volatile("inb %1, %0" : "=a"(ret) : "dN"(port));
+    return ret;
+}
+
+bool_t strcmp(const char *a, const char *b)
+{
+    for (int i = 0;; ++i)
+    {
+        if (a[i] != b[i])
+        {
+            return 0;
+        }
+        if (a[i] == 0)
+        {
+            return 1;
+        }
+    }
+}
+
+__attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
+{
+    byte_t *_dst = dst;
+    const byte_t *_src = src;
+
+    uint32_t i = 0;
+
+    for (; i + 4 <= size; i += 4)
+    {
+        *((uint32_t *)(_dst + i)) = *((uint32_t *)(_src + i));
+    }
+    for (; i < size; i++)
+    {
+        _dst[i] = _src[i];
+    }
+}
+
+void uint32_to_string(uint32_t number, char *result)
+{
+    uint16_t len = 0;
+    for (uint32_t i = number; i != 0; i /= 10)
+        len++;
+    for (; number != 0; number /= 10)
+        result[--len] = '0' + (number % 10);
+}
+
+void panic(char *msg, char *file, uint32_t line)
+{
+    uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp, eflags;
+
+    // Читаем общие регистры по отдельности
+    asm volatile("mov %%eax, %0" : "=r"(eax));
+    asm volatile("mov %%ebx, %0" : "=r"(ebx));
+    asm volatile("mov %%ecx, %0" : "=r"(ecx));
+    asm volatile("mov %%edx, %0" : "=r"(edx));
+    asm volatile("mov %%esi, %0" : "=r"(esi));
+    asm volatile("mov %%edi, %0" : "=r"(edi));
+    asm volatile("mov %%ebp, %0" : "=r"(ebp));
+    asm volatile("mov %%esp, %0" : "=r"(esp));
+    asm volatile("pushf; pop %0" : "=r"(eflags));
+
+    // Адрес возврата (EIP)
+    uint32_t eip = (uint32_t)__builtin_return_address(0);
+
+    // Читаем сегментные регистры
+    uint16_t cs, ds, es, fs, gs, ss;
+    asm volatile("mov %%cs, %0" : "=r"(cs));
+    asm volatile("mov %%ds, %0" : "=r"(ds));
+    asm volatile("mov %%es, %0" : "=r"(es));
+    asm volatile("mov %%fs, %0" : "=r"(fs));
+    asm volatile("mov %%gs, %0" : "=r"(gs));
+    asm volatile("mov %%ss, %0" : "=r"(ss));
+
+    // Вывод с использованием konsole_printf
+    konsole_set_panic_color();
+    konsole_printf("GURU MEDITATION ( %s )\n", msg);
+    konsole_set_bad_result_color();
+    konsole_printf("File: %s : %d\n", file, line);
+    konsole_set_base_color();
+
+    konsole_printf("\n=== REGISTER DUMP ===\n");
+    konsole_printf("EAX: %x  EBX: %x\n", eax, ebx);
+    konsole_printf("ECX: %x  EDX: %x\n", ecx, edx);
+    konsole_printf("ESI: %x  EDI: %x\n", esi, edi);
+    konsole_printf("EBP: %x  ESP: %x\n", ebp, esp);
+    konsole_printf("EIP: %x  EFLAGS: %x\n", eip, eflags);
+    konsole_printf("CS: %x  DS: 0x%x  ES: %x\n", cs, ds, es);
+    konsole_printf("FS: %x  GS: 0x%x  SS: %x\n", fs, gs, ss);
+
+    konsole_print("\nSystem halted.\n");
+    halt();
+}
+============================================================
+
+#keyboard.h
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
+
+#include "types.h"
+#include "isr.h"
+#include "system.h"
+#include "pic.h"
+
+#define KEYBOARD_DATA_PORT 0x60
+#define KEYBOARD_STATUS_PORT 0x64
+
+// Special keys
+#define KEY_ENTER 0x1C
+#define KEY_BACKSPACE 0x0E
+#define KEY_ESC 0x01
+#define KEY_LSHIFT 0x2A
+#define KEY_RSHIFT 0x36
+#define KEY_CAPSLOCK 0x3A
+#define KEY_TAB 0x0F
+#define KEY_CTRL 0x1D
+#define KEY_ALT 0x38
+#define KEY_SPACE 0x39
+
+// Function keys
+#define KEY_F1 0x3B
+#define KEY_F2 0x3C
+#define KEY_F3 0x3D
+#define KEY_F4 0x3E
+#define KEY_F5 0x3F
+#define KEY_F6 0x40
+#define KEY_F7 0x41
+#define KEY_F8 0x42
+#define KEY_F9 0x43
+#define KEY_F10 0x44
+
+// Arrow keys
+#define KEY_UP 0x48
+#define KEY_DOWN 0x50
+#define KEY_LEFT 0x4B
+#define KEY_RIGHT 0x4D
+
+void keyboard_init(void);
+bool_t keyboard_is_key_pressed(uint8_t scancode);
+void keyboard_wait_for_key(uint8_t scancode);
+void keyboard_enable_interrupts(void);
+void keyboard_disable_interrupts(void);
+bool_t keyboard_is_shift_pressed(void);
+bool_t keyboard_is_capslock_on(void);
+bool_t keyboard_is_ctrl_pressed(void);
+bool_t keyboard_is_alt_pressed(void);
+
+char keyboard_get_input(void);
+
+#endif
+
+============================================================
+
+#isr.h
+#ifndef ISR
+#define ISR
+
+#include "types.h"
+
+#define IRQ0 32
+#define IRQ1 33
+#define IRQ2 34
+#define IRQ3 35
+#define IRQ4 36
+#define IRQ5 37
+#define IRQ6 38
+#define IRQ7 39
+#define IRQ8 40
+#define IRQ9 41
+#define IRQ10 42
+#define IRQ11 43
+#define IRQ12 44
+#define IRQ13 45
+#define IRQ14 46
+#define IRQ15 47
+
+typedef struct
+{
+    uint32_t ds;                                     // data segment selector
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // pushed by pusha
+    uint32_t int_no, err_code;                       // interrupt number and error code (if applicable)
+    uint32_t eip, cs, eflags, useresp, ss;           // pushed by the processor automatically (on iret)
+} isr_data_t;
+
+typedef void (*isr_t)(isr_data_t);
+
+void interrupt_register(uint8_t n, isr_t handler);
+void interrupt_enable();
+void interrupt_disable();
+
+#endif
+============================================================
+
+#idt_initialiser.c
+#include "idt_initialiser.h"
+#include "pic.h"
+#include "konsole.h"
+#include "system.h"
+
+// Number of IDT entries
+#define IDT_COUNT 256
+
+static void idt_set_gate(uint8_t, uint32_t, uint16_t, uint8_t);
+static void pic_remap(void);
+
+idt_entry_t idt_entries[IDT_COUNT] = {0};
+idt_ptr_t idt_ptr;
+
+void idt_flush(uint32_t idt_start_ptr)
+{
+    asm volatile("lidt (%0)" ::"r"(idt_start_ptr));
+}
+
+void idt_init(void)
+{
+    idt_ptr.limit = (sizeof(idt_entry_t) * IDT_COUNT) - 1;
+    idt_ptr.base = (uint32_t)&idt_entries;
+
+    idt_set_gate(0, (uint32_t)isr0, 0x08, 0x8E);
+    idt_set_gate(1, (uint32_t)isr1, 0x08, 0x8E);
+    idt_set_gate(2, (uint32_t)isr2, 0x08, 0x8E);
+    idt_set_gate(3, (uint32_t)isr3, 0x08, 0x8E);
+    idt_set_gate(4, (uint32_t)isr4, 0x08, 0x8E);
+    idt_set_gate(5, (uint32_t)isr5, 0x08, 0x8E);
+    idt_set_gate(6, (uint32_t)isr6, 0x08, 0x8E);
+    idt_set_gate(7, (uint32_t)isr7, 0x08, 0x8E);
+    idt_set_gate(8, (uint32_t)isr8, 0x08, 0x8E);
+    idt_set_gate(9, (uint32_t)isr9, 0x08, 0x8E);
+    idt_set_gate(10, (uint32_t)isr10, 0x08, 0x8E);
+    idt_set_gate(11, (uint32_t)isr11, 0x08, 0x8E);
+    idt_set_gate(12, (uint32_t)isr12, 0x08, 0x8E);
+    idt_set_gate(13, (uint32_t)isr13, 0x08, 0x8E);
+    idt_set_gate(14, (uint32_t)isr14, 0x08, 0x8E);
+    idt_set_gate(15, (uint32_t)isr15, 0x08, 0x8E);
+    idt_set_gate(16, (uint32_t)isr16, 0x08, 0x8E);
+    idt_set_gate(17, (uint32_t)isr17, 0x08, 0x8E);
+    idt_set_gate(18, (uint32_t)isr18, 0x08, 0x8E);
+    idt_set_gate(19, (uint32_t)isr19, 0x08, 0x8E);
+    idt_set_gate(20, (uint32_t)isr20, 0x08, 0x8E);
+    idt_set_gate(21, (uint32_t)isr21, 0x08, 0x8E);
+    idt_set_gate(22, (uint32_t)isr22, 0x08, 0x8E);
+    idt_set_gate(23, (uint32_t)isr23, 0x08, 0x8E);
+    idt_set_gate(24, (uint32_t)isr24, 0x08, 0x8E);
+    idt_set_gate(25, (uint32_t)isr25, 0x08, 0x8E);
+    idt_set_gate(26, (uint32_t)isr26, 0x08, 0x8E);
+    idt_set_gate(27, (uint32_t)isr27, 0x08, 0x8E);
+    idt_set_gate(28, (uint32_t)isr28, 0x08, 0x8E);
+    idt_set_gate(29, (uint32_t)isr29, 0x08, 0x8E);
+    idt_set_gate(30, (uint32_t)isr30, 0x08, 0x8E);
+    idt_set_gate(31, (uint32_t)isr31, 0x08, 0x8E);
+
+    pic_remap();
+
+    idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);
+    idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+    idt_set_gate(34, (uint32_t)irq2, 0x08, 0x8E);
+    idt_set_gate(35, (uint32_t)irq3, 0x08, 0x8E);
+    idt_set_gate(36, (uint32_t)irq4, 0x08, 0x8E);
+    idt_set_gate(37, (uint32_t)irq5, 0x08, 0x8E);
+    idt_set_gate(38, (uint32_t)irq6, 0x08, 0x8E);
+    idt_set_gate(39, (uint32_t)irq7, 0x08, 0x8E);
+    idt_set_gate(40, (uint32_t)irq8, 0x08, 0x8E);
+    idt_set_gate(41, (uint32_t)irq9, 0x08, 0x8E);
+    idt_set_gate(42, (uint32_t)irq10, 0x08, 0x8E);
+    idt_set_gate(43, (uint32_t)irq11, 0x08, 0x8E);
+    idt_set_gate(44, (uint32_t)irq12, 0x08, 0x8E);
+    idt_set_gate(45, (uint32_t)irq13, 0x08, 0x8E);
+    idt_set_gate(46, (uint32_t)irq14, 0x08, 0x8E);
+    idt_set_gate(47, (uint32_t)irq15, 0x08, 0x8E);
+
+    idt_flush((uint32_t)&idt_ptr);
+}
+
+static void idt_set_gate(uint8_t number, uint32_t base, uint16_t selector, uint8_t flags)
+{
+    idt_entries[number].base_low = base & 0xFFFF;
+    idt_entries[number].base_high = (base >> 16) & 0xFFFF;
+
+    idt_entries[number].selector = selector;
+    idt_entries[number].zero = 0;
+
+    // TODO: set interrupt gate to ring 3
+    idt_entries[number].flags = flags /* | 0x60 */;
+}
+
+static void pic_remap(void)
+{
+    // Restart both PICs
+    outb(PIC1_CMD, 0x11);
+    outb(PIC2_CMD, 0x11);
+
+    // Start PIC1 at 32
+    outb(PIC1_DATA, 0x20);
+
+    // Start PIC2 at 40
+    outb(PIC2_DATA, 0x28);
+
+    // Set up cascading
+    outb(PIC1_DATA, 0x04);
+    outb(PIC2_DATA, 0x02);
+
+    // Finish
+    outb(PIC1_DATA, 0x01);
+    outb(PIC2_DATA, 0x01);
+
+    outb(PIC1_DATA, 0x0);
+    outb(PIC2_DATA, 0x0);
+}
+
+============================================================
+
