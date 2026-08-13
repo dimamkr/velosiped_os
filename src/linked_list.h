@@ -3,17 +3,21 @@
 
 #include "types.h"
 #include "heap.h"
+#include "system.h"
 
 typedef struct _linked_list_node
 {
-    void *value;
     struct _linked_list_node *left, *right;
 } linked_list_node_t;
 
-linked_list_node_t *linked_list_create_root(uint32_t value, uint32_t value_size);
+linked_list_node_t *linked_list_create_root(void *value, uint32_t value_size);
 
-linked_list_node_t *linked_list_add(linked_list_node_t *left, uint32_t value, uint32_t value_size);
+linked_list_node_t *linked_list_add(linked_list_node_t *left, void *value, uint32_t value_size);
 
-void linked_list_del(linked_list_node_t *curr);
+linked_list_node_t *linked_list_add_begin(linked_list_node_t **root, void *value, uint32_t value_size);
+
+void linked_list_del(linked_list_node_t **root, linked_list_node_t *curr);
+
+void *linked_list_node_get_value_ptr(linked_list_node_t *curr);
 
 #endif

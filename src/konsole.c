@@ -1,20 +1,14 @@
 #include "konsole.h"
-#include "system.h"
 
-#include <stdarg.h>
-
-volatile char *const konsole_start = (char *)0xB8000;
-int const konsole_w = 80;
-int const konsole_h = 25;
-int const konsole_line_offset = konsole_w * 2;
+volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)0xB8000;
 
 int konsole_curr_x = 0;
 int konsole_curr_y = 0;
-uint32_t konsole_current_color = 0x0F; // Белый на черном
+uint16_t konsole_current_color = 0x0F; // Белый на черном
 
-static char *konsole_pos_get()
+static konsole_symbol_t *konsole_pos_get()
 {
-    return konsole_start + (konsole_curr_y * konsole_line_offset) + (konsole_curr_x * 2);
+    return konsole_start + (konsole_curr_y * KONSOLE_W) + konsole_curr_x;
 }
 
 void konsole_cursor_set_position(uint16_t position)
@@ -31,28 +25,28 @@ void konsole_cursor_set_position(uint16_t position)
 // сдвижка позиции
 void konsole_pos_shift(int delta_x)
 {
-    konsole_curr_y += delta_x / konsole_w;
-    konsole_curr_x += delta_x % konsole_w;
-    konsole_curr_y += konsole_curr_x / konsole_w;
-    konsole_curr_x %= konsole_w;
+    konsole_curr_y += delta_x / KONSOLE_W;
+    konsole_curr_x += delta_x % KONSOLE_W;
+    konsole_curr_y += konsole_curr_x / KONSOLE_W;
+    konsole_curr_x %= KONSOLE_W;
 
-    if (konsole_curr_y >= konsole_h)
+    if (konsole_curr_y >= KONSOLE_H)
     {
         konsole_scroll();
     }
 
-    konsole_cursor_set_position(konsole_curr_y * konsole_w + konsole_curr_x);
+    konsole_cursor_set_position(konsole_curr_y * KONSOLE_W + konsole_curr_x);
 }
 
 void konsole_clear()
 {
-    for (int y = 0; y < konsole_h; y++)
+    for (int y = 0; y < KONSOLE_H; y++)
     {
-        for (int x = 0; x < konsole_w; x++)
+        for (int x = 0; x < KONSOLE_W; x++)
         {
-            int offset = (y * konsole_line_offset) + (x * 2);
-            konsole_start[offset] = ' ';
-            konsole_start[offset + 1] = konsole_current_color;
+            int offset = (y * KONSOLE_W) + x;
+            konsole_start[offset].symbol = ' ';
+            konsole_start[offset].colors = konsole_current_color;
         }
     }
     konsole_curr_x = 0;
@@ -66,7 +60,7 @@ void konsole_putch(char ch)
     case '\n':
         konsole_curr_x = 0;
         konsole_curr_y++;
-        if (konsole_curr_y >= konsole_h)
+        if (konsole_curr_y >= KONSOLE_H)
         {
             konsole_scroll();
         }
@@ -76,13 +70,13 @@ void konsole_putch(char ch)
         if (konsole_curr_x > 0)
         {
             konsole_pos_shift(-1);
-            konsole_pos_get()[0] = 0;
+            konsole_pos_get()->symbol = 0;
         }
         break;
 
     default:
-        konsole_pos_get()[0] = ch;
-        konsole_pos_get()[1] = konsole_current_color;
+        konsole_pos_get()->symbol = ch;
+        konsole_pos_get()->colors = konsole_current_color;
         konsole_pos_shift(1);
     }
 }
@@ -198,26 +192,18 @@ void konsole_set_color(uint32_t fg, uint32_t bg)
 
 void konsole_scroll()
 {
-    // Простая реализация скроллинга
-    for (int y = 0; y < konsole_h - 1; y++)
-    {
-        for (int x = 0; x < konsole_w; x++)
-        {
-            int src_offset = ((y + 1) * konsole_line_offset) + (x * 2);
-            int dst_offset = (y * konsole_line_offset) + (x * 2);
-            konsole_start[dst_offset] = konsole_start[src_offset];
-            konsole_start[dst_offset + 1] = konsole_start[src_offset + 1];
-        }
-    }
+    memcpy(konsole_start, konsole_start + KONSOLE_W, ((KONSOLE_H - 1) * KONSOLE_W) * sizeof(konsole_symbol_t));
+
     // Очищаем последнюю строку
-    for (int x = 0; x < konsole_w; x++)
+    for (int x = 0; x < KONSOLE_W; x++)
     {
-        int offset = ((konsole_h - 1) * konsole_line_offset) + (x * 2);
-        konsole_start[offset] = ' ';
-        konsole_start[offset + 1] = konsole_current_color;
+        int offset = (KONSOLE_H - 1) * KONSOLE_W + x;
+        konsole_start[offset]
+            .symbol = ' ';
+        konsole_start[offset].colors = konsole_current_color;
     }
 
-    konsole_curr_y = konsole_h - 1;
+    konsole_curr_y = KONSOLE_H - 1;
 }
 
 // COLORS

@@ -1,5 +1,10 @@
-#ifndef KONSOLE_H
-#define KONSOLE_H
+#ifndef KONSOLE
+#define KONSOLE
+
+#include "system.h"
+#include <stdarg.h>
+#include "types.h"
+#include "linked_list.h"
 
 #define COLOR_BLACK 0x0
 #define COLOR_BLUE 0x1
@@ -18,12 +23,8 @@
 #define COLOR_YELLOW 0xE
 #define COLOR_WHITE 0xF
 
-#include "types.h"
-
-extern volatile char *const konsole_start;
-extern int const konsole_w;
-extern int const konsole_h;
-extern int const konsole_line_offset;
+#define KONSOLE_W 80
+#define KONSOLE_H 25
 
 void konsole_clear();
 void konsole_putch(char ch);
@@ -39,5 +40,17 @@ void konsole_set_good_result_color();
 void konsole_set_bad_result_color();
 void konsole_set_panic_color();
 void konsole_set_base_color();
+
+typedef struct
+{
+    byte_t symbol;
+    // первые 4 бита задний фон, вторые 4 цвет символа
+    byte_t colors;
+} __attribute__((packed)) konsole_symbol_t;
+
+typedef struct
+{
+    konsole_symbol_t line[KONSOLE_W];
+} konsole_line_t;
 
 #endif

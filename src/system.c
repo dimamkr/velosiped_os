@@ -34,6 +34,7 @@ bool_t strcmp(const char *a, const char *b)
     }
 }
 
+// размер в байтах
 __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
 {
     byte_t *_dst = dst;
