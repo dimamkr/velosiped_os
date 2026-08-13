@@ -29,6 +29,8 @@ gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
     -fno-pic -mgeneral-regs-only -Os -c -o build/datetime.o datetime.c
 gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
     -fno-pic -mgeneral-regs-only -Os -c -o build/heap.o heap.c
+gcc -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+    -fno-pic -mgeneral-regs-only -Os -c -o build/dynamic_array.o dynamic_array.c
 
 #
 
@@ -47,7 +49,8 @@ echo "2. Linking..."
 ld -m elf_i386 -T link.ld -nostdlib -o build/kernel.elf \
     build/kernel.o build/konsole.o build/keyboard.o build/terminal.o \
     build/idt_initialiser.o build/isr.o build/interrupts.o build/system.o \
-    build/timer.o build/gdt_initialiser.o build/datetime.o build/heap.o
+    build/timer.o build/gdt_initialiser.o build/datetime.o build/heap.o \
+    build/dynamic_array.o
 
 echo "3. Creating binary..."
 objcopy -O binary -S build/kernel.elf build/kernel.bin
