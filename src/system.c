@@ -34,6 +34,14 @@ bool_t strcmp(const char *a, const char *b)
     }
 }
 
+__attribute__((optimize("O3,unroll-loops"))) uint32_t strlen(const char *s)
+{
+    uint32_t len = 0;
+    while (s[len])
+        len++;
+    return len;
+}
+
 // размер в байтах
 __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
 {
@@ -50,6 +58,42 @@ __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *
     {
         _dst[i] = _src[i];
     }
+}
+
+// TODO оптимизировать
+//  размер в байтах
+__attribute__((optimize("O3,unroll-loops"))) void memset(void *ptr, byte_t value, uint32_t size)
+{
+    for (uint32_t i = 0; i < size; i++)
+    {
+        *((byte_t *)ptr + i) = value;
+    }
+}
+
+// TODO
+// оптимизировать
+// размер в байтах; возвращает равны ли
+__attribute__((optimize("O3,unroll-loops"))) bool memcmp(void *ptr_a, void *ptr_b, uint32_t size)
+{
+    uint32_t i = 0;
+
+    for (; i + 4 <= size; i += 4)
+    {
+        if (*((uint32_t *)(ptr_a + i)) != *((uint32_t *)(ptr_b + i)))
+        {
+            return false;
+        }
+    }
+
+    for (; i < size; i++)
+    {
+        if (*((byte_t *)(ptr_a + i)) != *((byte_t *)(ptr_b + i)))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void uint32_to_string(uint32_t number, char *result)
