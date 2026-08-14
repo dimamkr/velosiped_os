@@ -63,7 +63,13 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     // konsole_println("");
 
     konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
-    konsole_printf("%s\n", "velosipedOS PRO+");
+
+    konsole_println("             .__               .__                  .___  ________    _________\n"
+                    "___  __ ____ |  |   ____  _____|__|_____   ____   __| _/  \\_____  \\  /   _____/\n"
+                    "\\  \\/ // __ \\|  |  /  _ \\/  ___/  \\____ \\_/ __ \\ / __ |    /   |   \\ \\_____  \\ "
+                    "\n \\   /\\  ___/|  |_(  <_> )___ \\|  |  |_> >  ___// /_/ |   /    |    \\/        \\\n  "
+                    "\\_/  \\___  >____/\\____/____  >__|   __/ \\___  >____ |   \\_______  /_______  /\n           "
+                    "\\/                \\/   |__|        \\/     \\/           \\/        \\/ ");
 
     konsole_set_base_color();
     terminal_main_loop();

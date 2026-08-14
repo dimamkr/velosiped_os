@@ -25,7 +25,12 @@ void terminal_read_symbol(char symbol)
         terminal_buff_add_symbol(0);
         terminal_EOI_flag = true;
         break;
-
+    case '=':
+        konsole_view_scroll_down();
+        break;
+    case '-':
+        konsole_view_scroll_up();
+        break;
     case '\b':
         if (terminal_input_buff_lenght > 0)
         {
