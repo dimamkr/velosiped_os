@@ -9,6 +9,7 @@ void outb(uint16_t port, byte_t value);
 byte_t inb(uint16_t port);
 void uint32_to_string(uint32_t number, char *result);
 bool_t strcmp(const char *a, const char *b);
+void halt();
 
 void memcpy(void *dst, const void *src, uint32_t size);
 

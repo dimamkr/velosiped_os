@@ -16,13 +16,14 @@ typedef struct
 
 dynamic_array_t *dynamic_array_create(uint32_t size_of_element);
 void dynamic_array_destroy(dynamic_array_t *array);
-void array_push_back(dynamic_array_t *array, void *element);
-void array_push_front(dynamic_array_t *array, void *element);
-void array_pop_back(dynamic_array_t *array);
-void array_pop_front(dynamic_array_t *array);
+void dynamic_array_push_back(dynamic_array_t *array, void *element);
+void dynamic_array_push_front(dynamic_array_t *array, void *element);
+void dynamic_array_pop_back(dynamic_array_t *array);
+void dynamic_array_pop_front(dynamic_array_t *array);
 
-#define get_by_index(array, index) ((void*)((array)->buffer + (((array)->start + (index) + 1) & ((array)->size - 1)) * (array)->size_of_element))
-#define get_bottom(array) get_by_index(array, 0)
-#define get_top(array) ((void*)((array)->buffer + (((array)->end - 1) & ((array)->size - 1)) * (array)->size_of_element))
+#define dynamic_array_get_by_index(array, index) ((void *)((array)->buffer + (((array)->start + (index) + 1) & ((array)->size - 1)) * (array)->size_of_element))
+#define dynamic_array_set_by_index(array, index, value) (memcpy(dynamic_array_get_by_index(array, index), value, (array)->size_of_element))
+#define dynamic_array_get_bottom(array) dynamic_array_get_by_index(array, 0)
+#define dynamic_array_get_top(array) ((void *)((array)->buffer + (((array)->end - 1) & ((array)->size - 1)) * (array)->size_of_element))
 
 #endif

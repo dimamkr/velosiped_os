@@ -23,8 +23,13 @@
 
 __attribute__((section(".text.start"))) void kernel_main(void)
 {
-    konsole_set_base_color();
-    konsole_println("\nWELCOME TO KERNEL");
+    heap_init();
+
+    konsole_init();
+    konsole_set_good_result_color();
+    konsole_println("\nHEAP INITED");
+    konsole_println("KONSOLE INITED");
+    konsole_set_good_result_color();
 
     PRINT_INIT("GDT");
     gdt_init();
@@ -42,32 +47,23 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     keyboard_init();
     PRINT_OK;
 
-    PRINT_INIT("heap");
-    heap_init();
-    PRINT_OK;
-
     interrupt_enable();
 
-    uint32_t size = 30 * MB;
-    char *a = malloc(size);
-    char *b = malloc(size);
-
-    terminal_print_time();
-    memcpy(a, b, size);
-    terminal_print_time();
-
-    // TODO std::vector
-    // TODO куча должна быть в области данных
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране
     // TODO листать вверх-вниз вывод консоли
-    // TODO дамп памяти и HEAP MAGIC
-    // TODO увеличение размера кучи
+    // TODO дамп памяти
 
-    konsole_set_base_color();
+    // for (int i = 1; i < 8; ++i)
+    // {
+    //     const char s[2] = {(char)i, 0};
+    //     konsole_print(s);
+    //     timer_wait(500);
+    // }
+    // konsole_println("");
 
-    konsole_set_color(COLOR_GREEN, COLOR_LIGHT_BLUE);
-    konsole_printf("%s%d%s\n", "СОСАЛИ ", 100, " ХУЕВ");
+    konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
+    konsole_printf("%s\n", "velosipedOS PRO+");
 
     konsole_set_base_color();
     terminal_main_loop();

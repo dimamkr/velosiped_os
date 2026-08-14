@@ -4,7 +4,7 @@
 #include "system.h"
 #include <stdarg.h>
 #include "types.h"
-#include "linked_list.h"
+#include "dynamic_array.h"
 
 #define COLOR_BLACK 0x0
 #define COLOR_BLUE 0x1
@@ -26,14 +26,17 @@
 #define KONSOLE_W 80
 #define KONSOLE_H 25
 
+void konsole_init();
 void konsole_clear();
 void konsole_putch(char ch);
 void konsole_print(const char *text);
 void konsole_println(const char *text);
 void konsole_set_color(uint32_t fg, uint32_t bg);
-void konsole_scroll();
+void konsole_scroll_down();
 void konsole_printf(const char *format, ...);
 void konsole_printfln(const char *format, ...);
+bool konsole_view_scroll_up();
+bool konsole_view_scroll_down();
 
 void konsole_set_preambula_color();
 void konsole_set_good_result_color();
@@ -48,9 +51,9 @@ typedef struct
     byte_t colors;
 } __attribute__((packed)) konsole_symbol_t;
 
-typedef struct
-{
-    konsole_symbol_t line[KONSOLE_W];
-} konsole_line_t;
+// typedef struct
+// {
+//     konsole_symbol_t line[KONSOLE_W];
+// } konsole_line_t;
 
 #endif

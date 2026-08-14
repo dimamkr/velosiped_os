@@ -1,14 +1,65 @@
 #include "konsole.h"
 
+// адрес начала видеопамяти
 volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)0xB8000;
 
-int konsole_curr_x = 0;
-int konsole_curr_y = 0;
-uint16_t konsole_current_color = 0x0F; // Белый на черном
+int konsole_curr_x;
+int konsole_curr_y;
+byte_t konsole_current_color;
+dynamic_array_t *konsole_output_history;
+// индекс верхнего левого символа
+uint32_t konsole_output_history_start_index;
 
-static konsole_symbol_t *konsole_pos_get()
+void konsole_init()
 {
-    return konsole_start + (konsole_curr_y * KONSOLE_W) + konsole_curr_x;
+    konsole_curr_x = 0;
+    konsole_curr_y = 0;
+    konsole_set_base_color();
+
+    konsole_output_history = dynamic_array_create(sizeof(konsole_symbol_t));
+    for (uint32_t i = 0; i < KONSOLE_W * KONSOLE_H; ++i)
+    {
+        dynamic_array_push_back(konsole_output_history, konsole_start + i);
+    }
+
+    konsole_output_history_start_index = 0;
+}
+
+// возвращает получилось ли проскроллить чтобы не выйти за границы массива
+bool konsole_view_scroll_up()
+{
+    if (konsole_output_history_start_index >= KONSOLE_W)
+    {
+        konsole_output_history_start_index -= KONSOLE_W;
+        memcpy(konsole_start, dynamic_array_get_by_index(konsole_output_history, konsole_output_history_start_index),
+               sizeof(konsole_symbol_t) * KONSOLE_W * KONSOLE_H);
+        return true;
+    }
+    return false;
+}
+
+bool konsole_view_scroll_down()
+{
+    if (konsole_output_history_start_index + KONSOLE_H * KONSOLE_W + KONSOLE_W <= konsole_output_history->elements_count)
+    {
+        konsole_output_history_start_index += KONSOLE_W;
+        memcpy(konsole_start, dynamic_array_get_by_index(konsole_output_history, konsole_output_history_start_index),
+               sizeof(konsole_symbol_t) * KONSOLE_W * KONSOLE_H);
+        return true;
+    }
+    return false;
+}
+
+// static inline konsole_symbol_t *konsole_pos_get()
+// {
+//     return konsole_start + (konsole_curr_y * KONSOLE_W) + konsole_curr_x;
+// }
+
+static inline void konsole_set_value(uint32_t x, uint32_t y, konsole_symbol_t value)
+{
+    uint32_t index = (y * KONSOLE_W) + x;
+    konsole_start[index] = value;
+    dynamic_array_set_by_index(konsole_output_history, konsole_output_history_start_index + index, &value);
 }
 
 void konsole_cursor_set_position(uint16_t position)
@@ -32,7 +83,7 @@ void konsole_pos_shift(int delta_x)
 
     if (konsole_curr_y >= KONSOLE_H)
     {
-        konsole_scroll();
+        konsole_scroll_down();
     }
 
     konsole_cursor_set_position(konsole_curr_y * KONSOLE_W + konsole_curr_x);
@@ -47,6 +98,8 @@ void konsole_clear()
             int offset = (y * KONSOLE_W) + x;
             konsole_start[offset].symbol = ' ';
             konsole_start[offset].colors = konsole_current_color;
+
+            konsole_set_value(x, y, (konsole_symbol_t){.symbol = ' ', .colors = konsole_current_color});
         }
     }
     konsole_curr_x = 0;
@@ -55,14 +108,20 @@ void konsole_clear()
 
 void konsole_putch(char ch)
 {
+    // чтобы curr_x и curr_y были в области видимости
+    while (konsole_view_scroll_down())
+    {
+    }
+
     switch (ch)
     {
     case '\n':
         konsole_curr_x = 0;
         konsole_curr_y++;
+
         if (konsole_curr_y >= KONSOLE_H)
         {
-            konsole_scroll();
+            konsole_scroll_down();
         }
         break;
 
@@ -70,13 +129,12 @@ void konsole_putch(char ch)
         if (konsole_curr_x > 0)
         {
             konsole_pos_shift(-1);
-            konsole_pos_get()->symbol = 0;
+            konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = 0, .colors = 0});
         }
         break;
 
     default:
-        konsole_pos_get()->symbol = ch;
-        konsole_pos_get()->colors = konsole_current_color;
+        konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = ch, .colors = konsole_current_color});
         konsole_pos_shift(1);
     }
 }
@@ -95,6 +153,7 @@ void konsole_println(const char *text)
     konsole_print("\n");
 }
 
+// TODO переписать через putch независимо от print
 void konsole_printf(const char *format, ...)
 {
     char buffer[1024]; // достаточно для большинства сообщений
@@ -185,28 +244,31 @@ void konsole_printf(const char *format, ...)
     va_end(args);
 }
 
-void konsole_set_color(uint32_t fg, uint32_t bg)
-{
-    konsole_current_color = (bg << 4) | (fg & 0x0F);
-}
-
-void konsole_scroll()
+// TODO блокировка прерываний тут
+void konsole_scroll_down()
 {
     memcpy(konsole_start, konsole_start + KONSOLE_W, ((KONSOLE_H - 1) * KONSOLE_W) * sizeof(konsole_symbol_t));
+
+    konsole_output_history_start_index += KONSOLE_W;
 
     // Очищаем последнюю строку
     for (int x = 0; x < KONSOLE_W; x++)
     {
-        int offset = (KONSOLE_H - 1) * KONSOLE_W + x;
-        konsole_start[offset]
-            .symbol = ' ';
-        konsole_start[offset].colors = konsole_current_color;
+        konsole_symbol_t value = (konsole_symbol_t){.symbol = ' ', .colors = konsole_current_color};
+
+        dynamic_array_push_back(konsole_output_history, &value);
+        konsole_set_value(x, KONSOLE_H - 1, value);
     }
 
     konsole_curr_y = KONSOLE_H - 1;
 }
 
 // COLORS
+void konsole_set_color(uint32_t fg, uint32_t bg)
+{
+    konsole_current_color = (bg << 4) | (fg & 0x0F);
+}
+
 void konsole_set_preambula_color()
 {
     konsole_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);

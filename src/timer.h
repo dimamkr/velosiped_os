@@ -13,5 +13,6 @@ void timer_callback(isr_data_t data);
 void timer_init(uint32_t);
 uint32_t timer_get_ticks();
 uint32_t timer_get_time();
+void timer_wait(uint32_t);
 
 #endif

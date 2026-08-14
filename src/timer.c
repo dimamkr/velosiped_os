@@ -47,3 +47,12 @@ uint32_t timer_get_ticks()
 {
     return timer_ticks_count;
 }
+
+void timer_wait(uint32_t miliseconds)
+{
+    uint32_t curr_time = timer_get_time();
+    while (timer_get_time() < curr_time + miliseconds)
+    {
+        halt();
+    }
+}
