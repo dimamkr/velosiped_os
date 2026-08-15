@@ -36,6 +36,7 @@ linked_list_node_t *linked_list_add(linked_list_node_t *left, void *value, uint3
     return new;
 }
 
+// поддерживает *root = NULL
 linked_list_node_t *linked_list_add_begin(linked_list_node_t **root, void *value, uint32_t value_size)
 {
     linked_list_node_t *new = linked_list_create_node(value, value_size);
