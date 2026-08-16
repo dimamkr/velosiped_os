@@ -62,7 +62,7 @@ run: all
 	@echo "========================================="
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
-	qemu-system-x86_64 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
+	qemu-system-i386 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
 	    -no-reboot -display sdl -vga std -m 256
 
 # Сборка с отладочной информацией (очистка + отладочная сборка)
@@ -79,7 +79,7 @@ run-debug: build-debug
 	@echo "========================================="
 	@echo "Starting QEMU with GDB server (for VS Code)..."
 	@echo "========================================="
-	@(nohup qemu-system-x86_64 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
+	@(nohup qemu-system-i386 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
 	    -monitor stdio -no-reboot -display sdl -vga std -s -S -m 256 \
 	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@echo "Waiting for QEMU to open port 1234..."

@@ -22,13 +22,12 @@
                 },
                 {
                     "description": "Set architecture",
-                    "text": "set architecture i386:x86-64",
+                    "text": "set architecture i386",
                     "ignoreFailures": true
                 }
             ],
             "preLaunchTask": "debug-setup",
-            "postDebugTask": "kill-qemu",
-            "targetArchitecture": "x86_64"
+            "postDebugTask": "kill-qemu"
         }
     ]
 }
