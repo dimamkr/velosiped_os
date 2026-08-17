@@ -14,7 +14,7 @@
 // ТАКЖЕ ВАЖНО ЧТОБЫ СИГНАТУРЫ И РАЗМЕРЫ ХРАНИЛИСЬ В ОДНОМ МЕСТЕ
 
 // далее пустотные данные и размер, сигнатура
-typedef volatile struct _heap_void_node
+typedef struct _heap_void_node
 {
     uint32_t signature;
     uint32_t size; // размер именно пустоты
@@ -23,7 +23,7 @@ typedef volatile struct _heap_void_node
 } __attribute__((packed)) heap_void_block_t;
 
 // далее выделенные данные и размер, сигнатура
-typedef volatile struct
+typedef struct
 {
     uint32_t signature;
     uint32_t size; // размер именно данных

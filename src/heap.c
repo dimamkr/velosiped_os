@@ -1,9 +1,9 @@
 #include "heap.h"
 
-// TODO
-// реализовать полную версию segregated lists где какое угодное количество HEAP_VOID_BUCKET_COUNT
-#define HEAP_VOID_BUCKET_COUNT 1
-uint32_t heap_void_bucket_size[HEAP_VOID_BUCKET_COUNT];
+// segregated lists heap
+
+#define HEAP_VOID_BUCKET_COUNT 30
+// uint32_t heap_void_bucket_size[HEAP_VOID_BUCKET_COUNT];
 
 // i-й элемент это указатель на корень с соотв разбросом размеров
 heap_void_block_t *heap_void_bucket_root[HEAP_VOID_BUCKET_COUNT];
@@ -11,6 +11,15 @@ heap_void_block_t *heap_void_bucket_root[HEAP_VOID_BUCKET_COUNT];
 #define RIGHT_EDGE_SIZE (2 * sizeof(uint32_t))
 #define SERVICE_FIELDS_SIZE (sizeof(heap_void_block_t) + RIGHT_EDGE_SIZE)
 #define LEFT_EDGE_SIZE (sizeof(heap_void_block_t))
+
+// наим степень двойки не меньшая числа
+static inline uint32_t get_void_block_size_index(uint32_t size)
+{
+    if (size <= 1)
+        return 0;
+    // __builtin_clz возвращает число ведущих нулей в 32-битном числе..
+    return (32 - __builtin_clz(size - 1));
+}
 
 static inline byte_t *get_data_ptr(byte_t *block_start_addr)
 {
@@ -114,7 +123,8 @@ static inline void heap_void_block_try_merge(heap_void_block_t *void_block)
 
         byte_t *left_start_addr = get_block_start(start_addr);
 
-        heap_void_bucket_erase(heap_void_bucket_root + 0, (heap_void_block_t *)left_start_addr);
+        heap_void_bucket_erase(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)left_start_addr)->size),
+                               (heap_void_block_t *)left_start_addr);
 
         new_start_addr = left_start_addr;
     }
@@ -126,19 +136,20 @@ static inline void heap_void_block_try_merge(heap_void_block_t *void_block)
     {
         found_neighbours = true;
 
-        heap_void_bucket_erase(heap_void_bucket_root + 0, right_start_block);
+        heap_void_bucket_erase(heap_void_bucket_root + get_void_block_size_index(right_start_block->size), right_start_block);
 
         new_end_addr = get_block_end((byte_t *)right_start_block);
     }
 
     if (found_neighbours)
     {
-        heap_void_bucket_erase(heap_void_bucket_root + 0, void_block);
+        heap_void_bucket_erase(heap_void_bucket_root + get_void_block_size_index(void_block->size), void_block);
 
         uint32_t new_size = new_end_addr - new_start_addr - SERVICE_FIELDS_SIZE;
 
         create_void_block_default(new_start_addr, new_size);
-        heap_void_bucket_add_begin(heap_void_bucket_root + 0, (heap_void_block_t *)new_start_addr);
+        heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)new_start_addr)->size),
+                                   (heap_void_block_t *)new_start_addr);
     }
 }
 
@@ -148,18 +159,20 @@ void heap_init()
     create_data_block((byte_t *)HEAP_START_BLOCK, 0);
     create_data_block((byte_t *)HEAP_END_BLOCK, 0);
 
-    heap_void_bucket_root[0] = NULL;
+    for (uint32_t i = 0; i < HEAP_VOID_BUCKET_COUNT; ++i)
+    {
+        heap_void_bucket_root[i] = NULL;
+    }
 
-    byte_t *void_block_start = (byte_t *)HEAP_START_BLOCK;
+    byte_t *void_block_start = get_block_end((byte_t *)HEAP_START_BLOCK);
 
-    create_void_block_default(void_block_start, (uint32_t)(HEAP_END_BLOCK - HEAP_START_BLOCK - SERVICE_FIELDS_SIZE));
-    heap_void_bucket_add_begin(heap_void_bucket_root + 0, (heap_void_block_t *)void_block_start);
+    create_void_block_default(void_block_start, (uint32_t)(HEAP_END_BLOCK - (uint32_t)void_block_start - SERVICE_FIELDS_SIZE));
+    heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)void_block_start)->size),
+                               (heap_void_block_t *)void_block_start);
 }
 
-void *malloc(uint32_t size)
+static inline byte_t *try_malloc_from_bucket(heap_void_block_t *n, uint32_t index, uint32_t size)
 {
-    // TODO сделать нормальный выбор подходящего размера
-    heap_void_block_t *n = heap_void_bucket_root[0];
     while (n)
     {
         if (n->size >= size)
@@ -172,19 +185,19 @@ void *malloc(uint32_t size)
             {
                 // то отдаем сразу всю память пустотного узла
                 size = n->size;
-                heap_void_bucket_erase(heap_void_bucket_root + 0, n);
+                heap_void_bucket_erase(heap_void_bucket_root + index, n);
                 create_data_block((byte_t *)n, size);
             }
             else
             {
-                heap_void_bucket_erase(heap_void_bucket_root + 0, n);
+                heap_void_bucket_erase(heap_void_bucket_root + index, n);
                 create_data_block((byte_t *)n, size);
 
                 // указывает на начало нового блока пустоты
                 heap_void_block_t *new = (heap_void_block_t *)get_block_end((byte_t *)n);
                 create_void_block_default((byte_t *)new, void_size_left);
 
-                heap_void_bucket_add_begin(heap_void_bucket_root + 0, new);
+                heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(new->size), new);
             }
 
             // n - это теперь адрес начала данных
@@ -192,6 +205,43 @@ void *malloc(uint32_t size)
         }
 
         n = n->right;
+    }
+
+    return NULL;
+}
+
+void *malloc(uint32_t size)
+{
+    if (size == 0)
+    {
+        return NULL;
+    }
+
+    uint32_t index = get_void_block_size_index(size);
+
+    if (index >= HEAP_VOID_BUCKET_COUNT)
+    {
+        PANIC("BAD MALLOC SIZE");
+    }
+
+    // пытаемся зайти в пустоту с большим размером (начиная с наименьшего)
+    for (uint32_t i = index; i < HEAP_VOID_BUCKET_COUNT; ++i)
+    {
+        byte_t *ptr = try_malloc_from_bucket(heap_void_bucket_root[i], i, size);
+        if (ptr)
+        {
+            return ptr;
+        }
+    }
+
+    if (index > 0)
+    {
+        // если нет, то берем в области где в теории может быть подходящий размер (редкое событие)
+        byte_t *ptr = try_malloc_from_bucket(heap_void_bucket_root[index - 1], index - 1, size);
+        if (ptr)
+        {
+            return ptr;
+        }
     }
 
     PANIC("BAD MALLOC");
@@ -215,7 +265,7 @@ void free(void *ptr)
     // места на новый пустотный узел гарантированно хватает
     create_void_block_default(start, ((heap_data_block_t *)start)->size);
 
-    heap_void_bucket_add_begin(heap_void_bucket_root, (heap_void_block_t *)start);
+    heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)start)->size), (heap_void_block_t *)start);
     heap_void_block_try_merge((heap_void_block_t *)start);
 }
 
@@ -223,6 +273,11 @@ void *realloc(void *ptr, uint32_t size)
 {
     if (ptr == NULL)
         return malloc(size);
+    if (size == 0)
+    {
+        free(ptr);
+        return NULL;
+    }
 
     heap_data_block_t *data_block = (heap_data_block_t *)((byte_t *)ptr - LEFT_EDGE_SIZE);
 
@@ -249,19 +304,19 @@ void *realloc(void *ptr, uint32_t size)
         {
             // то отдаем сразу всю память пустотного узла
             size = next->size + data_block->size + SERVICE_FIELDS_SIZE;
-            heap_void_bucket_erase(heap_void_bucket_root + 0, next);
+            heap_void_bucket_erase(heap_void_bucket_root + get_void_block_size_index(next->size), next);
             create_data_block((byte_t *)data_block, size);
         }
         else
         {
-            heap_void_bucket_erase(heap_void_bucket_root + 0, next);
+            heap_void_bucket_erase(heap_void_bucket_root + get_void_block_size_index(next->size), next);
             create_data_block((byte_t *)data_block, size);
 
             // указывает на начало нового блока пустоты
             heap_void_block_t *new = (heap_void_block_t *)get_block_end((byte_t *)data_block);
             create_void_block_default((byte_t *)new, void_size_left);
 
-            heap_void_bucket_add_begin(heap_void_bucket_root + 0, new);
+            heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(new->size), new);
         }
 
         new_ptr = get_data_ptr((byte_t *)data_block);
