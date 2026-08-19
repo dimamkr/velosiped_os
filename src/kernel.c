@@ -5,6 +5,7 @@
 #include "timer.h"
 #include "keyboard.h"
 #include "heap.h"
+#include "ahci.h"
 
 #define PRINT_INIT(x)                   \
     do                                  \
@@ -29,7 +30,6 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     konsole_set_good_result_color();
     konsole_println("\nHEAP INITED");
     konsole_println("KONSOLE INITED");
-    konsole_set_good_result_color();
 
     PRINT_INIT("GDT");
     gdt_init();
@@ -46,6 +46,15 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     PRINT_INIT("keyboard");
     keyboard_init();
     PRINT_OK;
+
+    PRINT_INIT("AHCI");
+    if (ahci_init())
+        PRINT_OK;
+    else
+    {
+        konsole_set_bad_result_color();
+        konsole_print("Fail");
+    }
 
     interrupt_enable();
 

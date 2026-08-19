@@ -5,6 +5,7 @@
 #include "timer.h"
 #include "types.h"
 #include "datetime.h"
+#include "ahci.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -77,6 +78,49 @@ void terminal_print_time()
     konsole_printf("%d%s%d%s\n", milis_time / 1000, " s ", milis_time % 1000, " ms");
 }
 
+void terminal_print_disks_info()
+{
+    dynamic_array_t *disks_info = ahci_enumerate_ports();
+
+    if (disks_info->elements_count)
+    {
+        for (uint8_t i = 0;i < disks_info->elements_count;i++)
+        {
+            ahci_basic_identify_data_t *entry = dynamic_array_get_by_index(disks_info, i);
+
+            konsole_printf("========\nPort: %d\nDevice type: ", entry->port_num);
+
+            switch (entry->port_sig)
+            {
+                case SATA_SIG_ATA:
+                    konsole_println("SATA drive");
+                    break;
+                case SATA_SIG_ATAPI:
+                    konsole_println("SATAPI drive");
+                    break;
+                case SATA_SIG_SEMB:
+                    konsole_println("Enclosure management bridge");
+                    break;
+                case SATA_SIG_PM:
+                    konsole_println("Port mmultiplier");
+                    break;
+            }
+
+            konsole_printf(
+                "Model: %s\nSerial: %s\nSectors: %d\nLBA48|NCQ|DMA: %d|%d|%d\n",
+                entry->model,
+                entry->serial,
+                entry->sectors,
+                entry->lba48_supported,
+                entry->ncq_supported,
+                entry->dma_supported
+            );
+        }
+
+        konsole_println("========");
+    }
+}
+
 void terminal_handle_command_from_buff()
 {
     if (strcmp(terminal_input_buff, "help"))
@@ -101,6 +145,10 @@ void terminal_handle_command_from_buff()
     {
         terminal_print_datetime();
         konsole_printf("\n");
+    }
+    else if (strcmp(terminal_input_buff, "disks"))
+    {
+        terminal_print_disks_info();
     }
     else
     {

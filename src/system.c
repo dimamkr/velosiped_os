@@ -7,16 +7,40 @@ void outb(uint16_t port, byte_t value)
     asm volatile("outb %1, %0" : : "dN"(port), "a"(value));
 }
 
-void halt()
-{
-    asm volatile("hlt");
-}
-
 byte_t inb(uint16_t port)
 {
     byte_t ret;
     asm volatile("inb %1, %0" : "=a"(ret) : "dN"(port));
     return ret;
+}
+
+void outw(uint16_t port, uint16_t value)
+{
+    asm volatile("outw %1, %0" : : "dN"(port), "a"(value));
+}
+
+uint16_t inw(uint16_t port)
+{
+    uint16_t ret;
+    asm volatile("inw %1, %0" : "=a"(ret) : "dN"(port));
+    return ret;
+}
+
+void outl(uint16_t port, uint32_t value)
+{
+    asm volatile("outl %1, %0" : : "dN"(port), "a"(value));
+}
+
+uint32_t inl(uint16_t port)
+{
+    uint32_t ret;
+    asm volatile("inl %1, %0" : "=a"(ret) : "dN"(port));
+    return ret;
+}
+
+void halt()
+{
+    asm volatile("hlt");
 }
 
 bool_t strcmp(const char *a, const char *b)
@@ -109,6 +133,8 @@ void panic(char *msg, char *file, uint32_t line)
 {
     uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp, eflags;
 
+    interrupt_disable();
+
     // Читаем общие регистры по отдельности
     asm volatile("mov %%eax, %0" : "=r"(eax));
     asm volatile("mov %%ebx, %0" : "=r"(ebx));
@@ -134,7 +160,7 @@ void panic(char *msg, char *file, uint32_t line)
 
     // Вывод с использованием konsole_printf
     konsole_set_panic_color();
-    konsole_printf("GURU MEDITATION ( %s )\n", msg);
+    konsole_printf("GURU MEDITATION (%s)\n", msg);
     konsole_set_bad_result_color();
     konsole_printf("File: %s : %d\n", file, line);
     konsole_set_base_color();
@@ -145,8 +171,8 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_printf("ESI: %x  EDI: %x\n", esi, edi);
     konsole_printf("EBP: %x  ESP: %x\n", ebp, esp);
     konsole_printf("EIP: %x  EFLAGS: %x\n", eip, eflags);
-    konsole_printf("CS: %x  DS: 0x%x  ES: %x\n", cs, ds, es);
-    konsole_printf("FS: %x  GS: 0x%x  SS: %x\n", fs, gs, ss);
+    konsole_printf("CS: %x  DS: %x  ES: %x\n", cs, ds, es);
+    konsole_printf("FS: %x  GS: %x  SS: %x\n", fs, gs, ss);
 
     konsole_print("\nSystem halted.\n");
     halt();

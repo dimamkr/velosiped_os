@@ -22,11 +22,11 @@ BUILD_DIR = build
 
 # Флаги для релизной сборки
 CFLAGS_RELEASE = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -Os
+                 -fno-pic -mgeneral-regs-only -Os -I$(SRC_DIR)
 
 # Флаги для отладочной сборки
 CFLAGS_DEBUG   = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer
+                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR)
 
 # Флаги по умолчанию (релиз)
 CFLAGS = $(CFLAGS_RELEASE)
@@ -62,7 +62,7 @@ run: all
 	@echo "========================================="
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
-	qemu-system-i386 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
+	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
 	    -no-reboot -display sdl -vga std -m 256
 
 # Сборка с отладочной информацией (очистка + отладочная сборка)
@@ -79,8 +79,8 @@ run-debug: build-debug
 	@echo "========================================="
 	@echo "Starting QEMU with GDB server (for VS Code)..."
 	@echo "========================================="
-	@(nohup qemu-system-i386 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=ide \
-	    -monitor stdio -no-reboot -display sdl -vga std -s -S -m 256 \
+	@(nohup qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
+	    -no-reboot -display sdl -vga std -s -S -m 256 \
 	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@echo "Waiting for QEMU to open port 1234..."
 	@timeout=0; \
