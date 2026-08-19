@@ -119,6 +119,10 @@ void terminal_print_disks_info()
 
         konsole_println("========");
     }
+    else
+        konsole_println("No disks found");
+    
+    dynamic_array_destroy(disks_info);
 }
 
 void terminal_handle_command_from_buff()
