@@ -1,6 +1,14 @@
 #include "heap.h"
 
 // segregated lists heap
+// инварианты:
+// не существует двух соседних пустотных блоков
+// malloc всегда из начала пустоты
+
+// TODO
+//  задуматься об утечке памяти которая может быть из-за увеличения размера защитных блоков по бокам
+// TODO
+// рефакторинг
 
 #define HEAP_VOID_BUCKET_COUNT 30
 // uint32_t heap_void_bucket_size[HEAP_VOID_BUCKET_COUNT];
@@ -8,7 +16,7 @@
 // i-й элемент это указатель на корень с соотв разбросом размеров
 heap_void_block_t *heap_void_bucket_root[HEAP_VOID_BUCKET_COUNT];
 
-#define RIGHT_EDGE_SIZE (2 * sizeof(uint32_t))
+#define RIGHT_EDGE_SIZE (sizeof(heap_end_block_t))
 #define SERVICE_FIELDS_SIZE (sizeof(heap_void_block_t) + RIGHT_EDGE_SIZE)
 #define LEFT_EDGE_SIZE (sizeof(heap_void_block_t))
 
@@ -245,6 +253,64 @@ void *malloc(uint32_t size)
     }
 
     PANIC("BAD MALLOC");
+}
+
+void *alligned_malloc(uint32_t size, uint32_t alignment)
+{
+    if (size == 0 || alignment == 0)
+    {
+        return NULL;
+    }
+
+    // не степень двойки
+    if (alignment & (alignment - 1))
+    {
+        PANIC("BAD ALLIGNMENT");
+    }
+
+    byte_t *_ptr = malloc(size + alignment - 1);
+
+    if (!_ptr)
+    {
+        return NULL;
+    }
+
+    // также начало выделеннного блока
+    byte_t *prev_end = _ptr - LEFT_EDGE_SIZE;
+    // первое не большее кратное выравниванию (степени двойки)
+    byte_t *alligned_ptr = (byte_t *)(((uint32_t)_ptr + alignment - 1) & ~(alignment - 1));
+    byte_t *curr_start = alligned_ptr - LEFT_EDGE_SIZE;
+
+    heap_block_erase(prev_end);
+    // TODO расширение блока пустоты справа, если он там есть
+    create_data_block(curr_start, get_block_end(prev_end) - curr_start - SERVICE_FIELDS_SIZE);
+
+    // слева не может быть блок пустоты
+    if (((heap_end_block_t *)(prev_end - RIGHT_EDGE_SIZE))->signature != HEAP_DATA_BLOCK_MAGIC)
+    {
+        PANIC("BAD ALLIGNED_ALLOC");
+    }
+
+    byte_t *prev_start = get_block_start(prev_end);
+
+    // сколько места останется на новый пустотный узел
+    int void_size_left = (curr_start - prev_end) - SERVICE_FIELDS_SIZE;
+
+    // если не поместится следующий нетривиальный пустотный узел
+    if (void_size_left <= 0)
+    {
+        uint32_t old_size = ((heap_data_block_t *)prev_start)->size;
+        heap_block_erase(prev_start);
+
+        create_data_block(prev_start, old_size + curr_start - prev_end);
+    }
+    else
+    {
+        create_void_block_default(prev_end, void_size_left);
+        heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)prev_end)->size), (heap_void_block_t *)prev_end);
+    }
+
+    return alligned_ptr;
 }
 
 void free(void *ptr)

@@ -31,13 +31,14 @@ typedef struct
     uint32_t dummy2; // пустышки нужны чтобы на месте каждого блока данных мог инициализироваться пустотный узел
 } __attribute__((packed)) heap_data_block_t;
 
-typedef volatile struct
+typedef struct
 {
     uint32_t size;
     uint32_t signature;
 } __attribute__((packed)) heap_end_block_t;
 
 void *malloc(uint32_t size);
+void *alligned_malloc(uint32_t size, uint32_t alignment);
 void *realloc(void *ptr, uint32_t size);
 void free(void *ptr);
 void heap_init();
