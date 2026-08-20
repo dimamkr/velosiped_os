@@ -42,7 +42,7 @@ C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
 
 # Список ассемблерных файлов (исключаем boot.asm, он собирается отдельно в бинарник)
 ALL_ASM = $(wildcard $(SRC_DIR)/*.asm)
-ASM_SOURCES = $(filter-out $(SRC_DIR)/boot.asm, $(ALL_ASM))
+ASM_SOURCES = $(filter-out $(SRC_DIR)/boot1.asm $(SRC_DIR)/boot2.asm, $(ALL_ASM))
 
 # Объектные файлы (в каталоге build)
 C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
@@ -115,15 +115,20 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	@echo "1. Compiling $<..."
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+# Сборка загрузчика stage 1 (boot1.asm) – бинарный файл
+$(BUILD_DIR)/boot1.bin: $(SRC_DIR)/boot1.asm | $(BUILD_DIR)
+	@echo "1.1 Building bootloader (stage 1)..."
+	$(NASM) -f bin -o $@ $<
+
+# Сборка загрузчика stage 2 (boot2.asm)
+$(BUILD_DIR)/boot2.bin: $(SRC_DIR)/boot2.asm | $(BUILD_DIR)
+	@echo "1.2 Building bootloader (stage 2)..."
+	$(NASM) -f bin -o $@ $<
+
 # Компиляция ассемблерных файлов (кроме boot.asm) в объектные
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_DIR)
-	@echo "1.1. Assembling $<..."
+	@echo "1.3 Assembling $<..."
 	$(NASM) $(NASMFLAGS) -o $@ $<
-
-# Сборка загрузчика (boot.asm) – бинарный файл
-$(BUILD_DIR)/boot.bin: $(SRC_DIR)/boot.asm | $(BUILD_DIR)
-	@echo "5. Building bootloader..."
-	$(NASM) -f bin -o $@ $<
 
 # Линковка ядра в ELF
 $(BUILD_DIR)/kernel.elf: $(OBJECTS) $(SRC_DIR)/link.ld | $(BUILD_DIR)
@@ -136,13 +141,27 @@ $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf | $(BUILD_DIR)
 	$(OBJCOPY) -O binary -S $< $@
 	@echo "   Kernel size: $$(wc -c < $@) bytes"
 
-# Создание образа дискеты (IMG) из загрузчика и ядра
-$(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
-	@echo "6. Creating disk image..."
-	dd if=/dev/zero of=$@ bs=512 count=2880 2>/dev/null
-	dd if=$(BUILD_DIR)/boot.bin of=$@ conv=notrunc 2>/dev/null
-	dd if=$(BUILD_DIR)/kernel.bin of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
-	@echo "   Image created: $@"
+$(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
+	@echo "Creating disk image with MBR and FAT32..."
+	# 1. Пустой образ 64 МБ
+	dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
+	# 2. MBR и FAT32-раздел (LBA)
+	parted -s $@ mklabel msdos
+	parted -s $@ mkpart primary fat32 1MiB 100%
+	parted -s $@ set 1 boot on
+	# 3. Создаём FAT32-раздел (129024 сектора ≈ 63 МБ)
+	dd if=/dev/zero of=part.tmp bs=512 count=129024 2>/dev/null
+	mkfs.vfat -F 32 -s 8 -R 32 -n "MYOS" part.tmp
+	# 4. Копируем ядро в корень FAT32
+	mcopy -i part.tmp $(BUILD_DIR)/kernel.bin ::kernel.bin
+	# 5. Вшиваем FAT32 в образ (смещение 1MiB)
+	dd if=part.tmp of=$@ bs=1M seek=1 conv=notrunc 2>/dev/null
+	rm -f part.tmp
+	# 6. Пишем boot1 в MBR (первые 446 байт)
+	dd if=$(BUILD_DIR)/boot1.bin of=$@ conv=notrunc bs=446 count=1 2>/dev/null
+	# 7. Пишем boot2 в сектор 1 (сразу после MBR)
+	dd if=$(BUILD_DIR)/boot2.bin of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
+	@echo "Image created: $@"
 
 # Фантомные цели (не файлы)
 .PHONY: all run build-debug run-debug clean debug-internal

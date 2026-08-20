@@ -28,7 +28,7 @@ __attribute__((section(".text.start"))) void kernel_main(void)
 
     konsole_init();
     konsole_set_good_result_color();
-    konsole_println("\nHEAP INITED");
+    konsole_println("\n\nHEAP INITED");
     konsole_println("KONSOLE INITED");
 
     PRINT_INIT("GDT");
