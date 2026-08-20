@@ -5,6 +5,8 @@
 #include "isr.h"
 
 #define BARRIER asm volatile("" ::: "memory")
+#define max(a, b) (_Generic((a), uint8_t: _uint8_max, uint16_t: _uint16_max, uint32_t: _uint32_max))((a), (b))
+#define min(a, b) (_Generic((a), uint8_t: _uint8_min, uint16_t: _uint16_min, uint32_t: _uint32_min))((a), (b))
 
 void uint32_to_string(uint32_t number, char *result);
 bool_t strcmp(const char *a, const char *b);
@@ -26,5 +28,42 @@ void outw(uint16_t port, uint16_t value);
 uint16_t inw(uint16_t port);
 void outl(uint16_t port, uint32_t value);
 uint32_t inl(uint16_t port);
+
+
+__attribute__((always_inline, artificial))
+inline uint8_t _uint8_max (uint8_t a, uint8_t b)
+{
+    return a > b ? a : b;
+}
+
+__attribute__((always_inline, artificial))
+inline uint8_t _uint8_min (uint8_t a, uint8_t b)
+{
+    return a < b ? a : b;
+}
+
+__attribute__((always_inline, artificial))
+inline uint16_t _uint16_max (uint16_t a, uint16_t b)
+{
+    return a > b ? a : b;
+}
+
+__attribute__((always_inline, artificial))
+inline uint16_t _uint16_min (uint16_t a, uint16_t b)
+{
+    return a < b ? a : b;
+}
+
+__attribute__((always_inline, artificial))
+inline uint32_t _uint32_max (uint32_t a, uint32_t b)
+{
+    return a > b ? a : b;
+}
+
+__attribute__((always_inline, artificial))
+inline uint32_t _uint32_min (uint32_t a, uint32_t b)
+{
+    return a < b ? a : b;
+}
 
 #endif

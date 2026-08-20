@@ -10,6 +10,7 @@
 #define PCI_CLASS_CODE_AHCI 0x010601
 
 #define PCI_PRDT_LENGTH 8
+#define AHCI_LARGE_READ_BY 
 
 #define	SATA_SIG_ATA 0x00000101		// SATA drive
 #define	SATA_SIG_ATAPI 0xEB140101	// SATAPI drive
@@ -56,6 +57,8 @@
 #define ATA_CMD_SECURITY_DISABLE_PASSWORD 0xF6
 #define ATA_CMD_DOWNLOAD_MICROCODE 0x92
 #define ATA_CMD_NOP                0x00    // No Operation
+
+#define ATA_ERROR_ANY 0xF9000000
 
 typedef volatile struct {
 	uint32_t clb;		// 0x00, command list base address, 1K-byte aligned
@@ -170,10 +173,26 @@ typedef struct {
 	uint32_t port_sig;
 } ahci_basic_identify_data_t;
 
+typedef struct {
+	union {
+		uint32_t lba32;
+		struct {
+			byte_t lba0;
+			byte_t lba1;
+			byte_t lba2;
+			byte_t lba3;
+		};
+	};
+	byte_t lba4;
+	byte_t lba5;
+} ahci_lba_t;
+
 bool_t ahci_init();
 bool_t ahci_init_port(byte_t port_num);
 uint8_t find_free_command_slot(byte_t port_num);
-ahci_basic_identify_data_t *ahci_identify(byte_t port_num);
+bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result);
+bool_t ahci_flush_cache_sync(byte_t port_num);
+bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, void *buffer, uint32_t size, bool_t write);
 dynamic_array_t *ahci_enumerate_ports();
 
 #endif

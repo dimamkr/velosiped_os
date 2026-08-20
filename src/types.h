@@ -15,10 +15,10 @@ typedef signed long long int64_t;
 
 typedef _Bool bool_t;
 
-#define NULL 0
-#define KB 0x400
-#define MB 0x100000
-#define GB 0x40000000
+#define NULL ((void*)0)
+#define KB ((uint32_t)0x400)
+#define MB ((uint32_t)0x100000)
+#define GB ((uint32_t)0x40000000)
 
 #define MAKEWORD(a, b) ((((uint16_t)(a)) << 8) | ((uint16_t)(b)))
 #define MAKEDWORD(a, b) ((((uint32_t)(a)) << 16) | ((uint32_t)(b)))

@@ -19,7 +19,7 @@ static inline void init_buff(linked_list_node_t ***buff, uint32_t buff_count_ind
 {
     uint32_t size = primes[buff_count_index_new] * sizeof(linked_list_node_t **);
     *buff = malloc(size);
-    memset(*buff, NULL, size);
+    memset(*buff, 0, size);
 }
 
 static inline void destroy_buff(hash_table_t *hash_table)
