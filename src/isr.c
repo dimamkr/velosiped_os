@@ -46,10 +46,7 @@ static void invoke_handler(isr_data_t registers)
     }
     else
     {
-        char a[3] = {0};
-        uint32_to_string(registers.int_no, a);
-        konsole_print("Unhandled interrupt: ");
-        konsole_println(a);
+        konsole_printf("%s%d\n", "Unhandled interrupt: ", registers.int_no);
     }
     // else
     // {
