@@ -1,6 +1,9 @@
 ; Defined in isr.c
 [EXTERN isr_handler]
 [EXTERN irq_handler]
+[EXTERN need_reschedule]
+
+[EXTERN task_switch_from_isr]
 
 isr_common:
 	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
@@ -29,7 +32,7 @@ isr_common:
 	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
 
 irq_common:
-	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
+    pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
 
 	mov ax, ds           ; lower 16 bits of eax = ds
 	push eax             ; save the data segment descriptor
@@ -40,9 +43,12 @@ irq_common:
 	mov fs, ax
 	mov gs, ax
 
-	call irq_handler
+    call irq_handler
 
-	pop eax              ; reload the original data segment descriptor
+	cmp byte [need_reschedule], 0
+    jne .switch
+
+    pop eax              ; reload the original data segment descriptor
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
@@ -53,6 +59,11 @@ irq_common:
 	sti                  ; enable interrupts
 	iret                 ; return from an interrupt..
 	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
+
+.switch:
+    mov byte [need_reschedule], 0
+    jmp task_switch_from_isr
+
 
 ; Define macro for interrupt handler without an error code
 %macro ISR_NOERROR 1
@@ -137,3 +148,25 @@ IRQ 12, 44
 IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
+
+
+[GLOBAL isr48]
+; прерывание смены контекста
+isr48:
+    cli
+    push byte 0          ; фиктивный код ошибки
+    push byte 48         ; номер прерывания
+    jmp yield_common
+
+yield_common:
+    pusha
+	mov ax, ds
+    push eax
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    jmp task_switch_from_isr   ; делает переключение и iret

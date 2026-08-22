@@ -1,5 +1,6 @@
 #include "timer.h"
 #include "konsole.h"
+#include "task.h"
 
 // иначе компилятор может заменить call и ret на jump + leave, и это сломает стек, поскольку он управляется полностью вручную на ассемблере
 #pragma GCC optimize("no-optimize-sibling-calls")
@@ -9,6 +10,8 @@ static volatile uint32_t timer_ticks_count = 0;
 void timer_callback(isr_data_t data)
 {
     timer_ticks_count++;
+
+    scheduler_tick(timer_get_time());
 }
 
 static uint32_t timer_frequency;
