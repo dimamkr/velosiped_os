@@ -28,23 +28,25 @@ CFLAGS_RELEASE = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
 CFLAGS_DEBUG   = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
                  -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR)
 
-# Флаги по умолчанию (релиз)
-CFLAGS = $(CFLAGS_RELEASE)
+# Флаги для NASM (релиз и отладка)
+NASMFLAGS_RELEASE = -f elf32
+NASMFLAGS_DEBUG   = -f elf32 -g
+
+# По умолчанию используем релизные флаги
+CFLAGS    = $(CFLAGS_RELEASE)
+NASMFLAGS = $(NASMFLAGS_RELEASE)
 
 # Флаги для линковки
 LDFLAGS = -m elf_i386 -T $(SRC_DIR)/link.ld -nostdlib
 
-# Флаги для NASM (объектный файл)
-NASMFLAGS = -f elf32
-
 # Список C-файлов
 C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
 
-# Список ассемблерных файлов (исключаем boot.asm, он собирается отдельно в бинарник)
+# Список ассемблерных файлов (исключаем boot.asm, они собираются отдельно)
 ALL_ASM = $(wildcard $(SRC_DIR)/*.asm)
 ASM_SOURCES = $(filter-out $(SRC_DIR)/boot1.asm $(SRC_DIR)/boot2.asm, $(ALL_ASM))
 
-# Объектные файлы (в каталоге build)
+# Объектные файлы
 C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
 ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
 OBJECTS     = $(C_OBJECTS) $(ASM_OBJECTS)
@@ -57,22 +59,24 @@ OBJECTS     = $(C_OBJECTS) $(ASM_OBJECTS)
 all: clean $(BUILD_DIR)/myos.img
 	@echo "✅ Build completed (release)."
 
-# Запуск QEMU без отладки (зависит от all)
+# Сборка с отладочной информацией
+build-debug: clean
+	@echo "Building with debug info..."
+	$(MAKE) debug-internal
+
+# Внутренняя цель для отладочной сборки (переопределяем флаги)
+debug-internal: CFLAGS = $(CFLAGS_DEBUG)
+debug-internal: NASMFLAGS = $(NASMFLAGS_DEBUG)
+debug-internal: $(BUILD_DIR)/myos.img
+	@echo "✅ Debug build completed."
+
+# Запуск QEMU без отладки
 run: all
 	@echo "========================================="
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
 	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
 	    -no-reboot -display sdl -vga std -m 256
-
-# Сборка с отладочной информацией (очистка + отладочная сборка)
-build-debug: clean
-	@$(MAKE) debug-internal
-
-# Внутренняя цель для отладочной сборки (переопределяем CFLAGS)
-debug-internal: CFLAGS = $(CFLAGS_DEBUG)
-debug-internal: $(BUILD_DIR)/myos.img
-	@echo "✅ Debug build completed."
 
 # Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug
@@ -106,7 +110,7 @@ clean:
 # Правила сборки
 # ============================================================
 
-# Создание каталога build (если его нет)
+# Создание каталога build
 $(BUILD_DIR):
 	mkdir -p $@
 
@@ -115,7 +119,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	@echo "1. Compiling $<..."
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Сборка загрузчика stage 1 (boot1.asm) – бинарный файл
+# Сборка загрузчика stage 1 (boot1.asm) – бинарный файл (без отладки)
 $(BUILD_DIR)/boot1.bin: $(SRC_DIR)/boot1.asm | $(BUILD_DIR)
 	@echo "1.1 Building bootloader (stage 1)..."
 	$(NASM) -f bin -o $@ $<
@@ -163,5 +167,5 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	dd if=$(BUILD_DIR)/boot2.bin of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	@echo "Image created: $@"
 
-# Фантомные цели (не файлы)
+# Фантомные цели
 .PHONY: all run build-debug run-debug clean debug-internal
