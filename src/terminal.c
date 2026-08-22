@@ -6,6 +6,7 @@
 #include "types.h"
 #include "datetime.h"
 #include "ahci.h"
+#include "task.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -55,7 +56,7 @@ static inline void terminal_wait_for_input_line()
     // каждое прерывание проверяем флаг
     while (!terminal_EOI_flag)
     {
-        asm volatile("hlt");
+        task_yield();
     }
 
     konsole_println("");
@@ -84,7 +85,7 @@ void terminal_print_disks_info()
 
     if (disks_info->elements_count)
     {
-        for (uint8_t i = 0;i < disks_info->elements_count;i++)
+        for (uint8_t i = 0; i < disks_info->elements_count; i++)
         {
             ahci_basic_identify_data_t *entry = dynamic_array_get_by_index(disks_info, i);
 
@@ -92,18 +93,18 @@ void terminal_print_disks_info()
 
             switch (entry->port_sig)
             {
-                case SATA_SIG_ATA:
-                    konsole_println("SATA drive");
-                    break;
-                case SATA_SIG_ATAPI:
-                    konsole_println("SATAPI drive");
-                    break;
-                case SATA_SIG_SEMB:
-                    konsole_println("Enclosure management bridge");
-                    break;
-                case SATA_SIG_PM:
-                    konsole_println("Port mmultiplier");
-                    break;
+            case SATA_SIG_ATA:
+                konsole_println("SATA drive");
+                break;
+            case SATA_SIG_ATAPI:
+                konsole_println("SATAPI drive");
+                break;
+            case SATA_SIG_SEMB:
+                konsole_println("Enclosure management bridge");
+                break;
+            case SATA_SIG_PM:
+                konsole_println("Port mmultiplier");
+                break;
             }
 
             konsole_printf(
@@ -113,15 +114,14 @@ void terminal_print_disks_info()
                 entry->sectors,
                 entry->lba48_supported,
                 entry->ncq_supported,
-                entry->dma_supported
-            );
+                entry->dma_supported);
         }
 
         konsole_println("========");
     }
     else
         konsole_println("No disks found");
-    
+
     dynamic_array_destroy(disks_info);
 }
 

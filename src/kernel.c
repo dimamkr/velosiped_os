@@ -6,6 +6,9 @@
 #include "keyboard.h"
 #include "heap.h"
 #include "ahci.h"
+#include "task.h"
+
+void kernel_main_task(void);
 
 #define PRINT_INIT(x)                   \
     do                                  \
@@ -22,13 +25,15 @@
         konsole_println("OK");           \
     } while (0)
 
-__attribute__((section(".text.start"))) void kernel_main(void)
+__attribute__((section(".text.start"))) void kernel_entry(void)
 {
     heap_init();
 
     konsole_init();
     konsole_set_good_result_color();
-    konsole_println("\n\nHEAP INITED");
+
+    konsole_print("\n\n");
+    konsole_println("HEAP INITED");
     konsole_println("KONSOLE INITED");
 
     PRINT_INIT("GDT");
@@ -40,7 +45,7 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     PRINT_OK;
 
     PRINT_INIT("timer");
-    timer_init(2500);
+    timer_init(50);
     PRINT_OK;
 
     PRINT_INIT("keyboard");
@@ -56,13 +61,22 @@ __attribute__((section(".text.start"))) void kernel_main(void)
         konsole_print("Fail");
     }
 
+    PRINT_INIT("SCHEDULER");
+    scheduler_init(kernel_main_task, STACK_SIZE_LARGE);
+    scheduler_start();
+}
+
+void kernel_main_task()
+{
+    task_lock();
+    PRINT_OK;
+
     interrupt_enable();
+    task_unlock();
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране
     // TODO дамп памяти
-    // TODO в hash_table хранить список указателей а не двойных указателей (для меньшей зависимости от malloc)
-    // TODO доделать кучу
 
     // for (int i = 1; i < 8; ++i)
     // {

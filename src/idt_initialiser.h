@@ -56,6 +56,8 @@ extern void isr29(void);
 extern void isr30(void);
 extern void isr31(void);
 
+extern void isr48(void);
+
 // IRQ handlers (ISR 32-47)
 extern void irq0(void);
 extern void irq1(void);
