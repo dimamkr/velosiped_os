@@ -1,5 +1,5 @@
-#ifndef FILESYSTEM_AHCI
-#define FILESYSTEM_AHCI
+#ifndef AHCI
+#define AHCI
 
 #include <types.h>
 #include <pci.h>
@@ -10,7 +10,6 @@
 #define PCI_CLASS_CODE_AHCI 0x010601
 
 #define PCI_PRDT_LENGTH 8
-#define AHCI_LARGE_READ_BY 
 
 #define	SATA_SIG_ATA 0x00000101		// SATA drive
 #define	SATA_SIG_ATAPI 0xEB140101	// SATAPI drive
@@ -192,7 +191,9 @@ bool_t ahci_init_port(byte_t port_num);
 uint8_t find_free_command_slot(byte_t port_num);
 bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result);
 bool_t ahci_flush_cache_sync(byte_t port_num);
-bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, void *buffer, uint32_t size, bool_t write);
+bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write);
 dynamic_array_t *ahci_enumerate_ports();
+
+extern bool_t _ahci_supported;
 
 #endif

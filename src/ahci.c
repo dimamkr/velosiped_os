@@ -6,6 +6,9 @@ static ahci_cmd_header_t *cmd_list[32];
 static ahci_cmd_table_t *cmd_table[32];
 static void *received_fis[32];
 
+bool_t _ahci_supported = false;
+
+
 bool_t ahci_init()
 {
     // ищем устройство AHCI
@@ -235,18 +238,16 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
     return true;
 }
 
-bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, void *buffer, uint32_t size, bool_t write)
+bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write)
 {
-    if (size == 0 || buffer == NULL)
-        return false;
-    if (size & 0x1FF) // количество секторов должно быть целым
+    if (sectors_count == 0 || buffer == NULL)
         return false;
 
     ahci_hba_port_t *port = &(hba->ports[port_num]);
 
     uint32_t commands_waiting = 0;
 
-    for (uint32_t i = 0; i < size;)
+    for (uint32_t i = 0; i < sectors_count;)
     {
         if (port->is & ATA_ERROR_ANY) // проверяем наличие ошибок для ожидаемых команд
         {
@@ -261,15 +262,15 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, void *buffer, uint32_
         // memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
         uint8_t prdt_count = 0;
-        uint16_t sectors_count = 0;
+        uint16_t cmd_sectors_count = 0;
 
-        for (; prdt_count < PCI_PRDT_LENGTH && i < size; i += 4 * MB)
+        for (; prdt_count < PCI_PRDT_LENGTH && i < sectors_count; i += 8192)
         {
-            uint32_t data_part_size = min(size - i, 4 * MB);
+            uint32_t data_part_size = min(sectors_count - i, 8192);
 
             command_table->prdt[prdt_count].dba = (uint32_t)buffer + i;
-            command_table->prdt[prdt_count].dbc = min(size - i, 4 * MB) - 1;
-            sectors_count += data_part_size / 512;
+            command_table->prdt[prdt_count].dbc = data_part_size * 512 - 1;
+            cmd_sectors_count += data_part_size;
             prdt_count++;
         }
 
@@ -279,8 +280,8 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, void *buffer, uint32_
         fis->c = 1; // устанавливаем бит команды
         fis->command = write ? ATA_CMD_WRITE_DMA : ATA_CMD_READ_DMA;
         fis->device = 0x40; // LBA
-        fis->countl = sectors_count & 0xFF; // младший байт количества секторов
-        fis->counth = (sectors_count >> 16) & 0xFF; // старший байт количества секторов
+        fis->countl = cmd_sectors_count & 0xFF; // младший байт количества секторов
+        fis->counth = (cmd_sectors_count >> 16) & 0xFF; // старший байт количества секторов
         fis->lba0 = lba.lba0;
         fis->lba1 = lba.lba1;
         fis->lba2 = lba.lba2;

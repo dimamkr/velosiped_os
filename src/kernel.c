@@ -6,12 +6,16 @@
 #include "keyboard.h"
 #include "heap.h"
 #include "ahci.h"
+#include "mbr.h"
+#include "fat32.h"
+
+#pragma GCC optimize("O0")
 
 #define PRINT_INIT(x)                   \
     do                                  \
     {                                   \
         konsole_set_preambula_color();  \
-        konsole_print("Initializing "); \
+        konsole_print("INFO: "); \
         konsole_print(x);               \
         konsole_print("...");           \
     } while (0)
@@ -21,8 +25,15 @@
         konsole_set_good_result_color(); \
         konsole_println("OK");           \
     } while (0)
+#define PRINT_FAIL                       \
+    do                                   \
+    {                                    \
+        konsole_set_bad_result_color(); \
+        konsole_println("Fail");           \
+    } while (0)
 
-__attribute__((section(".text.start"))) void kernel_main(void)
+__attribute__((section(".text.start")))
+void kernel_main(void)
 {
     heap_init();
 
@@ -49,11 +60,17 @@ __attribute__((section(".text.start"))) void kernel_main(void)
 
     PRINT_INIT("AHCI");
     if (ahci_init())
+    {
+        _ahci_supported = true;
         PRINT_OK;
+    }
     else
     {
-        konsole_set_bad_result_color();
-        konsole_print("Fail");
+        _ahci_supported = false;
+        PRINT_FAIL;
+
+        konsole_set_warning_color();
+        konsole_println("AHCI not found, using legacy mode");
     }
 
     interrupt_enable();
@@ -70,7 +87,7 @@ __attribute__((section(".text.start"))) void kernel_main(void)
     //     konsole_print(s);
     //     timer_wait(500);
     // }
-    // konsole_println("");
+    // konsole_println("")
 
     konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
 
