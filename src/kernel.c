@@ -15,7 +15,7 @@
     do                                  \
     {                                   \
         konsole_set_preambula_color();  \
-        konsole_print("INFO: "); \
+        konsole_print("Initializing "); \
         konsole_print(x);               \
         konsole_print("...");           \
     } while (0)
