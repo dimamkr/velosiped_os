@@ -279,6 +279,11 @@ void konsole_set_good_result_color()
     konsole_set_color(COLOR_LIGHT_GREEN, COLOR_BLACK);
 }
 
+void konsole_set_warning_color()
+{
+    konsole_set_color(COLOR_YELLOW, COLOR_BLACK);
+}
+
 void konsole_set_bad_result_color()
 {
     konsole_set_color(COLOR_RED, COLOR_BLACK);

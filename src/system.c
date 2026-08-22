@@ -58,7 +58,8 @@ bool_t strcmp(const char *a, const char *b)
     }
 }
 
-__attribute__((optimize("O3,unroll-loops"))) uint32_t strlen(const char *s)
+__attribute__((optimize("O3,unroll-loops")))
+uint32_t strlen(const char *s)
 {
     uint32_t len = 0;
     while (s[len])
@@ -67,7 +68,8 @@ __attribute__((optimize("O3,unroll-loops"))) uint32_t strlen(const char *s)
 }
 
 // размер в байтах
-__attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
+__attribute__((optimize("O3,unroll-loops")))
+void memcpy(void *dst, const void *src, uint32_t size)
 {
     byte_t *_dst = dst;
     const byte_t *_src = src;
@@ -86,7 +88,8 @@ __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *
 
 // TODO оптимизировать
 //  размер в байтах
-__attribute__((optimize("O3,unroll-loops"))) void memset(void *ptr, byte_t value, uint32_t size)
+__attribute__((optimize("O3,unroll-loops")))
+void memset(void *ptr, byte_t value, uint32_t size)
 {
     for (uint32_t i = 0; i < size; i++)
     {
@@ -97,11 +100,12 @@ __attribute__((optimize("O3,unroll-loops"))) void memset(void *ptr, byte_t value
 // TODO
 // оптимизировать
 // размер в байтах; возвращает равны ли
-__attribute__((optimize("O3,unroll-loops"))) bool memcmp(void *ptr_a, void *ptr_b, uint32_t size)
+__attribute__((optimize("O3,unroll-loops")))
+bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size)
 {
     uint32_t i = 0;
 
-    for (; i + 4 <= size; i += 4)
+    for (; i+4 <= size; i += 4)
     {
         if (*((uint32_t *)(ptr_a + i)) != *((uint32_t *)(ptr_b + i)))
         {
@@ -119,6 +123,27 @@ __attribute__((optimize("O3,unroll-loops"))) bool memcmp(void *ptr_a, void *ptr_
 
     return true;
 }
+
+__attribute__((optimize("O3,unroll-loops")))
+void memswap(void *buff_1, void *buff_2, uint32_t size)
+{
+    uint32_t i = 0;
+
+    for (;i+4 <= size;i += 4)
+    {
+        uint32_t tmp = *((uint32_t*)buff_1);
+        *((uint32_t*)buff_1) = *((uint32_t*)buff_2);
+        *((uint32_t*)buff_2) = tmp;
+    }
+
+    for (;i < size;i++)
+    {
+        byte_t tmp = *((byte_t*)buff_1);
+        *((byte_t*)buff_1) = *((byte_t*)buff_2);
+        *((byte_t*)buff_2) = tmp;
+    }
+}
+
 
 void uint32_to_string(uint32_t number, char *result)
 {

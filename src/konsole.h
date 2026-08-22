@@ -40,6 +40,7 @@ bool konsole_view_scroll_down();
 
 void konsole_set_preambula_color();
 void konsole_set_good_result_color();
+void konsole_set_warning_color();
 void konsole_set_bad_result_color();
 void konsole_set_panic_color();
 void konsole_set_base_color();

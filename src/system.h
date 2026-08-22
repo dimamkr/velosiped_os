@@ -14,7 +14,8 @@ uint32_t strlen(const char *s);
 
 void memcpy(void *dst, const void *src, uint32_t size);
 void memset(void *ptr, byte_t value, uint32_t size);
-bool memcmp(void *ptr_a, void *ptr_b, uint32_t size);
+bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size);
+void memswap(void *buff_1, void *buff_2, uint32_t size);
 
 #define PANIC(msg) panic(msg, __FILE__, __LINE__);
 #define ASSERT(b) ((b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))
