@@ -3,7 +3,6 @@
 
 #include "types.h"
 #include "linked_list.h"
-#include "system.h"
 
 typedef struct
 {

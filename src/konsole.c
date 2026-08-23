@@ -1,4 +1,7 @@
 #include "konsole.h"
+#include "dynamic_array.h"
+#include "task.h"
+#include <stdarg.h>
 
 // адрес начала видеопамяти
 volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)0xB8000;

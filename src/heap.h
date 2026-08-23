@@ -3,7 +3,6 @@
 
 #include "types.h"
 #include "system.h"
-#include "konsole.h"
 
 #define HEAP_START_BLOCK (3 * MB)
 #define HEAP_END_BLOCK (100 * MB)
