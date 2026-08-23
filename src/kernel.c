@@ -12,13 +12,13 @@
 
 #pragma GCC optimize("O0")
 
-void kernel_main_task(void);
+void kernel_main_task(void *);
 
 void low_level_wait()
 {
-    BARRIER;
     for (uint32_t i = 1; i != 0; ++i)
     {
+        BARRIER;
     }
 }
 
@@ -87,12 +87,14 @@ __attribute__((section(".text.start"))) void kernel_entry(void)
     }
 
     PRINT_INIT("SCHEDULER");
-    scheduler_init(kernel_main_task, STACK_SIZE_LARGE);
+    scheduler_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
     scheduler_start();
 }
 
-void kernel_main_task()
+void kernel_main_task(void *_)
 {
+    (void)_;
+
     task_lock();
     PRINT_OK;
 

@@ -27,7 +27,7 @@ void scheduler_start()
     goto_current_task();
 }
 
-static task_t *task_init_default(void (*entry)(void), uint32_t stack_size)
+static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     task_t *task = &tasks[task_count];
     task->pid = task_count;
@@ -41,12 +41,22 @@ static task_t *task_init_default(void (*entry)(void), uint32_t stack_size)
 
     uint32_t *sp = (uint32_t *)((uint32_t)task->stack_start + stack_size);
 
-    // Тот же порядок, что и в task_create
-    *--sp = 0x10;
-    *--sp = (uint32_t)(task->stack_start + stack_size);
-    *--sp = 0x202;
-    *--sp = 0x08;
-    *--sp = (uint32_t)entry;
+    // арумент
+    *--sp = (uint32_t)arg;
+
+    // фейковый адрес возврата
+    *--sp = 0;
+
+    // Запоминаем адрес, где лежит фиктивный адрес возврата – это будет ESP после iret
+    // uint32_t esp_after_iret = (uint32_t)sp;
+
+    // подставные данные для iret
+    // ss и esp не нужны при переходе без смены привелегий (но стоит помнить об этих вещах)
+    // *--sp = 0x10;            // SS
+    // *--sp = esp_after_iret;  // ESP (после iret)
+    *--sp = 0x202;           // EFLAGS
+    *--sp = 0x08;            // CS
+    *--sp = (uint32_t)entry; // EIP
 
     *--sp = 0; // err_code
     *--sp = 0; // int_no
@@ -69,9 +79,9 @@ static task_t *task_init_default(void (*entry)(void), uint32_t stack_size)
 }
 
 // Инициализация планировщика и передача управления ему
-void scheduler_init(void (*idle_entry)(void), uint32_t stack_size)
+void scheduler_init(void (*idle_entry)(void *), void *arg, uint32_t stack_size)
 {
-    task_t *task = task_init_default(idle_entry, stack_size);
+    task_t *task = task_init_default(idle_entry, arg, stack_size);
 
     task->node = linked_list_create_root_cycle(&task, sizeof(task_t *));
 
@@ -79,12 +89,12 @@ void scheduler_init(void (*idle_entry)(void), uint32_t stack_size)
 }
 
 // Создание новой задачи
-void task_create(void (*entry)(void), uint32_t stack_size)
+void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     if (task_count >= MAX_TASKS)
         PANIC("TOO MANY TASKS");
 
-    task_t *task = task_init_default(entry, stack_size);
+    task_t *task = task_init_default(entry, arg, stack_size);
 
     linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
     task->node = node;

@@ -41,10 +41,10 @@ typedef struct
 void goto_current_task(void);
 
 void scheduler_start(void);
-void scheduler_init(void (*kernel_task_entry)(void), uint32_t stack_size);
+void scheduler_init(void (*kernel_task_entry)(void *), void *arg, uint32_t stack_size);
 void scheduler_tick(uint32_t time_milisec); // вызывается из прерывания таймера
 
-void task_create(void (*entry)(void), uint32_t stack_size);
+void task_create(void (*entry)(void *), void *arg, uint32_t stack_size);
 void task_yield(void);
 void task_exit(void);
 void task_sleep(uint32_t ticks);
