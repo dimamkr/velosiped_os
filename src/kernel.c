@@ -11,7 +11,16 @@
 #include "fat32.h"
 
 #pragma GCC optimize("O0")
+
 void kernel_main_task(void);
+
+void low_level_wait()
+{
+    BARRIER;
+    for (uint32_t i = 1; i != 0; ++i)
+    {
+    }
+}
 
 #define PRINT_INIT(x)                   \
     do                                  \
@@ -36,6 +45,7 @@ void kernel_main_task(void);
 
 __attribute__((section(".text.start"))) void kernel_entry(void)
 {
+    interrupt_disable();
     heap_init();
 
     konsole_init();
@@ -54,7 +64,7 @@ __attribute__((section(".text.start"))) void kernel_entry(void)
     PRINT_OK;
 
     PRINT_INIT("timer");
-    timer_init(50);
+    timer_init(100);
     PRINT_OK;
 
     PRINT_INIT("keyboard");

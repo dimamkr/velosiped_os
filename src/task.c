@@ -184,9 +184,7 @@ void task_sleep(uint32_t time_milisec)
 
 void task_lock()
 {
-    interrupt_disable();
     locked = true;
-    interrupt_enable();
 }
 
 void task_unlock()
