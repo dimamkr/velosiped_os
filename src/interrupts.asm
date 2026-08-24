@@ -1,9 +1,10 @@
 ; Defined in isr.c
 [EXTERN isr_handler]
 [EXTERN irq_handler]
-[EXTERN need_reschedule]
+[EXTERN invoke_bottom_handler]
 
 [EXTERN task_switch_from_isr]
+[EXTERN need_reschedule]
 
 isr_common:
 	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
@@ -17,7 +18,10 @@ isr_common:
 	mov fs, ax
 	mov gs, ax
 
+	;верхний и нижний обработчик
 	call isr_handler
+	sti 
+	call invoke_bottom_handler
 
 	pop eax              ; reload the original data segment descriptor
 	mov ds, ax
@@ -27,7 +31,6 @@ isr_common:
 
 	popa                 ; pops edi,esi,ebp,esp,ebx,edx,ecx,eax
 	add esp, 8           ; clean up the pushed error code and pushed ISR number
-	sti                  ; enable interrupts
 	iret                 ; return from an interrupt..
 	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
 
@@ -43,8 +46,11 @@ irq_common:
 	mov fs, ax
 	mov gs, ax
 
+	;верхний и нижний обработчик
     call irq_handler
-
+	sti 
+	call invoke_bottom_handler
+	
 	cmp byte [need_reschedule], 0
     jne .switch
 
@@ -56,36 +62,36 @@ irq_common:
 
 	popa                 ; pops edi,esi,ebp,esp,ebx,edx,ecx,eax
 	add esp, 8           ; clean up the pushed error code and pushed ISR number
-	sti                  ; enable interrupts
 	iret                 ; return from an interrupt..
 	                     ; ..pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
 
+; переключение контекста
 .switch:
     mov byte [need_reschedule], 0
+	cli
     jmp task_switch_from_isr
 
-
-; Define macro for interrupt handler without an error code
+; Define macro for interrupt top_handler without an error code
 %macro ISR_NOERROR 1
 	[GLOBAL isr%1]
 	isr%1:
 		cli              ; disable interrupts
 		push byte 0      ; push a dummy error code
 		push byte %1     ; push the interrupt number
-		jmp isr_common   ; jump to the common handler
+		jmp isr_common   ; jump to the common top_handler
 %endmacro
 
-; Define macro for interrupt handler with an error code
+; Define macro for interrupt top_handler with an error code
 ;  arg 0 : error code
 %macro ISR_ERROR 1
 	[GLOBAL isr%1]
 	isr%1:
 		cli              ; disable interrupts
 		push byte %1     ; push the interrupt number
-		jmp isr_common   ; jump to the common handler
+		jmp isr_common   ; jump to the common top_handler
 %endmacro
 
-; Define macro for IRQ interrupt handler
+; Define macro for IRQ interrupt top_handler
 ;  arg 0 : IRQ number (0-15)
 ;  arg 1 : ISR number (32-47)
 %macro IRQ 2
@@ -94,7 +100,7 @@ irq_common:
 		cli              ; disable interrupts
 		push byte 0      ; push zero
 		push byte %2     ; push ISR number
-		jmp irq_common   ; jump to the common handler
+		jmp irq_common   ; jump to the common top_handler
 %endmacro
 
 ; Set up ISRs 0 to 31

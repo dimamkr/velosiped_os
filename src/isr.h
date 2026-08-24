@@ -30,7 +30,7 @@ typedef struct
 
 typedef void (*isr_t)(isr_data_t);
 
-void interrupt_register(uint8_t n, isr_t handler);
+void interrupt_register(uint8_t n, isr_t top_handler, isr_t bottom_handler);
 void interrupt_enable();
 void interrupt_disable();
 

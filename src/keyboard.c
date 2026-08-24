@@ -155,5 +155,5 @@ static volatile void keyboard_callback(isr_data_t data)
 void keyboard_init()
 {
     outb(0x64, 0xAE);
-    interrupt_register(IRQ1, keyboard_callback);
+    interrupt_register(IRQ1, keyboard_callback, NULL);
 }

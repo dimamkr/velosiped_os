@@ -7,7 +7,8 @@
 // Number of spurious interrupts received
 uint64_t spurious_interrupts;
 
-isr_t interruption_handlers[256];
+isr_t interruption_top_handlers[256] = {NULL};
+isr_t interruption_bottom_handlers[256] = {NULL};
 
 static uint16_t get_pic_isr(void)
 {
@@ -37,12 +38,12 @@ static bool_t is_spurious(isr_data_t registers)
     return false;
 }
 
-static void invoke_handler(isr_data_t registers)
+static void invoke_top_handler(isr_data_t registers)
 {
-    if (interruption_handlers[registers.int_no] != 0)
+    if (interruption_top_handlers[registers.int_no] != NULL)
     {
-        isr_t handler = interruption_handlers[registers.int_no];
-        handler(registers);
+        isr_t top_handler = interruption_top_handlers[registers.int_no];
+        top_handler(registers);
     }
     else
     {
@@ -63,9 +64,18 @@ static void invoke_handler(isr_data_t registers)
     // }
 }
 
+void invoke_bottom_handler(isr_data_t registers)
+{
+    if (interruption_bottom_handlers[registers.int_no] != NULL)
+    {
+        isr_t bottom_handler = interruption_bottom_handlers[registers.int_no];
+        bottom_handler(registers);
+    }
+}
+
 void isr_handler(isr_data_t registers)
 {
-    invoke_handler(registers);
+    invoke_top_handler(registers);
 }
 
 void irq_handler(isr_data_t registers)
@@ -91,12 +101,13 @@ void irq_handler(isr_data_t registers)
     // Send reset signal to the master
     outb(PIC1_CMD, PIC_EOI);
 
-    invoke_handler(registers);
+    invoke_top_handler(registers);
 }
 
-void interrupt_register(uint8_t n, isr_t handler)
+void interrupt_register(uint8_t n, isr_t top_handler, isr_t bottom_handler)
 {
-    interruption_handlers[n] = handler;
+    interruption_top_handlers[n] = top_handler;
+    interruption_bottom_handlers[n] = bottom_handler;
 }
 
 void interrupt_enable()
