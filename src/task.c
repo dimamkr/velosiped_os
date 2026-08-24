@@ -44,8 +44,8 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
     // арумент
     *--sp = (uint32_t)arg;
 
-    // фейковый адрес возврата
-    *--sp = 0;
+    // адрес возврата (уничтожение)
+    *--sp = (uint32_t)task_exit;
 
     // Запоминаем адрес, где лежит фиктивный адрес возврата – это будет ESP после iret
     // uint32_t esp_after_iret = (uint32_t)sp;
