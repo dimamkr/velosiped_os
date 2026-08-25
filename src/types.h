@@ -12,6 +12,7 @@ typedef unsigned long int uint32_t;
 typedef signed long int int32_t;
 typedef unsigned long long uint64_t;
 typedef signed long long int64_t;
+typedef uint16_t wchar_t;
 
 typedef _Bool bool_t;
 

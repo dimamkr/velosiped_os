@@ -6,11 +6,11 @@
 #include "keyboard.h"
 #include "heap.h"
 #include "ahci.h"
+#include "disk.h"
 #include "task.h"
 #include "mbr.h"
 #include "fat32.h"
 
-#pragma GCC optimize("O0")
 void kernel_main_task(void);
 
 #define PRINT_INIT(x)                   \
@@ -34,8 +34,10 @@ void kernel_main_task(void);
         konsole_println("Fail");        \
     } while (0)
 
-__attribute__((section(".text.start"))) void kernel_entry(void)
+__attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_signature_addr)
 {
+    memcpy(_boot_disk_signature, disk_signature_addr, 6); // сохраняем сигнатуру диска для поиска
+
     heap_init();
 
     konsole_init();
@@ -61,6 +63,19 @@ __attribute__((section(".text.start"))) void kernel_entry(void)
     keyboard_init();
     PRINT_OK;
 
+    PRINT_INIT("SCHEDULER");
+    scheduler_init(kernel_main_task, STACK_SIZE_LARGE);
+    scheduler_start();
+}
+
+void kernel_main_task()
+{
+    task_lock();
+    PRINT_OK;
+
+    interrupt_enable();
+    task_unlock();
+
     PRINT_INIT("AHCI");
     if (ahci_init())
     {
@@ -76,19 +91,6 @@ __attribute__((section(".text.start"))) void kernel_entry(void)
         konsole_println("AHCI not found, using legacy mode");
     }
 
-    PRINT_INIT("SCHEDULER");
-    scheduler_init(kernel_main_task, STACK_SIZE_LARGE);
-    scheduler_start();
-}
-
-void kernel_main_task()
-{
-    task_lock();
-    PRINT_OK;
-
-    interrupt_enable();
-    task_unlock();
-
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране
     // TODO дамп памяти
@@ -102,7 +104,7 @@ void kernel_main_task()
     // konsole_println("")
 
     konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
-
+konsole_println("========");
     konsole_println("             .__               .__                  .___  ________    _________\n"
                     "___  __ ____ |  |   ____  _____|__|_____   ____   __| _/  \\_____  \\  /   _____/\n"
                     "\\  \\/ // __ \\|  |  /  _ \\/  ___/  \\____ \\_/ __ \\ / __ |    /   |   \\ \\_____  \\ "

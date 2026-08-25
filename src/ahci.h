@@ -6,6 +6,7 @@
 #include <dynamic_array.h>
 #include <timer.h>
 #include <heap.h>
+#include <task.h>
 
 #define PCI_CLASS_CODE_AHCI 0x010601
 

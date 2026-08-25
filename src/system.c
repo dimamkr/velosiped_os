@@ -43,30 +43,6 @@ void halt()
     asm volatile("hlt");
 }
 
-bool_t strcmp(const char *a, const char *b)
-{
-    for (int i = 0;; ++i)
-    {
-        if (a[i] != b[i])
-        {
-            return 0;
-        }
-        if (a[i] == 0)
-        {
-            return 1;
-        }
-    }
-}
-
-__attribute__((optimize("O3,unroll-loops")))
-uint32_t strlen(const char *s)
-{
-    uint32_t len = 0;
-    while (s[len])
-        len++;
-    return len;
-}
-
 // размер в байтах
 __attribute__((optimize("O3,unroll-loops")))
 void memcpy(void *dst, const void *src, uint32_t size)
@@ -88,7 +64,7 @@ void memcpy(void *dst, const void *src, uint32_t size)
 
 // TODO оптимизировать
 //  размер в байтах
-__attribute__((optimize("O3,unroll-loops")))
+__attribute__((optimize("O3,unroll-loops"), artificial))
 void memset(void *ptr, byte_t value, uint32_t size)
 {
     for (uint32_t i = 0; i < size; i++)
@@ -144,15 +120,6 @@ void memswap(void *buff_1, void *buff_2, uint32_t size)
     }
 }
 
-
-void uint32_to_string(uint32_t number, char *result)
-{
-    uint16_t len = 0;
-    for (uint32_t i = number; i != 0; i /= 10)
-        len++;
-    for (; number != 0; number /= 10)
-        result[--len] = '0' + (number % 10);
-}
 
 void panic(char *msg, char *file, uint32_t line)
 {

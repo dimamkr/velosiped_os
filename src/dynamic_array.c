@@ -141,6 +141,16 @@ void dynamic_array_pop_front(dynamic_array_t *array)
         array_shrink_(array);
 }
 
+void dynamic_array_clear(dynamic_array_t *array)
+{
+    if (array->elements_count == 0)
+        return;
+
+    array->elements_count = 0;
+    array->size = 1;
+    array->buffer = realloc(array->buffer, array->size_of_element);
+}
+
 void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t r_index, dynamic_array_less_cb less)
 {
     if (l_index == r_index)

@@ -1,7 +1,10 @@
 #include "disk.h"
 
+#pragma GCC optimize("O0")
+
 
 static disk_cache_t caches [32] = {0};
+byte_t _boot_disk_signature [6] = {0};
 
 
 bool_t disk_hardware_transfer_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer, bool_t write)
@@ -48,8 +51,8 @@ disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_
         linked_list_erase(&(cache->cache), cache->cache);
     }
 
-    linked_list_node_t *top;
-    linked_list_node_t *right;
+    linked_list_node_t *top = NULL;
+    linked_list_node_t *right = NULL;
 
     for (linked_list_node_t *cur = cache->cache;cur != NULL;cur = right)
     {
@@ -107,8 +110,12 @@ bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_c
 
     if (record == NULL)
     {
-        if (!disk_hardware_transfer_sync(disk_id, start_sector, sectors_count, buffer, false))
+        bool_t result = disk_hardware_transfer_sync(disk_id, start_sector, sectors_count, buffer, false);
+
+        if (!result)
             return false;
+
+        asm("" ::: "memory");
 
         disk_add_cache_record_sync(disk_id, start_sector, sectors_count, buffer);
     }
@@ -133,4 +140,31 @@ bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_
         memcpy(record->data + (start_sector - record->start_sector) * 512, buffer, sectors_count * 512);
         
     return true;
+}
+
+uint8_t disk_get_boot_disk_id()
+{
+    uint8_t buffer [512];
+
+    if (__builtin_expect(_ahci_supported, true))
+    {
+        dynamic_array_t *ports = ahci_enumerate_ports();
+
+        for (int i = 0;i < ports->elements_count;i++)
+        {
+            ahci_basic_identify_data_t *identify_data = dynamic_array_get_by_index(ports, i);
+
+            disk_read_sync(identify_data->port_num, 0, 1, buffer);
+
+            if (memcmp(buffer + 440, _boot_disk_signature, 6))
+            {
+                dynamic_array_destroy(ports);
+                return identify_data->port_num;
+            }
+        }
+
+        dynamic_array_destroy(ports);
+    }
+
+    return -1;
 }

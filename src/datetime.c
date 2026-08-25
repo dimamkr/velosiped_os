@@ -25,8 +25,7 @@ static uint8_t bcd_to_bin(uint8_t bcd)
 }
 
 // Чтение системной даты и времени
-void system_get_datetime(uint16_t *year, uint8_t *month, uint8_t *day,
-                         uint8_t *hour, uint8_t *minute, uint8_t *second)
+void system_get_datetime(datetime_t *result)
 {
     // Ждём окончания обновления
     cmos_wait_update();
@@ -52,10 +51,27 @@ void system_get_datetime(uint16_t *year, uint8_t *month, uint8_t *day,
     }
 
     // Преобразуем год (обычно 0–99, добавляем 2000)
-    *year = 2000 + _yr;
-    *month = _mon;
-    *day = _day;
-    *hour = _hrs;
-    *minute = _min;
-    *second = _sec;
+    result->year = 2000 + _yr;
+    result->month = _mon;
+    result->day = _day;
+    result->hour = _hrs;
+    result->minute = _min;
+    result->second = _sec;
+}
+
+void datetime_fat_from_datetime(const datetime_t *datetime, datetime_fat_t *fat_datetime)
+{
+    fat_datetime->date = ((datetime->year - 1980) << 9) + ((uint16_t)datetime->month << 5) + (uint16_t)datetime->day;
+    fat_datetime->time = ((uint16_t)datetime->hour << 11) + ((uint16_t)datetime->minute << 5) + ((uint16_t)datetime->second / 2);
+}
+
+void datetime_datetime_from_fat(const datetime_fat_t *fat_datetime, datetime_t *datetime)
+{
+    datetime->year = 1980 + ((fat_datetime->date >> 9) & 0x7F);
+    datetime->month = (fat_datetime->date >> 5) & 0x0F;
+    datetime->day = fat_datetime->date & 0x1F;
+    
+    datetime->hour = (fat_datetime->time >> 11) & 0x1F;
+    datetime->minute = (fat_datetime->time >> 5) & 0x3F;
+    datetime->second = (fat_datetime->time & 0x1F) * 2;
 }

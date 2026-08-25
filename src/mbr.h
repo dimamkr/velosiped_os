@@ -38,5 +38,6 @@ typedef struct {
 
 bool_t mbr_read_sync(uint8_t disk_id, mbr_t *result);
 bool_t mbr_write_sync(uint8_t disk_id, mbr_t *result);
+uint32_t mbr_get_bootable_partition(uint8_t disk_id);
 
 #endif

@@ -2,15 +2,22 @@
 #include "terminal.h"
 #include "keyboard.h"
 #include "system.h"
+#include "string.h"
 #include "timer.h"
 #include "types.h"
 #include "datetime.h"
 #include "ahci.h"
+#include "fat32.h"
 #include "task.h"
+#include "argparse.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
-static bool terminal_EOI_flag;
+static bool_t terminal_EOI_flag;
+
+fat32_info_t info;
+fat32_basic_file_info_t root;
+dynamic_array_t *path;
 
 static inline void terminal_buff_add_symbol(char symbol)
 {
@@ -66,11 +73,11 @@ static inline void terminal_wait_for_input_line()
 
 void terminal_print_datetime()
 {
-    uint16_t year;
-    uint8_t month, day, hour, minute, second;
-    system_get_datetime(&year, &month, &day, &hour, &minute, &second);
+    datetime_t dt;
+
+    system_get_datetime(&dt);
     konsole_printf("%d-%d-%d %d:%d:%d",
-                   year, month, day, hour, minute, second);
+                   dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
 }
 
 void terminal_print_time()
@@ -106,7 +113,7 @@ void terminal_print_disks_info()
                 konsole_println("Port mmultiplier");
                 break;
             }
-
+ 
             konsole_printf(
                 "Model: %s\nSerial: %s\nSectors: %d\nLBA48|NCQ|DMA: %d|%d|%d\n",
                 entry->model,
@@ -125,47 +132,116 @@ void terminal_print_disks_info()
     dynamic_array_destroy(disks_info);
 }
 
+void terminal_print_path()
+{
+    for (uint8_t i = 0;i < path->elements_count;i++)
+    {
+        fat32_basic_file_info_t *dir = dynamic_array_get_by_index(path, i);
+
+        konsole_printf("%s/", dir->filename);
+    }
+}
+
+void terminal_print_listdir()
+{
+    dynamic_array_t *listdir = fat32_read_directory(&info, dynamic_array_get_top(path));
+
+    if (listdir->elements_count != 0)
+        konsole_println("========");
+
+    for (uint32_t i = 0;i < listdir->elements_count;i++)
+    {
+        fat32_basic_file_info_t *file_info = dynamic_array_get_by_index(listdir, i);
+
+        konsole_printf("Filename: %s\n", file_info->filename);
+
+        konsole_print("Attributes: ");
+
+        if (file_info->attributes & FAT32_ATTRIBUTE_ARCHIVE)
+            konsole_print("Archived ");
+        if (file_info->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+            konsole_print("Directory ");
+        if (file_info->attributes & FAT32_ATTRIBUTE_HIDDEN)
+            konsole_print("Hidden ");
+        if (file_info->attributes & FAT32_ATTRIBUTE_READONLY)
+            konsole_print("Readonly ");
+        if (file_info->attributes & FAT32_ATTRIBUTE_SYSTEM)
+            konsole_print("System ");
+        if (file_info->attributes & FAT32_ATTRIBUTE_VOLUME_ID)
+            konsole_print("VolumeID ");
+
+        konsole_println("");
+
+        datetime_t dt;
+        datetime_datetime_from_fat(&(file_info->creation_datetime), &dt);
+        konsole_printf("Created at: %d-%d-%d %d:%d:%d\n", dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
+        datetime_datetime_from_fat(&(file_info->last_modify_datetime), &dt);
+        konsole_printf("Modified at: %d-%d-%d %d:%d:%d\n", dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
+
+        if (!(file_info->attributes & (FAT32_ATTRIBUTE_DIRECTORY | FAT32_ATTRIBUTE_VOLUME_ID)))
+            konsole_printf("Size: %d B\n", file_info->size);
+
+        konsole_println("========");
+    }
+}
+
 void terminal_handle_command_from_buff()
 {
-    if (strcmp(terminal_input_buff, "help"))
+    argparse_command_t command;
+    argparse_parse_command(terminal_input_buff, &command);
+
+    if (strcmp(command.command_name, "help") == 0)
     {
         konsole_println("i can not help you");
     }
-    else if (strcmp(terminal_input_buff, "time"))
+    else if (strcmp(command.command_name, "time") == 0)
     {
         terminal_print_time();
     }
-    else if (strcmp(terminal_input_buff, "clear"))
+    else if (strcmp(command.command_name, "clear") == 0)
     {
         konsole_clear();
     }
-    else if (strcmp(terminal_input_buff, "ticks"))
+    else if (strcmp(command.command_name, "ticks") == 0)
     {
         char ticks[10] = {0};
         uint32_to_string(timer_get_ticks(), ticks);
         konsole_println(ticks);
     }
-    else if (strcmp(terminal_input_buff, "datetime"))
+    else if (strcmp(command.command_name, "datetime") == 0)
     {
         terminal_print_datetime();
-        konsole_printf("\n");
+        konsole_println("");
     }
-    else if (strcmp(terminal_input_buff, "disks"))
+    else if (strcmp(command.command_name, "disks") == 0)
     {
         terminal_print_disks_info();
+    }
+    else if (strcmp(command.command_name, "listdir") == 0)
+    {
+        terminal_print_listdir();
     }
     else
     {
         konsole_println("i can not understand your text");
     }
+
+    argparse_free_command(&command);
 }
 
 void terminal_main_loop()
 {
+    fat32_get_bootable_partition_info_sync(&info);
+    path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
+    fat32_basic_file_info_t root;
+    fat32_mount(&info, "ROOT", &root);
+    dynamic_array_push_back(path, &root);
+
     konsole_println("");
+
     while (1)
     {
-        terminal_print_datetime();
+        terminal_print_path();
         konsole_print(">");
 
         terminal_wait_for_input_line();

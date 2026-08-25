@@ -15,6 +15,30 @@ STACK_TOP equ 0x90000 ; Верхушка стека в защищённом ре
     adc %1, %3
 %endmacro
 
+%macro read_cmos_register 2
+    mov al, %1
+    or al, 0x80
+    mov dx, 0x70
+    out dx, al
+    mov dx, 0x71
+    in al, dx
+    mov %2, al
+%endmacro
+
+%macro read_disk 0
+    push ax
+    mov ax, 0x4200
+    call disk_transfer
+    pop ax
+%endmacro
+
+%macro write_disk 0
+    push ax
+    mov ax, 0x4300
+    call disk_transfer
+    pop ax
+%endmacro
+
 ; ------------------------------------------------------------
 ; Точка входа
 ; ------------------------------------------------------------
@@ -27,11 +51,36 @@ start:
 
     ; читаем MBR
 
-    call read_disk
+    read_disk
 
     mov ax, KERNEL_LOAD_SEGMENT
     mov es, ax
 
+    ; сохраняем дату и время 
+
+    xor dx, dx
+    mov dl, 0x70
+
+.cmos_wait_update:
+    read_cmos_register 0x0A, al
+    test al, 0x80
+    jnz .cmos_wait_update
+
+    read_cmos_register 0x00, byte [datetime]
+    read_cmos_register 0x02, byte [datetime + 0x1]
+    read_cmos_register 0x04, byte [datetime + 0x2]
+    read_cmos_register 0x07, byte [datetime + 0x3]
+    read_cmos_register 0x08, byte [datetime + 0x4]
+    read_cmos_register 0x09, byte [datetime + 0x5]
+
+    ; массовое копирование
+    lea si, datetime
+    mov di, 0x1B8
+    mov cx, 3
+    rep movsw
+
+    write_disk ; сохраняем запись о дате и времени
+    
     ; ищем сектор, помеченный как загрузочный (первый байт записи MBR - 0x80)
     mov cx, 4
     mov si, 0x1BE
@@ -51,7 +100,7 @@ start:
     mov word [lba_packet + 0xA], ax
     mov word [partition_offset + 0x2], ax
 
-    call read_disk
+    read_disk
 
     ; достаем смещения fat и области данных
     ; смещение таблицы fat = partition_offset + reserved_sectors
@@ -95,7 +144,7 @@ start:
     mov dx, word [es:0x2E]
 
     call select_cluster
-    call read_disk
+    read_disk
 
     ; ищем ядро в корневой директории 
 
@@ -161,7 +210,7 @@ start:
     call addr_32_to_16
     mov word [lba_packet + 0x4], cx
     mov word [lba_packet + 0x6], bx
-    call read_disk
+    read_disk
 
     cmp dx, 0x0FFF
     jne .kernel_reading_3
@@ -297,7 +346,7 @@ fat_at:
     mov word [lba_packet + 0x8], ax
     mov word [lba_packet + 0xA], dx
 
-    call read_disk
+    read_disk
 
     ; загружаем прочитанную запись в dx:ax
     mov ax, word [es:di]
@@ -327,15 +376,13 @@ addr_32_to_16:
 
     ret
 
-; читает диск с параметрами из lba_packet
-read_disk:
+; читает/записывает диск в зависимости от ax с параметрами из lba_packet
+disk_transfer:
     pusha
     push es
 
-    xor ax, ax
     mov es, ax
     mov si, lba_packet       ; es:SI указывает на структуру пакета
-    mov ah, 0x42
     mov dl, [boot_drive]
     int 0x13
     jc disk_error
@@ -352,6 +399,7 @@ disk_error:
 ; ------------------------------------------------------------
 ; Данные
 ; ------------------------------------------------------------
+datetime db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 partition_offset dd 0
 boot_drive db 0
 sectors_per_cluster dw 0
@@ -361,7 +409,7 @@ data_offset dd 0
 kernel_dos_fullname db "KERNEL  BIN"
 
 msg_loading db "Stage 2 loaded", 0x0D, 0x0A, 0
-msg_disk_error db "E: Disk read error", 0x0D, 0x0A, 0
+msg_disk_error db "E: Disk transfer error", 0x0D, 0x0A, 0
 msg_no_boot_partition db "E: No boot partition", 0x0D, 0x0A, 0
 msg_no_kernel db "E: Kernel not found", 0x0D, 0x0A, 0
 msg_dbg db "!DEBUG!", 0x0D, 0x0A, 0
@@ -446,21 +494,13 @@ protected_mode:
     mov ebp, STACK_TOP
     mov esp, ebp
 
-
-    ; Передаём управление ядру (оно лежит по адресу 0x10000)
-    ; ВАЖНО: ядро должно быть скомпилировано как плоский двоичный файл
-    ; и его точка входа должна находиться по смещению 0 от начала.
-    call KERNEL_LOAD_SEGMENT << 4   ; Эквивалент call 0x10000
-    ; (KERNEL_LOAD_SEG = 0x1000, смещение 0 -> физический адрес 0x10000)
+    lea eax, datetime
+    push eax ; передаем аргументом адрес сигнатуры
+    ; Передаём управление ядру
+    call KERNEL_LOAD_SEGMENT << 4;
 
     ; Если ядро вернёт управление (не должно) – зависаем
     cli
 .hang:
     hlt
     jmp .hang
-
-; ------------------------------------------------------------
-; Заполнение до 510 байт и сигнатура 0xAA55
-; ------------------------------------------------------------
-; times 510 - ($-$$) db 0
-; dw 0xAA55

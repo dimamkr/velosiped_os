@@ -8,10 +8,6 @@
 #define max(a, b) (_Generic((a), uint8_t: _uint8_max, uint16_t: _uint16_max, uint32_t: _uint32_max))((a), (b))
 #define min(a, b) (_Generic((a), uint8_t: _uint8_min, uint16_t: _uint16_min, uint32_t: _uint32_min))((a), (b))
 
-void uint32_to_string(uint32_t number, char *result);
-bool_t strcmp(const char *a, const char *b);
-uint32_t strlen(const char *s);
-
 void memcpy(void *dst, const void *src, uint32_t size);
 void memset(void *ptr, byte_t value, uint32_t size);
 bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size);
