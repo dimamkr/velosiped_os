@@ -22,6 +22,16 @@ extern void goto_current_task(void);
 
 #pragma GCC optimize("no-optimize-sibling-calls")
 
+void lazy_task(void *_)
+{
+    (void)_;
+
+    while (1)
+    {
+        halt();
+    }
+}
+
 void scheduler_start()
 {
     goto_current_task();
@@ -79,13 +89,15 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
 }
 
 // Инициализация планировщика и передача управления ему
-void scheduler_init(void (*idle_entry)(void *), void *arg, uint32_t stack_size)
+void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
-    task_t *task = task_init_default(idle_entry, arg, stack_size);
+    task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_TINY);
+    lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
+    lazy->state = TASK_WAITING;
+    task_set_current(lazy);
 
-    task->node = linked_list_create_root_cycle(&task, sizeof(task_t *));
-
-    task_set_current(task);
+    task_create(k_entry, arg, stack_size);
+    task_set_current(&tasks[1]); // задача ядра
 }
 
 // Создание новой задачи
@@ -100,39 +112,57 @@ void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
     task->node = node;
 }
 
+static inline void process_task_state(task_t *task, uint32_t time_milisec)
+{
+    switch (task->state)
+    {
+    case TASK_READY:
+        break;
+    case TASK_SLEEPING:
+        if (time_milisec >= task->activation_time)
+        {
+            task->state = TASK_READY;
+        }
+        break;
+    case TASK_TERMINATED:
+        break;
+
+    default:
+        break;
+    }
+}
+
 // Поиск следующей готовой задачи а также отложенная обработка задач
 task_t *task_get_next()
 {
     uint32_t time_milisec = timer_get_time();
 
-    linked_list_node_t *node = current_task_node;
+    linked_list_node_t *node = current_task->node;
+
     do
     {
         node = node->right;
         // Извлекаем указатель на task_t из узла (в узле хранится task_t**)
         task_t *t = *(task_t **)node->value;
 
-        switch (t->state)
+        process_task_state(t, time_milisec);
+        if (t->state == TASK_READY)
         {
-        case TASK_READY:
             return t;
-            break;
-        case TASK_SLEEPING:
-            if (time_milisec >= t->activation_time)
-            {
-                t->state = TASK_READY;
-                return t;
-            }
-            break;
-        case TASK_TERMINATED:
-            break;
-
-        default:
-            break;
         }
+
     } while (node != current_task_node);
 
-    return current_task;
+    process_task_state(current_task, time_milisec);
+    if (current_task->state == TASK_READY || current_task->state == TASK_RUNNING)
+    {
+        return current_task;
+    }
+    else
+    {
+        // ничего не делающая задача
+        return &tasks[0];
+    }
 }
 
 // Обновление глобальных указателей
@@ -229,4 +259,10 @@ void scheduler_tick(uint32_t time_milisec)
     {
         need_reschedule = 1;
     }
+}
+
+void task_wait_until(task_event_t *ev)
+{
+    task_event_add(ev, current_task->pid);
+    task_yield();
 }

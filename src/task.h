@@ -7,18 +7,23 @@
 #include "system.h"
 #include "konsole.h"
 #include "linked_list.h"
+#include "task_event.h"
 
 #define MAX_TASKS 32
+#define TASK_AUTO_SWITCH_FREQ 100
+
+#define STACK_SIZE_TINY KB / 4
 #define STACK_SIZE_SMALL KB
 #define STACK_SIZE_LARGE MB
-#define TASK_AUTO_SWITCH_FREQ 100
+#define STACK_SIZE_ENORMOUS 4 * MB
 
 typedef enum
 {
     TASK_RUNNING,
     TASK_READY,
     TASK_TERMINATED,
-    TASK_SLEEPING
+    TASK_SLEEPING,
+    TASK_WAITING
 } task_state_t;
 
 typedef struct
@@ -53,6 +58,7 @@ void task_unlock(void);
 task_t *task_get_next(void);
 void task_set_current(task_t *task);
 void task_switch_prepare(task_t *prev, task_t *next);
+void task_wait_until(task_event_t *ev);
 
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
