@@ -260,7 +260,7 @@ void keyboard_bottom_callback(isr_data_t data)
             }
         }
     }
-    if (any_event && keyboard_event != NULL)
+    if (any_event)
     {
         task_event_flush(keyboard_event);
     }

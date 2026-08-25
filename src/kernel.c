@@ -11,7 +11,7 @@
 #include "mbr.h"
 #include "fat32.h"
 
-void kernel_main_task(void);
+void kernel_main_task(void *);
 
 #define PRINT_INIT(x)                   \
     do                                  \
@@ -65,11 +65,11 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_sign
     PRINT_OK;
 
     PRINT_INIT("SCHEDULER");
-    scheduler_init(kernel_main_task, STACK_SIZE_LARGE);
+    scheduler_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
     scheduler_start();
 }
 
-void kernel_main_task()
+void kernel_main_task(void *_)
 {
     task_lock();
     PRINT_OK;
@@ -105,7 +105,7 @@ void kernel_main_task()
     // konsole_println("")
 
     konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
-konsole_println("========");
+    konsole_println("========");
     konsole_println("             .__               .__                  .___  ________    _________\n"
                     "___  __ ____ |  |   ____  _____|__|_____   ____   __| _/  \\_____  \\  /   _____/\n"
                     "\\  \\/ // __ \\|  |  /  _ \\/  ___/  \\____ \\_/ __ \\ / __ |    /   |   \\ \\_____  \\ "

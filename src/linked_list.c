@@ -117,6 +117,8 @@ void linked_list_erase_move_root_left(linked_list_node_t **root, linked_list_nod
         if ((*root)->left == *root)
         { // единственный элемент
             *root = NULL;
+            left = NULL;
+            right = NULL;
         }
         else
         {

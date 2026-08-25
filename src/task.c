@@ -91,7 +91,7 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
 // Инициализация планировщика и передача управления ему
 void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
-    task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_TINY);
+    task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_LARGE);
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
     task_set_current(lazy);
 
@@ -122,15 +122,11 @@ static inline void process_task_state(task_t *task, uint32_t time_milisec)
 
     switch (task->state)
     {
-    case TASK_READY:
-        break;
     case TASK_SLEEPING:
         if (time_milisec >= task->activation_time)
         {
             task->state = TASK_READY;
         }
-        break;
-    case TASK_TERMINATED:
         break;
 
     default:
@@ -173,7 +169,7 @@ void task_set_current(task_t *task)
 // Подготовка переключения
 void task_switch_prepare(task_t *prev, task_t *next)
 {
-    if (prev->state != TASK_TERMINATED && prev->state != TASK_SLEEPING)
+    if (prev->state == TASK_RUNNING)
     {
         prev->state = TASK_READY;
     }

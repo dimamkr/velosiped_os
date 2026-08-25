@@ -10,16 +10,11 @@ void task_event_init(task_event_t *this)
 
 void task_event_add(task_event_t *this, uint32_t pid)
 {
+    task_lock();
     tasks[pid].state = TASK_WAITING;
 
-    if (this->front == NULL)
-    {
-        linked_list_add_begin(&(this->front), &pid, sizeof(uint32_t));
-    }
-    else
-    {
-        this->front = linked_list_create_root_cycle(&pid, sizeof(uint32_t));
-    }
+    linked_list_add_begin(&(this->front), &pid, sizeof(uint32_t));
+    task_unlock();
 }
 
 void task_event_flush(task_event_t *this)
