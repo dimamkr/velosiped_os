@@ -93,7 +93,6 @@ void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
     task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_TINY);
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
-    lazy->state = TASK_WAITING;
     task_set_current(lazy);
 
     task_create(k_entry, arg, stack_size);
@@ -114,6 +113,13 @@ void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
 
 static inline void process_task_state(task_t *task, uint32_t time_milisec)
 {
+    // для пропуска ленивой задачи
+    if (task == &tasks[0])
+    {
+        task->state = TASK_WAITING;
+        return;
+    }
+
     switch (task->state)
     {
     case TASK_READY:
@@ -146,23 +152,15 @@ task_t *task_get_next()
         task_t *t = *(task_t **)node->value;
 
         process_task_state(t, time_milisec);
-        if (t->state == TASK_READY)
+        if (t->state == TASK_READY || t->state == TASK_RUNNING)
         {
             return t;
         }
 
     } while (node != current_task_node);
 
-    process_task_state(current_task, time_milisec);
-    if (current_task->state == TASK_READY || current_task->state == TASK_RUNNING)
-    {
-        return current_task;
-    }
-    else
-    {
-        // ничего не делающая задача
-        return &tasks[0];
-    }
+    // ничего не делающая задача
+    return &tasks[0];
 }
 
 // Обновление глобальных указателей

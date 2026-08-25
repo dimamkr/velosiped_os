@@ -28,5 +28,6 @@ void task_event_flush(task_event_t *this)
     {
         uint32_t pid = *(uint32_t *)this->front->value;
         tasks[pid].state = TASK_READY;
+        linked_list_erase(&(this->front), this->front);
     }
 }
