@@ -1,4 +1,7 @@
 #include "konsole.h"
+#include "dynamic_array.h"
+#include "task.h"
+#include <stdarg.h>
 
 // адрес начала видеопамяти
 volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)0xB8000;
@@ -141,27 +144,29 @@ void konsole_putch(char ch)
 
 void konsole_print(const char *text)
 {
+    task_lock();
     for (int i = 0; text[i] != 0; ++i)
     {
         konsole_putch(text[i]);
     }
+    task_unlock();
 }
 
 void konsole_println(const char *text)
 {
+    task_lock();
     konsole_print(text);
     konsole_print("\n");
+    task_unlock();
 }
 
-// TODO переписать через putch независимо от print
 void konsole_printf(const char *format, ...)
 {
-    char buffer[1024]; // достаточно для большинства сообщений
-    int pos = 0;
+    task_lock();
     va_list args;
     va_start(args, format);
 
-    while (*format && pos < sizeof(buffer) - 1)
+    while (*format)
     {
         if (*format == '%')
         {
@@ -171,9 +176,9 @@ void konsole_printf(const char *format, ...)
             case 's':
             {
                 const char *str = va_arg(args, const char *);
-                while (*str && pos < sizeof(buffer) - 1)
+                while (*str)
                 {
-                    buffer[pos++] = *str++;
+                    konsole_putch(*str++);
                 }
                 break;
             }
@@ -182,7 +187,7 @@ void konsole_printf(const char *format, ...)
                 int num = va_arg(args, int);
                 if (num < 0)
                 {
-                    buffer[pos++] = '-';
+                    konsole_putch('-');
                     num = -num;
                 }
                 char tmp[12];
@@ -194,15 +199,15 @@ void konsole_printf(const char *format, ...)
                 } while (num > 0);
                 while (len > 0)
                 {
-                    buffer[pos++] = tmp[--len];
+                    konsole_putch(tmp[--len]);
                 }
                 break;
             }
             case 'x':
             {
                 uint32_t num = va_arg(args, uint32_t);
-                buffer[pos++] = '0';
-                buffer[pos++] = 'x';
+                konsole_putch('0');
+                konsole_putch('x');
                 char tmp[12];
                 int len = 0;
                 do
@@ -216,32 +221,31 @@ void konsole_printf(const char *format, ...)
                 } while (num > 0);
                 while (len > 0)
                 {
-                    buffer[pos++] = tmp[--len];
+                    konsole_putch(tmp[--len]);
                 }
                 break;
             }
             case '%':
             {
-                buffer[pos++] = '%';
+                konsole_putch('%');
                 break;
             }
             default:
             {
-                buffer[pos++] = '%';
-                buffer[pos++] = *format;
+                konsole_putch('%');
+                konsole_putch(*format);
                 break;
             }
             }
         }
         else
         {
-            buffer[pos++] = *format;
+            konsole_putch(*format);
         }
         format++;
     }
-    buffer[pos] = '\0';
-    konsole_print(buffer);
     va_end(args);
+    task_unlock();
 }
 
 // TODO блокировка прерываний тут

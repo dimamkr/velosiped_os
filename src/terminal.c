@@ -1,6 +1,7 @@
 #include "konsole.h"
 #include "terminal.h"
 #include "keyboard.h"
+#include "task_event.h"
 #include "system.h"
 #include "string.h"
 #include "timer.h"
@@ -25,32 +26,58 @@ static inline void terminal_buff_add_symbol(char symbol)
     terminal_input_buff_lenght++;
 }
 
-// сюда ведет прерывание клавиатуры
-void terminal_read_symbol(char symbol)
+void terminal_process_keyboard_events(void)
 {
-    switch (symbol)
+    keyboard_event_t ev;
+    while (keyboard_dequeue_event(&ev))
     {
-    case '\n':
-        terminal_buff_add_symbol(0);
-        terminal_EOI_flag = true;
-        break;
-    case '=':
-        konsole_view_scroll_down();
-        break;
-    case '-':
-        konsole_view_scroll_up();
-        break;
-    case '\b':
-        if (terminal_input_buff_lenght > 0)
-        {
-            konsole_putch('\b');
-            terminal_input_buff[--terminal_input_buff_lenght] = 0;
-        }
-        break;
+        // Игнорируем отпускания
+        if (!ev.pressed)
+            continue;
 
-    default:
-        terminal_buff_add_symbol(symbol);
-        konsole_putch(symbol);
+        // Ctrl+↑ / Ctrl+↓ для прокрутки
+        if (ev.modifiers & MOD_CTRL)
+        {
+            if (ev.keycode == KEY_UP)
+            {
+                konsole_view_scroll_up();
+                continue;
+            }
+            else if (ev.keycode == KEY_DOWN)
+            {
+                konsole_view_scroll_down();
+                continue;
+            }
+        }
+
+        // Обработка специальных клавиш
+        switch (ev.keycode)
+        {
+        case KEY_BACKSPACE:
+            if (terminal_input_buff_lenght > 0)
+            {
+                konsole_putch('\b');
+                terminal_input_buff[--terminal_input_buff_lenght] = 0;
+            }
+            break;
+        case KEY_ENTER:
+            terminal_buff_add_symbol(0);
+            terminal_EOI_flag = true;
+            break;
+        case KEY_SPACE:
+            terminal_buff_add_symbol(' ');
+            konsole_putch(' ');
+            break;
+        default:
+            if (ev.keycode < 0x80)
+            { // ASCII
+                char ch = (char)ev.keycode;
+                terminal_buff_add_symbol(ch);
+                konsole_putch(ch);
+            }
+            // Остальные спецклавиши игнорируем
+            break;
+        }
     }
 }
 
@@ -60,15 +87,13 @@ static inline void terminal_wait_for_input_line()
     terminal_input_buff_lenght = 0;
     terminal_EOI_flag = false;
 
-    // каждое прерывание проверяем флаг
     while (!terminal_EOI_flag)
     {
-        task_yield();
+        task_wait_until(keyboard_event);
+        terminal_process_keyboard_events();
     }
 
     konsole_println("");
-
-    return;
 }
 
 void terminal_print_datetime()

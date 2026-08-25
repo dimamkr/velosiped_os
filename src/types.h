@@ -19,7 +19,7 @@ typedef _Bool bool_t;
 #define false ((bool_t)0)
 #define true ((bool_t)1)
 
-#define NULL ((void*)0)
+#define NULL ((void *)0)
 #define KB ((uint32_t)0x400)
 #define MB ((uint32_t)0x100000)
 #define GB ((uint32_t)0x40000000)
@@ -27,6 +27,12 @@ typedef _Bool bool_t;
 #define MAKEWORD(a, b) ((((uint16_t)(a)) << 8) | ((uint16_t)(b)))
 #define MAKEDWORD(a, b) ((((uint32_t)(a)) << 16) | ((uint32_t)(b)))
 
-#define PAIR(type1, type2) struct {type1 first; type2 second;}
+#define PAIR(type1, type2) \
+    struct                 \
+    {                      \
+        type1 first;       \
+        type2 second;      \
+    }
 
-// #define func_ptr(a, b) (a (*)(b))
+#define likely(x) __builtin_expect(!!(x), 1)   // Скорее всего ИСТИНА
+#define unlikely(x) __builtin_expect(!!(x), 0) // Скорее всего ЛОЖЬ

@@ -1,4 +1,8 @@
 #include "ahci.h"
+#include <pci.h>
+#include <timer.h>
+#include <heap.h>
+#include "konsole.h"
 
 static ahci_hba_mem_t *hba;
 
@@ -7,7 +11,6 @@ static ahci_cmd_table_t *cmd_table[32];
 static void *received_fis[32];
 
 bool_t _ahci_supported = false;
-
 
 bool_t ahci_init()
 {
@@ -53,7 +56,7 @@ void ahci_stop_port(ahci_hba_port_t *port)
 void ahci_start_port(ahci_hba_port_t *port)
 {
     while (port->cmd & (1 << 15))
-        ; // ждем окончания выполнения команд
+        ;                             // ждем окончания выполнения команд
     port->cmd |= (1 << 0) | (1 << 4); // запустить порт
 }
 
@@ -274,13 +277,13 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
             prdt_count++;
         }
 
-        ahci_fis_h2d_t *fis = (ahci_fis_h2d_t*)(command_table->cfis);
+        ahci_fis_h2d_t *fis = (ahci_fis_h2d_t *)(command_table->cfis);
 
         fis->fis_type = FIS_TYPE_REG_H2D;
         fis->c = 1; // устанавливаем бит команды
         fis->command = write ? ATA_CMD_WRITE_DMA : ATA_CMD_READ_DMA;
-        fis->device = 0x40; // LBA
-        fis->countl = cmd_sectors_count & 0xFF; // младший байт количества секторов
+        fis->device = 0x40;                             // LBA
+        fis->countl = cmd_sectors_count & 0xFF;         // младший байт количества секторов
         fis->counth = (cmd_sectors_count >> 16) & 0xFF; // старший байт количества секторов
         fis->lba0 = lba.lba0;
         fis->lba1 = lba.lba1;
@@ -288,12 +291,12 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
         fis->lba3 = lba.lba3;
         fis->lba4 = lba.lba4;
         fis->lba5 = lba.lba5;
-        
+
         command_header->cfl = sizeof(ahci_fis_h2d_t) / 4;
         command_header->prdtl = prdt_count; // одна PRDT запись
         command_header->write = write;
 
-        port->ci = (1 << cmd_num); // запускаем команду
+        port->ci = (1 << cmd_num);          // запускаем команду
         commands_waiting |= (1 << cmd_num); // добавляем для ожидания
     }
 
@@ -305,7 +308,7 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
         ahci_restart_port(port);
         return false;
     }
-        
+
     return true;
 }
 

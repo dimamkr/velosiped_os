@@ -36,6 +36,7 @@ void kernel_main_task(void);
 
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_signature_addr)
 {
+    interrupt_disable();
     memcpy(_boot_disk_signature, disk_signature_addr, 6); // сохраняем сигнатуру диска для поиска
 
     heap_init();
@@ -56,7 +57,7 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_sign
     PRINT_OK;
 
     PRINT_INIT("timer");
-    timer_init(50);
+    timer_init(100);
     PRINT_OK;
 
     PRINT_INIT("keyboard");

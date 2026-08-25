@@ -7,10 +7,9 @@
 
 static volatile uint32_t timer_ticks_count = 0;
 
-void timer_callback(isr_data_t data)
+void timer_top_callback(isr_data_t data)
 {
     timer_ticks_count++;
-
     scheduler_tick(timer_get_time());
 }
 
@@ -37,7 +36,7 @@ void timer_init(uint32_t frequency)
     outb(TIMER0_DATA, period);
     outb(TIMER0_DATA, period >> 8);
 
-    interrupt_register(IRQ0, timer_callback);
+    interrupt_register(IRQ0, timer_top_callback, NULL);
 }
 
 // в милисекундах

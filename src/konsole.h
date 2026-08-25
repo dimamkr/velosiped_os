@@ -1,10 +1,7 @@
 #ifndef KONSOLE
 #define KONSOLE
 
-#include "system.h"
-#include <stdarg.h>
 #include "types.h"
-#include "dynamic_array.h"
 
 #define COLOR_BLACK 0x0
 #define COLOR_BLUE 0x1
