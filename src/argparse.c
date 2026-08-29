@@ -16,55 +16,89 @@ void argparse_parse_command(char *buffer, argparse_command_t *result)
     {
         if (ind == 0 && !quotes && *buffer == ' ')
             continue;
-        if (*buffer == '\'')
+        if (*buffer == '"')
         {
             quotes = !quotes;
             continue;
         }
 
-        if (state == ARGPARSE_STATE_CMDNAME)
+        switch (state)
         {
-            if (quotes == false && *buffer == ' ' || *buffer == '\0')
+            case ARGPARSE_STATE_CMDNAME:
             {
-                state = ARGPARSE_STATE_ARGNAME;
-                result->command_name[ind++] = '\0';
-                realloc(result->command_name, ind);
-                ind = 0;
-            }
-            else
-                result->command_name[ind++] = *buffer;
-        }
-        else if (state == ARGPARSE_STATE_ARGNAME)
-        {
-            if (*buffer == '/')
-                continue;
-            if (ind == 0)
-                arg.name = malloc(256);
-            if (quotes == false && *buffer == ' ' || *buffer == '\0')
-            {
-                state = ARGPARSE_STATE_ARGVAL;
-                arg.name[ind++] = '\0';
-                realloc(arg.name, ind);
-                ind = 0;
-            }
-            else
-                arg.name[ind++] = *buffer;
-        }
-        else if (state == ARGPARSE_STATE_ARGVAL)
-        {
-            if (ind == 0)
-                arg.value = malloc(256);
-            if (quotes == false && (*buffer == ' ' || *buffer == '/') || *buffer == '\0')
-            {
-                state = ARGPARSE_STATE_ARGNAME;
-                arg.value[ind++] = '\0';
-                realloc(arg.value, ind);
-                ind = 0;
+                if (quotes == false && *buffer == ' ' || *buffer == '\0')
+                {
+                    state = ARGPARSE_STATE_INPUT;
+                    result->command_name[ind++] = '\0';
+                    realloc(result->command_name, ind);
+                    ind = 0;
+                }
+                else
+                    result->command_name[ind++] = *buffer;
 
-                dynamic_array_push_back(result->arguments, &arg);
+                break;
             }
-            else
-                arg.value[ind++] = *buffer;
+
+            case ARGPARSE_STATE_INPUT:
+            {
+                if (*buffer == '-')
+                {
+                    state = ARGPARSE_STATE_ARGNAME;
+                    continue;
+                }
+                    
+                if (ind == 0)
+                    arg.name = malloc(256);
+                if (quotes == false && *buffer == ' ' || *buffer == '\0')
+                {
+                    arg.name[ind++] = '\0';
+                    arg.value = NULL;
+                    realloc(arg.name, ind);
+                    dynamic_array_push_back(result->arguments, &arg);
+                    ind = 0;
+                }
+                else
+                    arg.name[ind++] = *buffer;
+
+                break;
+            }
+
+            case ARGPARSE_STATE_ARGNAME:
+            {
+                if (ind == 0)
+                    arg.name = malloc(256);
+                if (quotes == false && *buffer == ' ' || *buffer == '\0')
+                {
+                    state = ARGPARSE_STATE_ARGVAL;
+                    arg.name[ind++] = '\0';
+                    arg.value = NULL;
+                    realloc(arg.name, ind);
+                    ind = 0;
+                }
+                else
+                    arg.name[ind++] = *buffer;
+
+                break;
+            }
+
+            case ARGPARSE_STATE_ARGVAL:
+            {
+                if (ind == 0)
+                    arg.value = malloc(256);
+                if (quotes == false && (*buffer == ' ' || *buffer == '/') || *buffer == '\0')
+                {
+                    state = ARGPARSE_STATE_INPUT;
+                    arg.value[ind++] = '\0';
+                    realloc(arg.value, ind);
+                    ind = 0;
+
+                    dynamic_array_push_back(result->arguments, &arg);
+                }
+                else
+                    arg.value[ind++] = *buffer;
+
+                break;
+            }
         }
 
         if (*buffer == '\0')

@@ -115,8 +115,6 @@ bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_c
         if (!result)
             return false;
 
-        asm("" ::: "memory");
-
         disk_add_cache_record_sync(disk_id, start_sector, sectors_count, buffer);
     }
     else

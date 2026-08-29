@@ -111,6 +111,12 @@ uint32_t strstr(const char *haystack, const char *needle)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
+bool_t is_matching_pattern(const char *str, const char *pattern)
+{
+    
+}
+
+__attribute__((optimize("O3,unroll-loops")))
 uint32_t wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
 {
     uint32_t i = 0, j = 0;
