@@ -9,7 +9,7 @@ void bitmap_init(bitmap_t *this, uint32_t bits_count)
 {
     this->bits_count = bits_count;
     this->blocks_count = (bits_count + REM) >> 5;
-    this->buff = (uint32_t *)malloc(this->blocks_count);
+    this->buff = (uint32_t *)malloc(this->blocks_count * sizeof(uint32_t));
 
     memset(this->buff, 0, this->blocks_count * sizeof(uint32_t));
 }
