@@ -1,4 +1,5 @@
 #include "heap.h"
+#include "ram.h"
 
 // segregated lists heap
 // инварианты:
@@ -164,17 +165,17 @@ static inline void heap_void_block_try_merge(heap_void_block_t *void_block)
 void heap_init()
 {
     // вспомогательные блоки для верной навигации по соседним
-    create_data_block((byte_t *)HEAP_START_BLOCK, 0);
-    create_data_block((byte_t *)HEAP_END_BLOCK, 0);
+    create_data_block((byte_t *)KHEAP_START_BLOCK, 0);
+    create_data_block((byte_t *)KHEAP_END_BLOCK, 0);
 
     for (uint32_t i = 0; i < HEAP_VOID_BUCKET_COUNT; ++i)
     {
         heap_void_bucket_root[i] = NULL;
     }
 
-    byte_t *void_block_start = get_block_end((byte_t *)HEAP_START_BLOCK);
+    byte_t *void_block_start = get_block_end((byte_t *)KHEAP_START_BLOCK);
 
-    create_void_block_default(void_block_start, (uint32_t)(HEAP_END_BLOCK - (uint32_t)void_block_start - SERVICE_FIELDS_SIZE));
+    create_void_block_default(void_block_start, (uint32_t)(KHEAP_END_BLOCK - (uint32_t)void_block_start - SERVICE_FIELDS_SIZE));
     heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)void_block_start)->size),
                                (heap_void_block_t *)void_block_start);
 }

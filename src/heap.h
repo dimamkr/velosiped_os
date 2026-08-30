@@ -4,8 +4,6 @@
 #include "types.h"
 #include "system.h"
 
-#define HEAP_START_BLOCK (3 * MB)
-#define HEAP_END_BLOCK (100 * MB)
 #define HEAP_DATA_BLOCK_MAGIC 0x600DB10C
 #define HEAP_VOID_BLOCK_MAGIC 0xDEFEC8ED
 
