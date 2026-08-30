@@ -1,16 +1,22 @@
 #include "bitmap.h"
 #include "system.h"
+#include "heap.h"
 
 // инварианты
 // внутри uint32_t индексация начиная м младшего бита (как в little endian)
 
-void bitmap_init(bitmap_t *this, uint32_t *buff, uint32_t bits_count)
+void bitmap_init(bitmap_t *this, uint32_t bits_count)
 {
-    this->buff = buff;
     this->bits_count = bits_count;
     this->blocks_count = (bits_count + REM) >> 5;
+    this->buff = (uint32_t *)malloc(this->blocks_count);
 
     memset(this->buff, 0, this->blocks_count * sizeof(uint32_t));
+}
+
+void bitmap_destroy(bitmap_t *this)
+{
+    free(this->buff);
 }
 
 uint32_t bitmap_find_first_zero(bitmap_t *this, uint32_t start_index)

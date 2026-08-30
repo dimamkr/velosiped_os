@@ -1,20 +1,19 @@
 #include "string.h"
 #include "bitmap.h"
 
-
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t strlen(const char *s)
+uint32_t
+strlen(const char *s)
 {
     uint32_t len = 0;
-    for (;s[len];len++)
+    for (; s[len]; len++)
         ;
     return len;
 }
 
-__attribute__((optimize("O3,unroll-loops")))
-int strcmp(const char *a, const char *b)
+__attribute__((optimize("O3,unroll-loops"))) int strcmp(const char *a, const char *b)
 {
-    for (int i = 0;;++i)
+    for (int i = 0;; ++i)
     {
         if (a[i] == b[i])
         {
@@ -47,22 +46,21 @@ void strcat(char *a, const char *b)
     a[len_a + len_b] = '\0';
 }
 
-__attribute__((optimize("O3,unroll-loops")))
-void string_to_lower(char *s)
+__attribute__((optimize("O3,unroll-loops"))) void string_to_lower(char *s)
 {
-    for (;*s;s++)
+    for (; *s; s++)
         *s = LOWER(*s);
 }
 
-__attribute__((optimize("O3,unroll-loops")))
-void string_to_upper(char *s)
+__attribute__((optimize("O3,unroll-loops"))) void string_to_upper(char *s)
 {
-    for (;*s;s++)
+    for (; *s; s++)
         *s = UPPER(*s);
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t strstr(const char *haystack, const char *needle)
+uint32_t
+strstr(const char *haystack, const char *needle)
 {
     // КМП с z-функцией
 
@@ -80,20 +78,20 @@ uint32_t strstr(const char *haystack, const char *needle)
 
     uint32_t best_index = 0;
 
-    for (uint32_t i = 1;i < len_united;i++)
+    for (uint32_t i = 1; i < len_united; i++)
     {
         z_func[i] = 0;
 
         if (i < best_index + z_func[best_index])
         {
             z_func[i] = min(z_func[i - best_index], best_index + z_func[best_index] - i);
-            
+
             if (i + z_func[i] < best_index + z_func[best_index])
                 continue;
         }
 
         best_index = i;
-        for (;i + z_func[i] < len_united && united[i + z_func[i]] == united[z_func[i]];z_func[i]++)
+        for (; i + z_func[i] < len_united && united[i + z_func[i]] == united[z_func[i]]; z_func[i]++)
             ;
 
         if (z_func[i] >= len_needle)
@@ -112,7 +110,8 @@ uint32_t strstr(const char *haystack, const char *needle)
 }
 
 __attribute__((optimize("O0")))
-bool_t is_matching_pattern(const char *str, const char *pattern)
+bool_t
+is_matching_pattern(const char *str, const char *pattern)
 {
     uint32_t y_size = strlen(str) + 1;
     uint32_t x_size = strlen(pattern) + 1;
@@ -120,31 +119,28 @@ bool_t is_matching_pattern(const char *str, const char *pattern)
     bitmap_t dp;
     bitmap_t maxes;
 
-    void *dp_buffer = malloc(BITMAP_BLOCKS_FROM_SIZE(x_size * y_size) * BLC);
-    void *maxes_buffer = malloc(BITMAP_BLOCKS_FROM_SIZE(x_size * y_size) * BLC);
-
-    bitmap_init(&dp, dp_buffer, x_size * y_size);
+    bitmap_init(&dp, x_size * y_size);
     bitmap_set_bit(&dp, x_size * (y_size - 1) + x_size - 1);
-    bitmap_init(&maxes, maxes_buffer, x_size * y_size);
+    bitmap_init(&maxes, x_size * y_size);
     bitmap_set_bit(&maxes, x_size * (y_size - 1) + x_size - 1);
 
-    for (uint32_t i = y_size - 2;i != -1;i--)
+    for (uint32_t i = y_size - 2; i != -1; i--)
     {
-        for (uint32_t j = x_size - 2;j != -1;j--)
+        for (uint32_t j = x_size - 2; j != -1; j--)
         {
             switch (pattern[j])
             {
-                case '?':
-                    if (bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
-                        bitmap_set_bit(&dp, x_size * i + j);
-                    break;
-                case '*':
-                    if (bitmap_test_bit(&dp, x_size * i + (j + 1)) || bitmap_test_bit(&maxes, x_size * (i + 1) + (j + 1)))
-                        bitmap_set_bit(&dp, x_size * i + j);
-                    break;
-                default:
-                    if (str[i] == pattern[j] && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
-                        bitmap_set_bit(&dp, x_size * i + j);
+            case '?':
+                if (bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                    bitmap_set_bit(&dp, x_size * i + j);
+                break;
+            case '*':
+                if (bitmap_test_bit(&dp, x_size * i + (j + 1)) || bitmap_test_bit(&maxes, x_size * (i + 1) + (j + 1)))
+                    bitmap_set_bit(&dp, x_size * i + j);
+                break;
+            default:
+                if (str[i] == pattern[j] && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                    bitmap_set_bit(&dp, x_size * i + j);
             }
 
             if (bitmap_test_bit(&dp, x_size * i + (j + 1)) || bitmap_test_bit(&maxes, x_size * (i + 1) + (j + 1)))
@@ -154,17 +150,18 @@ bool_t is_matching_pattern(const char *str, const char *pattern)
 
     bool_t result = bitmap_test_bit(&dp, 0);
 
-    free(dp_buffer);
-    free(maxes_buffer);
+    bitmap_destroy(&dp);
+    bitmap_destroy(&maxes);
 
     return result;
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
+uint32_t
+wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
 {
     uint32_t i = 0, j = 0;
-    
+
     while (src[i] != 0 && j < dst_size - 4)
     {
         if (src[i] <= 0x7F)
@@ -175,7 +172,7 @@ uint32_t wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
         {
             dst[j++] = 0xC0 | ((src[i] >> 6) & 0x1F);
             dst[j++] = 0x80 | (src[i] & 0x3F);
-        } 
+        }
         else
         {
             dst[j++] = 0xE0 | ((src[i] >> 12) & 0x0F);
@@ -207,7 +204,7 @@ uint32_t string_to_uint32(char *str)
     if (str_length == 0)
         return -1;
 
-    for (uint32_t i = str_length - 1;i != -1;i--)
+    for (uint32_t i = str_length - 1; i != -1; i--)
     {
         if (str[i] > '9' || str[i] < '0')
             return -1;
