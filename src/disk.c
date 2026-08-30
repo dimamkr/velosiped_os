@@ -1,4 +1,5 @@
 #include "disk.h"
+#include "konsole.h"
 
 #pragma GCC optimize("O0")
 
@@ -37,6 +38,10 @@ disk_cache_record_t *disk_get_covering(uint8_t disk_id, uint32_t start_sector, u
 
 disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, const void *data)
 {
+    //konsole_println("Trying add cache record");
+    //konsole_printf("Sector: %d, count: %d\n", start_sector, sectors_count);
+    //konsole_printf("First 3 bytes: %x %x %x\n", (uint32_t)(((byte_t*)data)[0]), (uint32_t)(((byte_t*)data)[1]), (uint32_t)(((byte_t*)data)[2]));
+
     if (sectors_count > DISK_MAX_CACHE_BLOCK)
         return NULL;
 
@@ -67,6 +72,8 @@ disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_
         }
     }
 
+    //konsole_printf("Top at: %x\n", top);
+
     disk_cache_record_t new_record;
     new_record.start_sector = start_sector;
     new_record.sectors_count = sectors_count;
@@ -80,6 +87,7 @@ disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_
     disk_cache_record_t *record = new_node->value;
 
     memcpy(record->data, data, sectors_count * 512);
+    //konsole_printf("First 3 record bytes: %x %x %x\n", (uint32_t)(((byte_t*)record->data)[0]), (uint32_t)(((byte_t*)record->data)[1]), (uint32_t)(((byte_t*)record->data)[2]));
 
     return record;
 }
@@ -110,12 +118,8 @@ bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_c
 
     if (record == NULL)
     {
-        bool_t result = disk_hardware_transfer_sync(disk_id, start_sector, sectors_count, buffer, false);
-
-        if (!result)
+        if (!disk_hardware_transfer_sync(disk_id, start_sector, sectors_count, buffer, false))
             return false;
-
-        asm("" ::: "memory");
 
         disk_add_cache_record_sync(disk_id, start_sector, sectors_count, buffer);
     }

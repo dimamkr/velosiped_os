@@ -7,6 +7,7 @@
 #define ARGPARSE_STATE_CMDNAME 0x00
 #define ARGPARSE_STATE_ARGNAME 0x01
 #define ARGPARSE_STATE_ARGVAL 0x02
+#define ARGPARSE_STATE_INPUT 0x03
 
 typedef struct {
     char *name;

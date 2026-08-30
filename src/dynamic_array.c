@@ -146,6 +146,8 @@ void dynamic_array_clear(dynamic_array_t *array)
     if (array->elements_count == 0)
         return;
 
+    array->start = 0;
+    array->end = 0;
     array->elements_count = 0;
     array->size = 1;
     array->buffer = realloc(array->buffer, array->size_of_element);

@@ -135,7 +135,7 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
     ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
-    // memset(command_table, 0, sizeof(ahci_cmd_table_t));
+    memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
     byte_t *cmd_answer_buffer = malloc(cmd_answer_buffer_size); // выделяем буффер под ответ
 
@@ -168,7 +168,7 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     // далее - парсинг ответа команды
 
-    // memset(result, 0, sizeof(ahci_basic_identify_data_t));
+    memset(result, 0, sizeof(ahci_basic_identify_data_t));
 
     // полученный буффер, согласно спецификации, интерпретируется как массив из 256 2-байтовых слов
     uint16_t *answer_words = (uint16_t *)cmd_answer_buffer;
@@ -263,7 +263,7 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
 
         ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
         ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
-        // memset(command_table, 0, sizeof(ahci_cmd_table_t));
+        memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
         uint8_t prdt_count = 0;
         uint16_t cmd_sectors_count = 0;

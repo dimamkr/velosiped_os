@@ -6,6 +6,8 @@
 #define BLC 32
 #define REM 31
 
+#define BITMAP_BLOCKS_FROM_SIZE(size) ((size) / BLC + !!((size) & REM))
+
 typedef struct
 {
     uint32_t *buff;
@@ -23,7 +25,7 @@ static inline void bitmap_clear_bit(bitmap_t *this, uint32_t index)
     this->buff[index >> 5] &= ~(1 << (index & REM));
 }
 
-static inline bool bitmap_test_bit(bitmap_t *this, uint32_t index)
+static inline bool_t bitmap_test_bit(bitmap_t *this, uint32_t index)
 {
     return this->buff[index >> 5] & (1 << (index & REM));
 }

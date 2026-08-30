@@ -64,12 +64,11 @@ void memcpy(void *dst, const void *src, uint32_t size)
 
 // TODO оптимизировать
 //  размер в байтах
-__attribute__((optimize("O3,unroll-loops"), artificial))
 void memset(void *ptr, byte_t value, uint32_t size)
 {
     for (uint32_t i = 0; i < size; i++)
     {
-        *((byte_t *)ptr + i) = value;
+        ((byte_t *)ptr)[i] = value;
     }
 }
 
