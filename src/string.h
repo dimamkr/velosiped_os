@@ -17,5 +17,7 @@ void string_to_upper(char *s);
 uint32_t strstr(const char *haystack, const char *needle);
 uint32_t wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size);
 void uint32_to_string(uint32_t number, char *result);
+bool_t is_matching_pattern(const char *str, const char *pattern);
+uint32_t string_to_uint32(char *str);
 
 #endif

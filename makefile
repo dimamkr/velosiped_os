@@ -22,7 +22,7 @@ BUILD_DIR = build
 
 # Флаги для релизной сборки
 CFLAGS_RELEASE = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -Os -I$(SRC_DIR)
+                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR)
 
 # Флаги для отладочной сборки
 CFLAGS_DEBUG   = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
@@ -156,14 +156,45 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	# 3. Создаём FAT32-раздел (129024 сектора ≈ 63 МБ)
 	dd if=/dev/zero of=part.tmp bs=512 count=129024 2>/dev/null
 	mkfs.vfat -F 32 -s 8 -R 32 -n "MYOS" part.tmp
-	# 4. Копируем ядро в корень FAT32
+	# 4. Создаём временную папку с контентом
+	mkdir -p fat32_content
+	# 4.1 Текстовые файлы
+	echo "Hello, FAT32 World!" > fat32_content/hello.txt
+	echo "This is a test file for FAT32 parser." > fat32_content/info.txt
+	echo "Line 1" > fat32_content/multiline.txt
+	echo "Line 2" >> fat32_content/multiline.txt
+	echo "Line 3" >> fat32_content/multiline.txt
+	# 4.2 Вложенные папки и файлы
+	mkdir -p fat32_content/docs
+	echo "Document 1 content" > fat32_content/docs/doc1.txt
+	echo "Document 2 content" > fat32_content/docs/doc2.txt
+	echo "Nested file" > fat32_content/docs/nested.txt
+	mkdir -p fat32_content/data
+	echo "Data content" > fat32_content/data/data1.bin
+	dd if=/dev/urandom of=fat32_content/data/random.bin bs=512 count=1 2>/dev/null
+	mkdir -p fat32_content/scripts
+	echo "#!/bin/bash" > fat32_content/scripts/hello.sh
+	echo "echo 'Hello from script!'" >> fat32_content/scripts/hello.sh
+	echo "echo 'Another line'" >> fat32_content/scripts/hello.sh
+	mkdir -p fat32_content/empty_folder
+	# 4.3 Пустые файлы
+	touch fat32_content/empty.txt
+	touch fat32_content/docs/empty.doc
+	# 4.4 Файл с пробелами в имени
+	echo "File with spaces content" > "fat32_content/file with spaces.txt"
+	# 4.5 Файл с длинным именем (проверка LFN)
+	echo "This is a file with a very long filename that definitely exceeds the old 8.3 DOS naming convention limit" > "fat32_content/This_is_a_very_long_filename_that_exceeds_8_3_limit.txt"
+	# 5. Копируем всё во временный FAT32-образ
+	mcopy -s -i part.tmp fat32_content/* ::/
+	# 6. Копируем ядро в корень FAT32
 	mcopy -i part.tmp $(BUILD_DIR)/kernel.bin ::kernel.bin
-	# 5. Вшиваем FAT32 в образ (смещение 1MiB)
+	# 7. Вшиваем FAT32 в образ (смещение 1MiB)
 	dd if=part.tmp of=$@ bs=1M seek=1 conv=notrunc 2>/dev/null
 	rm -f part.tmp
-	# 6. Пишем boot1 в MBR (первые 446 байт)
+	rm -rf fat32_content
+	# 8. Пишем boot1 в MBR (первые 446 байт)
 	dd if=$(BUILD_DIR)/boot1.bin of=$@ conv=notrunc bs=446 count=1 2>/dev/null
-	# 7. Пишем boot2 в сектор 1 (сразу после MBR)
+	# 9. Пишем boot2 в сектор 1 (сразу после MBR)
 	dd if=$(BUILD_DIR)/boot2.bin of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	@echo "Image created: $@"
 

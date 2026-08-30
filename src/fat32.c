@@ -110,7 +110,13 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
 
     for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
     {
-        fat32_read_cluster_sync(info, position.cluster_num, buffer);
+        if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
+        {
+            free(buffer);
+            dynamic_array_destroy(result);
+            dynamic_array_destroy(lfn_entries);
+            return NULL;
+        }
 
         for (uint32_t i = 0;i < entries_per_cluster;i++)
         {
@@ -142,15 +148,15 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
                         {
                             fat32_lfn_record_t *lfn_record = dynamic_array_get_by_index(lfn_entries, i);
 
-                            memcpy(wide_filename + i,
+                            memcpy(wide_filename + i * 13,
                                 lfn_record->name_part_1,
                                 sizeof(lfn_record->name_part_1));
-                            memcpy(wide_filename + i + sizeof(lfn_record->name_part_1),
-                                lfn_record->name_part_1,
-                                sizeof(lfn_record->name_part_1));
-                            memcpy(wide_filename + i + sizeof(lfn_record->name_part_1) + sizeof(lfn_record->name_part_2),
-                                lfn_record->name_part_1,
-                                sizeof(lfn_record->name_part_1));
+                            memcpy(wide_filename + i * 13 + 5,
+                                lfn_record->name_part_2,
+                                sizeof(lfn_record->name_part_2));
+                            memcpy(wide_filename + i * 13 + 11,
+                                lfn_record->name_part_3,
+                                sizeof(lfn_record->name_part_3));
                         }
 
                         file_info.filename = malloc(wide_filename_size);
@@ -212,10 +218,94 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
     return result;
 }
 
+bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size)
+{
+    uint32_t cluster_size = info->sectors_per_cluster * 512;
+
+    fat32_position_t position = {0};
+    position.cluster_num = file_info->cluster_num;
+    position.fat_value = fat32_fat_at_sync(info, position.cluster_num);
+
+    // пропускаем кластеры до начала
+    while (start_position >= cluster_size)
+    {
+        if (FAT32_IS_LAST_CLUSTER(position) || FAT32_HAS_READING_ERROR(position))
+            return false;
+
+        fat32_next_cluster_sync(info, &position);
+        start_position -= cluster_size;
+    }
+
+    void *temp_buffer = malloc(cluster_size);
+    uint32_t free_buffer_size = min(buffer_size, file_info->size);
+    uint32_t buffer_index = 0;
+
+    for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
+    {
+        if (!fat32_read_cluster_sync(info, position.cluster_num, temp_buffer))
+        {
+            free(temp_buffer);
+            return false;
+        }
+
+        uint32_t bytes_to_read = min(cluster_size - start_position, free_buffer_size);
+
+        memcpy(buffer + buffer_index, temp_buffer + start_position, bytes_to_read);
+        buffer_index += bytes_to_read;
+        start_position = 0;
+
+        if (bytes_to_read == free_buffer_size)
+            break;
+
+        free_buffer_size -= bytes_to_read;
+
+        if (FAT32_IS_LAST_CLUSTER(position))
+            break;
+    }
+
+    free(temp_buffer);
+
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+
+    return true;
+}
+
 void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info_t *result)
 {
     result->attributes = FAT32_ATTRIBUTE_DIRECTORY | FAT32_ATTRIBUTE_SYSTEM;
     result->cluster_num = info->root_cluster;
     result->size = 0;
     result->filename = strdup(dir_name);
+}
+
+dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern)
+{
+    dynamic_array_t *result = dynamic_array_create(sizeof(fat32_basic_file_info_t));
+    dynamic_array_t *files = fat32_read_directory(info, dir_info);
+
+    if (files == NULL)
+    {
+        dynamic_array_destroy(result);
+        return NULL;
+    }
+    if (pattern == NULL)
+    {
+        dynamic_array_destroy(result);
+        return files;
+    }
+
+    for (uint32_t i = 0;i < files->elements_count;i++)
+    {
+        fat32_basic_file_info_t *entry = dynamic_array_get_by_index(files, i);
+
+        if (is_matching_pattern(entry->filename, pattern))
+            dynamic_array_push_back(result, entry);
+        else
+            free(entry->filename);
+    }
+
+    dynamic_array_destroy(files);
+
+    return result;
 }

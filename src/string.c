@@ -1,4 +1,5 @@
 #include "string.h"
+#include "bitmap.h"
 
 
 __attribute__((optimize("O3,unroll-loops")))
@@ -110,10 +111,53 @@ uint32_t strstr(const char *haystack, const char *needle)
     return -1;
 }
 
-__attribute__((optimize("O3,unroll-loops")))
+__attribute__((optimize("O0")))
 bool_t is_matching_pattern(const char *str, const char *pattern)
 {
-    
+    uint32_t y_size = strlen(str) + 1;
+    uint32_t x_size = strlen(pattern) + 1;
+
+    bitmap_t dp;
+    bitmap_t maxes;
+
+    void *dp_buffer = malloc(BITMAP_BLOCKS_FROM_SIZE(x_size * y_size) * BLC);
+    void *maxes_buffer = malloc(BITMAP_BLOCKS_FROM_SIZE(x_size * y_size) * BLC);
+
+    bitmap_init(&dp, dp_buffer, x_size * y_size);
+    bitmap_set_bit(&dp, x_size * (y_size - 1) + x_size - 1);
+    bitmap_init(&maxes, maxes_buffer, x_size * y_size);
+    bitmap_set_bit(&maxes, x_size * (y_size - 1) + x_size - 1);
+
+    for (uint32_t i = y_size - 2;i != -1;i--)
+    {
+        for (uint32_t j = x_size - 2;j != -1;j--)
+        {
+            switch (pattern[j])
+            {
+                case '?':
+                    if (bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                        bitmap_set_bit(&dp, x_size * i + j);
+                    break;
+                case '*':
+                    if (bitmap_test_bit(&dp, x_size * i + (j + 1)) || bitmap_test_bit(&maxes, x_size * (i + 1) + (j + 1)))
+                        bitmap_set_bit(&dp, x_size * i + j);
+                    break;
+                default:
+                    if (str[i] == pattern[j] && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                        bitmap_set_bit(&dp, x_size * i + j);
+            }
+
+            if (bitmap_test_bit(&dp, x_size * i + (j + 1)) || bitmap_test_bit(&maxes, x_size * (i + 1) + (j + 1)))
+                bitmap_set_bit(&maxes, x_size * i + j + 1);
+        }
+    }
+
+    bool_t result = bitmap_test_bit(&dp, 0);
+
+    free(dp_buffer);
+    free(maxes_buffer);
+
+    return result;
 }
 
 __attribute__((optimize("O3,unroll-loops")))
@@ -152,4 +196,25 @@ void uint32_to_string(uint32_t number, char *result)
         len++;
     for (; number != 0; number /= 10)
         result[--len] = '0' + (number % 10);
+}
+
+uint32_t string_to_uint32(char *str)
+{
+    uint32_t result = 0;
+    uint32_t str_length = strlen(str);
+    uint32_t mul = 1;
+
+    if (str_length == 0)
+        return -1;
+
+    for (uint32_t i = str_length - 1;i != -1;i--)
+    {
+        if (str[i] > '9' || str[i] < '0')
+            return -1;
+
+        result += (uint32_t)(str[i] - '0') * mul;
+        mul *= 10;
+    }
+
+    return result;
 }

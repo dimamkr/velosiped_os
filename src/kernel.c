@@ -34,10 +34,10 @@ void kernel_main_task(void *);
         konsole_println("Fail");        \
     } while (0)
 
-__attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_signature_addr)
+__attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
     interrupt_disable();
-    memcpy(_boot_disk_signature, disk_signature_addr, 6); // сохраняем сигнатуру диска для поиска
+    memcpy(_boot_disk_signature, param, 6); // сохраняем сигнатуру диска для поиска
 
     heap_init();
 
@@ -75,7 +75,6 @@ void kernel_main_task(void *_)
     PRINT_OK;
 
     interrupt_enable();
-    task_unlock();
 
     PRINT_INIT("AHCI");
     if (ahci_init())
@@ -91,6 +90,8 @@ void kernel_main_task(void *_)
         konsole_set_warning_color();
         konsole_println("AHCI not found, using legacy mode");
     }
+
+    task_unlock();
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране

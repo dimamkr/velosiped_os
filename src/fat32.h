@@ -6,6 +6,7 @@
 #include "datetime.h"
 #include "mbr.h"
 #include "string.h"
+#include "heap.h"
 
 #define FAT32_BAD_CLUSTER 0x0FFFFFF7
 #define FAT32_EMPTY_CLUSTER 0x00000000
@@ -126,6 +127,8 @@ bool_t fat32_read_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *b
 bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, const void *buffer);
 void fat32_next_cluster_sync(fat32_info_t *info, fat32_position_t *position);
 dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info);
+bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
 void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info_t *result);
+dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern);
 
 #endif
