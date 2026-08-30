@@ -2,6 +2,8 @@
 #define TYPES
 #endif
 
+#include <stdbool.h>
+
 // Типы данных
 typedef unsigned char byte_t;
 typedef unsigned char uint8_t;
@@ -14,10 +16,7 @@ typedef unsigned long long uint64_t;
 typedef signed long long int64_t;
 typedef uint16_t wchar_t;
 
-typedef _Bool bool_t;
-
-#define false ((bool_t)0)
-#define true ((bool_t)1)
+typedef bool bool_t;
 
 #define NULL ((void *)0)
 #define KB ((uint32_t)0x400)

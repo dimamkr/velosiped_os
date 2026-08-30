@@ -10,8 +10,15 @@
 #include "task.h"
 #include "mbr.h"
 #include "fat32.h"
+#include "paging.h"
+#include "bitmap.h"
 
 void kernel_main_task(void *);
+void kernel_continue(void);
+
+// ------------------------------------------------------------
+// Битовая карта физической памяти (глобальная)
+// ------------------------------------------------------------
 
 #define PRINT_INIT(x)                   \
     do                                  \
@@ -39,6 +46,8 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_sign
     interrupt_disable();
     memcpy(_boot_disk_signature, disk_signature_addr, 6); // сохраняем сигнатуру диска для поиска
 
+    // Инициализация менеджера физической памяти
+
     heap_init();
 
     konsole_init();
@@ -47,6 +56,18 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *disk_sign
     konsole_print("\n\n");
     konsole_println("HEAP INITED");
     konsole_println("KONSOLE INITED");
+
+    PRINT_INIT("Paging");
+    init_paging();
+
+    kernel_continue();
+
+    __builtin_unreachable();
+}
+
+void kernel_continue(void)
+{
+    PRINT_OK;
 
     PRINT_INIT("GDT");
     gdt_init();

@@ -1,10 +1,11 @@
 #include "konsole.h"
 #include "dynamic_array.h"
 #include "task.h"
+#include "ram.h"
 #include <stdarg.h>
 
 // адрес начала видеопамяти
-volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)0xB8000;
+volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)VIDEO_MEMORY_ENTRY;
 
 int konsole_curr_x;
 int konsole_curr_y;

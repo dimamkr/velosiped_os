@@ -21,11 +21,11 @@ SRC_DIR   = src
 BUILD_DIR = build
 
 # Флаги для релизной сборки
-CFLAGS_RELEASE = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+CFLAGS_RELEASE = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
                  -fno-pic -mgeneral-regs-only -Os -I$(SRC_DIR)
 
 # Флаги для отладочной сборки
-CFLAGS_DEBUG   = -m32 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
+CFLAGS_DEBUG   = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
                  -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR)
 
 # Флаги для NASM (релиз и отладка)
@@ -143,7 +143,9 @@ $(BUILD_DIR)/kernel.elf: $(OBJECTS) $(SRC_DIR)/link.ld | $(BUILD_DIR)
 $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf | $(BUILD_DIR)
 	@echo "3. Creating binary..."
 	$(OBJCOPY) -O binary -S $< $@
-	@echo "   Kernel size: $$(wc -c < $@) bytes"
+	@echo "Kernel data: "
+	readelf -l $<
+	@echo "kernel.bin file size: $$(wc -c < $@) bytes"
 
 $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
 	@echo "Creating disk image with MBR and FAT32..."
