@@ -46,8 +46,9 @@ static void invoke_top_handler(isr_data_t registers)
         top_handler(registers);
     }
     else
-    {
-        konsole_printf("%s%d\n", "Unhandled interrupt: ", registers.int_no);
+    {   
+        konsole_printf("Unhandled interrupt #%d\n", registers.int_no);
+        PANIC("Unhandled interrupt")
     }
     // else
     // {

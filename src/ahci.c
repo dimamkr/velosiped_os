@@ -156,7 +156,7 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     port->ci |= (1 << cmd_num); // отправляем нашу команду
 
-    while (port->ci & (1 << cmd_num) && port->is & ATA_ERROR_ANY) // ждем завершения всех команд (или ошибки)
+    while (port->ci & (1 << cmd_num) && !(port->is & ATA_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
         task_yield();
 
     if (port->is & ATA_ERROR_ANY)
@@ -230,7 +230,7 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
     command_header->cfl = sizeof(ahci_fis_h2d_t) / 4;
 
-    while (port->ci & (1 << cmd_num) && port->is & ATA_ERROR_ANY)
+    while (port->ci & (1 << cmd_num) && !(port->is & ATA_ERROR_ANY))
         task_yield();
 
     if (port->is & ATA_ERROR_ANY)
@@ -301,7 +301,7 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
         commands_waiting |= (1 << cmd_num); // добавляем для ожидания
     }
 
-    while (port->ci & commands_waiting && port->is & ATA_ERROR_ANY) // ждем завершения всех команд (или ошибки)
+    while (port->ci & commands_waiting && !(port->is & ATA_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
         task_yield();
 
     if (port->is & ATA_ERROR_ANY)
