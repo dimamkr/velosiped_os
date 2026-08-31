@@ -5,7 +5,7 @@
 #include <stdarg.h>
 
 // адрес начала видеопамяти
-volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)VIDEO_MEMORY_ENTRY;
+volatile konsole_symbol_t *konsole_start = (konsole_symbol_t *)VIDEO_MEMORY_START;
 
 int konsole_curr_x;
 int konsole_curr_y;
