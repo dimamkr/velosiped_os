@@ -354,7 +354,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
         }
         else
         {
-            choice = string_to_uint32(choice_str);
+            choice = string_to_uint32(choice_str, 10);
 
             if (choice != -1 && choice < files->elements_count)
                 memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
@@ -394,9 +394,9 @@ bool_t terminal_view(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value);
+            start_pos = string_to_uint32(arg->value, 10);
         else if (strcmp(arg->name, "bytes") == 0)
-            bytes_count = string_to_uint32(arg->value);
+            bytes_count = string_to_uint32(arg->value, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -545,6 +545,8 @@ bool_t terminal_write(argparse_command_t *command)
     uint32_t start_pos = 0;
     char *pattern = NULL;
     bool_t hex = false;
+    bool_t overwrite = false;
+    bool_t append = false;
     
     for (uint32_t i = 0;i < command->arguments->elements_count;i++)
     {
@@ -553,7 +555,7 @@ bool_t terminal_write(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value);
+            start_pos = string_to_uint32(arg->value, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -562,7 +564,19 @@ bool_t terminal_write(argparse_command_t *command)
                 hex = false;
             else
             {
-                konsole_println("Error: unknown format");
+                konsole_printf("Error: unknown format '%s'\n", arg->value);
+                return false;
+            }
+        }
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "overwrite") == 0)
+                overwrite = true;
+            else if (strcmp(arg->value, "append") == 0)
+                append = true;
+            else
+            {
+                konsole_printf("Error: unknown option '%s'\n", arg->value);
                 return false;
             }
         }
@@ -596,6 +610,21 @@ bool_t terminal_write(argparse_command_t *command)
         return false;
     }
 
+    if (append)
+        start_pos = file->size;
+    if (overwrite)
+    {
+        if (!fat32_erase_file_sync(&info, file))
+        {
+            free(file);
+            konsole_println("Error: erase error");
+            return false;
+        }
+
+        file->size = 0;
+        file->cluster_num = 0;
+    }
+        
     konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
 
     const unsigned char *input_line;
@@ -607,7 +636,58 @@ bool_t terminal_write(argparse_command_t *command)
     byte_t *buffer = malloc(buffer_size);
 
     if (hex)
-        ;
+    {
+        while (input_line = terminal_get_input_line())
+        {
+            unsigned char write_byte [3];
+            uint8_t cursor = 0;
+
+            for (unsigned char *cur = input_line;;cur++)
+            {
+                if (*cur == ' ' || *cur == '\0')
+                {
+                    write_byte[cursor] = '\0';
+                    cursor = 0;
+
+                    if (buffer_free_space == 0)
+                    {
+                        buffer_free_space += buffer_size;
+                        buffer_size *= 2;
+                        realloc(buffer, buffer_size);
+                    }
+
+                    uint32_t byte_num = string_to_uint32(write_byte, 16);
+
+                    if (byte_num != -1)
+                    {
+                        buffer[buffer_size - buffer_free_space] = byte_num & 0xFF;
+                    }
+                    else
+                    {
+                        free(buffer);
+                        free(file);
+                        konsole_println("Error: invalid byte");
+                        return false;
+                    }
+
+                    buffer_free_space--;
+                }
+                else
+                    write_byte[cursor++] = *cur;
+                
+                if (cursor > 3)
+                {
+                    free(buffer);
+                    free(file);
+                    konsole_println("Error: invalid byte");
+                    return false;
+                }
+
+                if (*cur == '\0')
+                    break;
+            }
+        }
+    }
     else
     {
         while (input_line = terminal_get_input_line())

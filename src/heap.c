@@ -324,7 +324,10 @@ void free(void *ptr)
 
     if (((heap_data_block_t *)start)->signature != HEAP_DATA_BLOCK_MAGIC)
     {
-        PANIC("BAD FREE");
+        if (((heap_data_block_t *)start)->signature == HEAP_VOID_BLOCK_MAGIC)
+            PANIC("DOUBLE FREE");
+        else
+            PANIC("BAD FREE");
     }
 
     heap_block_erase(start);

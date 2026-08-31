@@ -340,7 +340,7 @@ uint32_t fat32_take_new_cluster_sync(fat32_info_t *info, uint32_t prev_cluster)
 
     if (info->fsinfo_sector)
     {
-        info = malloc(sizeof(fat32_fsinfo_t));
+        fsinfo = malloc(sizeof(fat32_fsinfo_t));
         fat32_read_fsinfo_sync(info, fsinfo);
         current_cluster = fsinfo->next_free_cluster;
     }
@@ -385,7 +385,7 @@ bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster)
 
     if (info->fsinfo_sector)
     {
-        info = malloc(sizeof(fat32_fsinfo_t));
+        fsinfo = malloc(sizeof(fat32_fsinfo_t));
         fat32_read_fsinfo_sync(info, fsinfo);
         min_cluster = fsinfo->next_free_cluster;
     }
@@ -440,6 +440,9 @@ bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t 
 // отличие от чтения только в возможном изменении размера и в том, что мы попутно выделяем новые кластеры
 bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size)
 {
+    if (buffer_size == 0)
+        return true;
+    
     uint32_t cluster_size = info->sectors_per_cluster * 512;
 
     fat32_basic_file_info_t new_file_info;
@@ -456,6 +459,7 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
     {
         position.cluster_num = fat32_take_new_cluster_sync(info, 0);
         position.fat_value = FAT32_LAST_CLUSTER;
+        new_file_info.cluster_num = position.cluster_num;
     }
 
     uint32_t current_position = start_position;
@@ -519,3 +523,19 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 
     return true;
 }
+
+bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info)
+{
+    fat32_basic_file_info_t new_file_info;
+    memcpy(&new_file_info, file_info, sizeof(fat32_basic_file_info_t));
+
+    new_file_info.size = 0;
+    new_file_info.cluster_num = 0;
+
+    if (file_info->cluster_num != 0)
+        if (!fat32_release_clusters_sync(info, file_info->cluster_num))
+            return false;
+
+    return fat32_update_directory_entry(info, &new_file_info);
+}
+

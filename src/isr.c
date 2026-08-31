@@ -7,8 +7,8 @@
 // Number of spurious interrupts received
 uint64_t spurious_interrupts;
 
-isr_t interruption_top_handlers[256] = {NULL};
-isr_t interruption_bottom_handlers[256] = {NULL};
+isr_t interruption_top_handlers[256] = {0};
+isr_t interruption_bottom_handlers[256] = {0};
 
 static uint16_t get_pic_isr(void)
 {
@@ -48,7 +48,7 @@ static void invoke_top_handler(isr_data_t registers)
     else
     {   
         konsole_printf("Unhandled interrupt #%d\n", registers.int_no);
-        PANIC("Unhandled interrupt")
+        PANIC("UNHANDLED INTERRUPT");
     }
     // else
     // {

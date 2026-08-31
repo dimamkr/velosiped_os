@@ -149,5 +149,6 @@ uint32_t fat32_take_new_cluster_sync(fat32_info_t *info, uint32_t prev_cluster);
 bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster);
 bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
+bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 
 #endif

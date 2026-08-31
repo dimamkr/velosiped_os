@@ -110,8 +110,7 @@ strstr(const char *haystack, const char *needle)
 }
 
 __attribute__((optimize("O0")))
-bool_t
-is_matching_pattern(const char *str, const char *pattern)
+bool_t is_matching_pattern(const char *str, const char *pattern)
 {
     uint32_t y_size = strlen(str) + 1;
     uint32_t x_size = strlen(pattern) + 1;
@@ -186,16 +185,16 @@ wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
     return j;
 }
 
-void uint32_to_string(uint32_t number, char *result)
+void uint32_to_string(uint32_t number, char *result, uint8_t base)
 {
     uint16_t len = 0;
-    for (uint32_t i = number; i != 0; i /= 10)
+    for (uint32_t i = number; i != 0; i /= base)
         len++;
-    for (; number != 0; number /= 10)
-        result[--len] = '0' + (number % 10);
+    for (; number != 0; number /= base)
+        result[--len] = DIGIT_BY_INDEX(number % base);
 }
 
-uint32_t string_to_uint32(char *str)
+uint32_t string_to_uint32(char *str, uint8_t base)
 {
     uint32_t result = 0;
     uint32_t str_length = strlen(str);
@@ -206,11 +205,13 @@ uint32_t string_to_uint32(char *str)
 
     for (uint32_t i = str_length - 1; i != -1; i--)
     {
-        if (str[i] > '9' || str[i] < '0')
+        uint32_t index = INDEX_BY_DIGIT(str[i]);
+
+        if (index >= base)
             return -1;
 
-        result += (uint32_t)(str[i] - '0') * mul;
-        mul *= 10;
+        result += index * mul;
+        mul *= base;
     }
 
     return result;
