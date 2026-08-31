@@ -25,7 +25,7 @@ static uint8_t bcd_to_bin(uint8_t bcd)
 }
 
 // Чтение системной даты и времени
-void system_get_datetime(datetime_t *result)
+void datetime_get(datetime_t *result)
 {
     // Ждём окончания обновления
     cmos_wait_update();

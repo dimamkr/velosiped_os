@@ -17,7 +17,7 @@ typedef struct {
     uint16_t time;
 } datetime_fat_t;
 
-void system_get_datetime(datetime_t *result);
+void datetime_get(datetime_t *result);
 void datetime_fat_from_datetime(const datetime_t *datetime, datetime_fat_t *fat_datetime);
 void datetime_datetime_from_fat(const datetime_fat_t *fat_datetime, datetime_t *datetime);
 

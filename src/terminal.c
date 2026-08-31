@@ -16,6 +16,7 @@
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
 static bool_t terminal_EOI_flag;
+static bool_t terminal_cancelled_flag;
 
 fat32_info_t info;
 fat32_basic_file_info_t root;
@@ -49,6 +50,12 @@ void terminal_process_keyboard_events(void)
             else if (ev.keycode == KEY_DOWN)
             {
                 konsole_view_scroll_down();
+                continue;
+            }
+            else if (LOWER(ev.keycode) == 'c')
+            {
+                terminal_buff_add_symbol(0);
+                terminal_cancelled_flag = true;
                 continue;
             }
         }
@@ -85,58 +92,92 @@ void terminal_process_keyboard_events(void)
 }
 
 // получает ввод и выводит все символы кроме переноса строки
-static inline void terminal_wait_for_input_line()
+static inline const char *terminal_get_input_line()
 {
     terminal_input_buff_lenght = 0;
     terminal_EOI_flag = false;
+    terminal_cancelled_flag = false;
 
-    while (!terminal_EOI_flag)
+    while (!terminal_EOI_flag && !terminal_cancelled_flag)
     {
         task_wait_until(keyboard_event);
         terminal_process_keyboard_events();
     }
 
-    konsole_println("");
+    if (terminal_EOI_flag)
+    {
+        konsole_println("");
+        return terminal_input_buff;
+    }
+    
+    return NULL;
 }
 
 void terminal_register_command_handler(char *command, terminal_command_handler_cb handler)
 {
-    hash_table_insert(cmd_handlers, command, strlen(command), &handler, sizeof(terminal_command_handler_cb));
+    hash_table_insert(cmd_handlers, command, strlen(command) + 1, &handler, sizeof(terminal_command_handler_cb));
 }
 
 // --------- Обработчики команд ---------
 
-void terminal_print_help(argparse_command_t *command)
+bool_t terminal_print_help(argparse_command_t *command)
 {
-    konsole_println("Avaliable commands: ");
+    konsole_print("Avaliable commands: ");
+    bool_t comma = false;
+
+    for (uint32_t i = 0;i < primes[cmd_handlers->buff_count_index];i++)
+    {
+        for (linked_list_node_t *node = *(cmd_handlers->key_buff_root + i);node;node = node->right)
+        {
+            unsigned char *key = node->value;
+
+            if (comma)
+                konsole_print(", ");
+            comma = true;
+
+            konsole_print(key);
+        }
+    }
+
+    konsole_println("");
+
+    return true;
 }
 
-void terminal_clear(argparse_command_t *command)
+bool_t terminal_clear(argparse_command_t *command)
 {
     konsole_clear();
+
+    return true;
 }
 
-void terminal_print_datetime(argparse_command_t *command)
+bool_t terminal_print_datetime(argparse_command_t *command)
 {
     datetime_t dt;
 
-    system_get_datetime(&dt);
+    datetime_get(&dt);
     konsole_printf("%d-%d-%d %d:%d:%d",
                    dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+
+    return true;
 }
 
-void terminal_print_time(argparse_command_t *command)
+bool_t terminal_print_time(argparse_command_t *command)
 {
     uint32_t milis_time = timer_get_time();
     konsole_printf("%d%s%d%s\n", milis_time / 1000, " s ", milis_time % 1000, " ms");
+
+    return true;
 }
 
-void terminal_print_ticks(argparse_command_t *command)
+bool_t terminal_print_ticks(argparse_command_t *command)
 {
     konsole_printf("%d\n", timer_get_ticks());
+
+    return true;
 }
 
-void terminal_print_disks(argparse_command_t *command)
+bool_t terminal_print_disks(argparse_command_t *command)
 {
     dynamic_array_t *disks_info = ahci_enumerate_ports();
 
@@ -177,12 +218,18 @@ void terminal_print_disks(argparse_command_t *command)
         konsole_println("========");
     }
     else
+    {
         konsole_println("No disks found");
+        dynamic_array_destroy(disks_info);
+        return false;
+    }
 
     dynamic_array_destroy(disks_info);
+
+    return true;
 }
 
-void terminal_print_path(argparse_command_t *command)
+bool_t terminal_print_path(argparse_command_t *command)
 {
     for (uint8_t i = 0;i < path->elements_count;i++)
     {
@@ -190,28 +237,39 @@ void terminal_print_path(argparse_command_t *command)
 
         konsole_printf("%s/", dir->filename);
     }
+
+    return true;
 }
 
-void terminal_print_listdir(argparse_command_t *command)
+bool_t terminal_print_listdir(argparse_command_t *command)
 {
     dynamic_array_t *listdir;
     char *pattern = NULL;
 
-    if (command->arguments->elements_count != 0)
-        pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    {
+
+        if (command->arguments->elements_count != 0)
+            pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
+    }
 
     listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
 
     if (listdir == NULL)
     {
         konsole_println("Error: disk error");
-        return;
+        return false;
     }
 
     // konsole_printf("%x\n", listdir);
 
     if (listdir->elements_count != 0)
         konsole_println("========");
+    else
+    {
+        dynamic_array_destroy(listdir);
+        return false;
+    }
 
     for (uint32_t i = 0;i < listdir->elements_count;i++)
     {
@@ -251,6 +309,8 @@ void terminal_print_listdir(argparse_command_t *command)
     }
 
     dynamic_array_destroy(listdir);
+
+    return true;
 }
 
 fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
@@ -285,17 +345,25 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
 
         konsole_print("?>");
 
-        terminal_wait_for_input_line();
+        const char *choice_str = terminal_get_input_line();
 
-        choice = string_to_uint32(terminal_input_buff);
-
-        if (choice != -1 && choice < files->elements_count)
-            memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
-        else
+        if (choice_str == NULL)
         {
-            konsole_println("Error: invalid option");
             free(result);
             result = NULL;
+        }
+        else
+        {
+            choice = string_to_uint32(choice_str);
+
+            if (choice != -1 && choice < files->elements_count)
+                memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
+            else
+            {
+                konsole_println("Error: invalid option");
+                free(result);
+                result = NULL;
+            }
         }
     }
 
@@ -312,7 +380,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
     return result;
 }
 
-void terminal_view(argparse_command_t *command)
+bool_t terminal_view(argparse_command_t *command)
 {
     uint32_t start_pos = 0;
     uint32_t bytes_count = 0;
@@ -338,7 +406,7 @@ void terminal_view(argparse_command_t *command)
             else
             {
                 konsole_println("Error: unknown format");
-                return;
+                return false;
             }
         }
     }
@@ -348,30 +416,32 @@ void terminal_view(argparse_command_t *command)
     if (files == NULL)
     {
         konsole_println("Error: disk error");
-        return;
+        return false;
     }
 
     if (files->elements_count == 0)
     {
         konsole_println("Error: No such file");
         dynamic_array_destroy(files);
-        return;
+        return false;
     }
 
     fat32_basic_file_info_t *file = terminal_resolve_filename(files);
 
     if (file == NULL)
     {
-        return;
+        return false;
     }
     if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
     {
+        free(file);
         konsole_println("Error: it isn't file");
-        return;
+        return false;
     }
     else if (file->size == 0)
     {
-        return;
+        free(file);
+        return true;
     }
 
     uint32_t buffer_size = bytes_count == 0 ? file->size + 1 : min(bytes_count, file->size) + 1;
@@ -393,12 +463,19 @@ void terminal_view(argparse_command_t *command)
 
     free(file);
     free(buffer);
+
+    return true;
 }
 
-void terminal_change_dir(argparse_command_t *command)
+bool_t terminal_change_dir(argparse_command_t *command)
 {
     char *pattern = NULL;
 
+    if (command->arguments->elements_count > 1)
+    {
+        konsole_println("Error: too many arguments");
+        return false;
+    }
     if (command->arguments->elements_count != 0)
         pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
 
@@ -411,7 +488,7 @@ void terminal_change_dir(argparse_command_t *command)
             dynamic_array_pop_back(path);
         }
 
-        return;
+        return false;
     }
 
     dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
@@ -419,31 +496,33 @@ void terminal_change_dir(argparse_command_t *command)
     if (files == NULL)
     {
         konsole_println("Error: disk error");
-        return;
+        return false;
     }
 
     if (files->elements_count == 0)
     {
         konsole_println("Error: No such directory");
         dynamic_array_destroy(files);
-        return;
+        return false;
     }
 
     fat32_basic_file_info_t *dir = terminal_resolve_filename(files);
 
     if (dir == NULL)
     {
-        return;
+        return false;
     }
     if (!(dir->attributes & FAT32_ATTRIBUTE_DIRECTORY))
     {
+        free(dir);
         konsole_println("Error: it isn't directory");
-        return;
+        return false;
     }
 
     if (strcmp(dir->filename, ".") == 0)
     {
-        return;
+        free(dir);
+        return true;
     }
     else if (strcmp(dir->filename, "..") == 0)
     {
@@ -457,16 +536,129 @@ void terminal_change_dir(argparse_command_t *command)
     }
 
     free(dir);
+
+    return true;
+}
+
+bool_t terminal_write(argparse_command_t *command)
+{
+    uint32_t start_pos = 0;
+    char *pattern = NULL;
+    bool_t hex = false;
+    
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == NULL)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "start") == 0)
+            start_pos = string_to_uint32(arg->value);
+        else if (strcmp(arg->name, "format") == 0)
+        {
+            if (strcmp(arg->value, "hex") == 0)
+                hex = true;
+            else if (strcmp(arg->value, "text") == 0)
+                hex = false;
+            else
+            {
+                konsole_println("Error: unknown format");
+                return false;
+            }
+        }
+    }
+
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
+
+    if (files == NULL)
+    {
+        konsole_println("Error: disk error");
+        return false;
+    }
+
+    if (files->elements_count == 0)
+    {
+        konsole_println("Error: No such file");
+        dynamic_array_destroy(files);
+        return false;
+    }
+
+    fat32_basic_file_info_t *file = terminal_resolve_filename(files);
+
+    if (file == NULL)
+    {
+        return false;
+    }
+    if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+    {
+        free(file);
+        konsole_println("Error: it isn't file");
+        return false;
+    }
+
+    konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
+
+    const unsigned char *input_line;
+
+    uint32_t buffer_size = 32;
+    uint32_t buffer_free_space = buffer_size;
+    bool_t enter = false;
+
+    byte_t *buffer = malloc(buffer_size);
+
+    if (hex)
+        ;
+    else
+    {
+        while (input_line = terminal_get_input_line())
+        {
+            uint32_t length = strlen(input_line);
+
+            while (buffer_free_space < length + enter)
+            {
+                buffer_free_space += buffer_size;
+                buffer_size *= 2;
+                buffer = realloc(buffer, buffer_size);
+            }
+
+            if (enter)
+            {
+                buffer[buffer_size - buffer_free_space] = '\n';
+                buffer_free_space--;
+            }
+            enter = true;
+
+            memcpy(buffer + (buffer_size - buffer_free_space), input_line, length);
+            buffer_free_space -= length;
+        }
+    }
+
+    konsole_println("===================");
+
+    if (!fat32_write_file_sync(&info, file, start_pos, buffer, buffer_size - buffer_free_space))
+    {
+        free(buffer);
+        free(file);
+        konsole_println("Error: disk write error");
+        return false;
+    }
+
+    free(buffer);
+    free(file);
+
+    konsole_println("Success");
+
+    return true;
 }
 
 // --------- Хэндлер ---------
 
-void terminal_handle_command_from_buff()
+void terminal_handle_command(const char *buffer)
 {
     argparse_command_t command;
-    argparse_parse_command(terminal_input_buff, &command);
+    argparse_parse_command(buffer, &command);
 
-    terminal_command_handler_cb *handler = hash_table_get(cmd_handlers, command.command_name, strlen(command.command_name));
+    terminal_command_handler_cb *handler = hash_table_get(cmd_handlers, command.command_name, strlen(command.command_name) + 1);
     
     if (handler)
         (*handler)(&command);
@@ -498,6 +690,7 @@ void terminal_main_loop()
     terminal_register_command_handler("cat", terminal_view);
     terminal_register_command_handler("chdir", terminal_change_dir);
     terminal_register_command_handler("cd", terminal_change_dir);
+    terminal_register_command_handler("write", terminal_write);
 
     konsole_println("");
 
@@ -506,9 +699,10 @@ void terminal_main_loop()
         terminal_print_path(NULL);
         konsole_print(">");
 
-        terminal_wait_for_input_line();
+        const char *cmd = terminal_get_input_line();
 
-        terminal_handle_command_from_buff();
+        if (cmd)
+            terminal_handle_command(cmd);
 
         konsole_println("");
     }
