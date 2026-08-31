@@ -5,11 +5,27 @@
 // инварианты
 // внутри uint32_t индексация начиная м младшего бита (как в little endian)
 
+bitmap_t *bitmap_create(uint32_t bits_count)
+{
+    bitmap_t *res = malloc(sizeof(bitmap_t));
+    bitmap_init(res, bits_count);
+    return res;
+}
+
 void bitmap_init(bitmap_t *this, uint32_t bits_count)
 {
     this->bits_count = bits_count;
     this->blocks_count = (bits_count + REM) >> 5;
     this->buff = (uint32_t *)malloc(this->blocks_count * sizeof(uint32_t));
+
+    memset(this->buff, 0, this->blocks_count * sizeof(uint32_t));
+}
+
+void bitmap_init_from_buff(bitmap_t *this, void *buff, uint32_t bits_count)
+{
+    this->bits_count = bits_count;
+    this->blocks_count = (bits_count + REM) >> 5;
+    this->buff = (uint32_t *)buff;
 
     memset(this->buff, 0, this->blocks_count * sizeof(uint32_t));
 }

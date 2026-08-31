@@ -30,7 +30,9 @@ static inline bool_t bitmap_test_bit(bitmap_t *this, uint32_t index)
     return this->buff[index >> 5] & (1 << (index & REM));
 }
 
+bitmap_t *bitmap_create(uint32_t bits_count);
 void bitmap_init(bitmap_t *this, uint32_t bits_count);
+void bitmap_init_from_buff(bitmap_t *this, void *buff, uint32_t bits_count);
 void bitmap_destroy(bitmap_t *this);
 uint32_t bitmap_find_first_zero(bitmap_t *this, uint32_t start_index);
 uint32_t bitmap_find_first_one(bitmap_t *this, uint32_t start_index);
