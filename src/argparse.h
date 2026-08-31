@@ -19,7 +19,7 @@ typedef struct {
     dynamic_array_t *arguments;
 } argparse_command_t;
 
-void argparse_parse_command(char *buffer, argparse_command_t *result);
+void argparse_parse_command(const char *buffer, argparse_command_t *result);
 void argparse_free_command(argparse_command_t *command);
 
 #endif

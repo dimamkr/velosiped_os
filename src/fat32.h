@@ -10,6 +10,7 @@
 
 #define FAT32_BAD_CLUSTER 0x0FFFFFF7
 #define FAT32_EMPTY_CLUSTER 0x00000000
+#define FAT32_LAST_CLUSTER 0x0FFFFFFF
 
 #define FAT32_ATTRIBUTE_READONLY 0x01
 #define FAT32_ATTRIBUTE_HIDDEN 0x02
@@ -104,6 +105,16 @@ typedef union {
 } fat32_directory_entry_t;
 
 typedef struct {
+    byte_t lead_signature [4];
+    byte_t reserved [480];
+    byte_t struct_signature [4];
+    uint32_t free_clusters_count;
+    uint32_t next_free_cluster;
+    byte_t reserver1 [12];
+    byte_t trail_signature [4];
+} __attribute__((packed)) fat32_fsinfo_t;
+
+typedef struct {
     uint32_t fat_value;
     uint32_t cluster_num;
 } fat32_position_t;
@@ -115,6 +126,8 @@ typedef struct {
     datetime_fat_t last_modify_datetime;
     uint32_t size;
     uint32_t cluster_num;
+    uint32_t entry_cluster_num;
+    uint16_t entry_index;
 } fat32_basic_file_info_t;
 
 bool_t fat32_read_initial_sector_sync(fat32_info_t *fat_info, fat32_initial_sector_t *init_sector);
@@ -130,5 +143,12 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
 bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
 void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info_t *result);
 dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern);
+bool_t fat32_read_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
+bool_t fat32_write_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
+uint32_t fat32_take_new_cluster_sync(fat32_info_t *info, uint32_t prev_cluster);
+bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster);
+bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
+bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 
 #endif

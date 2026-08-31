@@ -25,4 +25,6 @@ void *hash_table_get(hash_table_t *hash_table, void *key, uint32_t key_size);
 // резервирует в количестве первое число из primes не меньше данного
 void hash_table_reserve(hash_table_t *hash_table, uint32_t buff_count);
 
+extern const uint32_t primes[32];
+
 #endif

@@ -207,8 +207,6 @@ void konsole_printf(const char *format, ...)
             case 'x':
             {
                 uint32_t num = va_arg(args, uint32_t);
-                konsole_putch('0');
-                konsole_putch('x');
                 char tmp[12];
                 int len = 0;
                 do

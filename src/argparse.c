@@ -1,7 +1,7 @@
 #include "argparse.h"
 
 
-void argparse_parse_command(char *buffer, argparse_command_t *result)
+void argparse_parse_command(const char *buffer, argparse_command_t *result)
 {
     uint8_t state = ARGPARSE_STATE_CMDNAME;
     bool_t quotes = false;
