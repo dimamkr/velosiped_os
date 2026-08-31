@@ -10,8 +10,8 @@
 #include "task.h"
 #include "mbr.h"
 #include "fat32.h"
-#include "paging.h"
-#include "bitmap.h"
+#include "vmm.h"
+#include "pmm.h"
 
 void kernel_main_task(void *);
 void kernel_continue(void);
@@ -46,8 +46,6 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
     interrupt_disable();
     memcpy(_boot_disk_signature, param, 6); // сохраняем сигнатуру диска для поиска
 
-    // Инициализация менеджера физической памяти
-
     heap_init();
 
     konsole_init();
@@ -57,24 +55,20 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
     konsole_println("HEAP INITED");
     konsole_println("KONSOLE INITED");
 
-    PRINT_INIT("Paging");
-    init_paging();
-
-    kernel_continue();
-
-    __builtin_unreachable();
-}
-
-void kernel_continue(void)
-{
-    PRINT_OK;
-
     PRINT_INIT("GDT");
     gdt_init();
     PRINT_OK;
 
     PRINT_INIT("IDT");
     idt_init();
+    PRINT_OK;
+
+    PRINT_INIT("PMM");
+    pmm_init();
+    PRINT_OK;
+
+    PRINT_INIT("VMM");
+    vmm_init();
     PRINT_OK;
 
     PRINT_INIT("timer");
@@ -98,7 +92,7 @@ void kernel_main_task(void *_)
     interrupt_enable();
 
     PRINT_INIT("AHCI");
-    if (ahci_init())
+    if (false) // TODO почему прерывание 14 при ahci_init()
     {
         _ahci_supported = true;
         PRINT_OK;
