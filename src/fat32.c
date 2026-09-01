@@ -290,7 +290,7 @@ void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info
     result->filename = strdup(dir_name);
 }
 
-dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern)
+dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern, bool_t ignore_case)
 {
     dynamic_array_t *result = dynamic_array_create(sizeof(fat32_basic_file_info_t));
     dynamic_array_t *files = fat32_read_directory(info, dir_info);
@@ -310,7 +310,7 @@ dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *d
     {
         fat32_basic_file_info_t *entry = dynamic_array_get_by_index(files, i);
 
-        if (is_matching_pattern(entry->filename, pattern))
+        if (is_matching_pattern(entry->filename, pattern, ignore_case))
             dynamic_array_push_back(result, entry);
         else
             free(entry->filename);
@@ -526,7 +526,8 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 
     free(temp_buffer);
 
-    new_file_info.size = max(file_info->size, start_position + buffer_size);
+    if (!(new_file_info.attributes & FAT32_ATTRIBUTE_DIRECTORY))
+        new_file_info.size = max(file_info->size, start_position + buffer_size);
 
     if (!fat32_update_directory_entry(info, &new_file_info))
         return false;
@@ -615,8 +616,24 @@ fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, co
     memcpy(result_dos_filename.name, name, min(strlen(name), 8));
     memcpy(result_dos_filename.extension, extension, min(strlen(extension), 3));
 
-    // если имя файла больше 8 или расширение больше 3, то генерируем сокращение
-    if (strlen(name) > 8 || strlen(extension) > 3)
+    bool_t have_such_file = false;
+
+    if (strlen(name) <= 8 && strlen(extension) <= 3)
+    {
+        for (uint32_t i = 0;i < directory_files->elements_count;i++)
+        {
+            fat32_basic_file_info_t *file = dynamic_array_get_by_index(directory_files, i);
+
+            if (memcmp(file->dos_filename, result_dos_filename.name, 8) && memcmp(file->dos_extension, result_dos_filename.extension, 3))
+            {
+                have_such_file = true;
+                break;
+            }
+        }
+    }
+    
+    // если имя файла больше 8, или расширение больше 3, или такой файл уже существует, то генерируем сокращение
+    if (strlen(name) > 8 || strlen(extension) > 3 || have_such_file)
     {
         dynamic_array_t *conflicts = dynamic_array_create(sizeof(uint32_t));
 
@@ -664,10 +681,20 @@ fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, co
     return result_dos_filename;
 }
 
-bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes)
+bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes, fat32_basic_file_info_t *result)
 {
     if (*filename == 0)
         return false;
+
+    dynamic_array_t *files_with_such_name = fat32_find_files(info, dir_info, filename, false);
+
+    if (files_with_such_name->elements_count != 0)
+    {
+        fat32_destroy_files_list(files_with_such_name);
+        return false;
+    }
+
+    dynamic_array_destroy(files_with_such_name);
 
     dynamic_array_t *dir_files = fat32_read_directory(info, dir_info);
     fat32_dos_filename_t dos_filename = fat32_get_dos_filename(dir_files, filename);
@@ -676,11 +703,8 @@ bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, 
     dynamic_array_t *lfn_entries = NULL;
     uint16_t new_entries_count = 1;
 
-    if (strchr_r(dos_filename.name, '~') != -1)
-    {
-        lfn_entries = fat32_split_filename_to_lfn(filename, checksum);
-        new_entries_count += lfn_entries->elements_count;
-    }
+    lfn_entries = fat32_split_filename_to_lfn(filename, checksum);
+    new_entries_count += lfn_entries->elements_count;
 
     fat32_destroy_files_list(dir_files);
 
@@ -763,6 +787,7 @@ bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, 
     // записываем туда наши records
     position.cluster_num = empty_sequence_start_cluster;
     position.fat_value = fat32_fat_at_sync(info, position.cluster_num);
+    uint16_t entry_index = empty_sequence_start_index;
 
     for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
     {
@@ -781,7 +806,10 @@ bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, 
                 dynamic_array_pop_front(lfn_entries);
             }
             else
+            {
                 memcpy(buffer + i, &record, sizeof(fat32_file_record_t));
+                entry_index = i;
+            }
             
             new_entries_count--;
 
@@ -804,8 +832,68 @@ bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, 
 
     free(buffer);
 
+    if (result)
+    {
+        result->filename = filename;
+        result->attributes = record.attributes;
+        result->creation_datetime.date = record.creation_date;
+        result->creation_datetime.time = record.creation_time;
+        result->last_modify_datetime.date = record.last_modify_date;
+        result->last_modify_datetime.time = record.last_modify_time;
+
+        memcpy(result->dos_filename, dos_filename.name, 8);
+        memcpy(result->dos_extension, dos_filename.extension, 3);
+
+        result->cluster_num = 0;
+        result->size = 0;
+
+        result->entry_cluster_num = position.cluster_num;
+        result->entry_index = entry_index;
+    }
+
     if (lfn_entries)
         dynamic_array_destroy(lfn_entries);
+
+    return true;
+}
+
+bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint8_t attributes, fat32_basic_file_info_t *result)
+{
+    fat32_basic_file_info_t new_dir;
+
+    if (!fat32_create_file(info, dir_info, dirname, attributes | FAT32_ATTRIBUTE_DIRECTORY, &new_dir))
+        return false;
+
+    fat32_file_record_t special_records [2] = {0};
+
+    special_records[0].attributes = FAT32_ATTRIBUTE_DIRECTORY;
+    special_records[0].creation_date = new_dir.creation_datetime.date;
+    special_records[0].creation_time = new_dir.creation_datetime.time;
+    special_records[0].last_modify_date = new_dir.last_modify_datetime.date;
+    special_records[0].last_modify_time = new_dir.last_modify_datetime.time;
+    special_records[0].last_access_date = new_dir.last_modify_datetime.date;
+
+    memcpy(special_records[0].dos_filename, ".       ", 8);
+    memcpy(special_records[0].dos_extension, "   ", 3);
+
+    memcpy(special_records + 1, special_records, sizeof(fat32_file_record_t));
+
+    special_records[1].dos_filename[1] = '.';
+
+    uint32_t new_cluster = fat32_take_new_cluster_sync(info, 0);
+
+    special_records[0].cluster_num_lo = new_cluster & 0xFFFF;
+    special_records[0].cluster_num_high = new_cluster >> 16;
+
+    new_dir.cluster_num = new_cluster;
+
+    if (!fat32_update_directory_entry(info, &new_dir))
+        return false;
+    if (!fat32_write_file_sync(info, &new_dir, 0, special_records, 2 * sizeof(fat32_file_record_t)))
+        return false;
+
+    if (result)
+        memcpy(result, &new_dir, sizeof(fat32_basic_file_info_t));
 
     return true;
 }

@@ -126,7 +126,7 @@ typedef struct {
     char *filename;
     byte_t dos_filename [8];
     byte_t dos_extension [3];
-    uint32_t attributes;
+    uint8_t attributes;
     datetime_fat_t creation_datetime;
     datetime_fat_t last_modify_datetime;
     uint32_t size;
@@ -152,7 +152,7 @@ void fat32_next_cluster_sync(fat32_info_t *info, fat32_position_t *position);
 dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info);
 bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
 void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info_t *result);
-dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern);
+dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern, bool_t ignore_case);
 bool_t fat32_read_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
 bool_t fat32_write_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
 uint32_t fat32_take_new_cluster_sync(fat32_info_t *info, uint32_t prev_cluster);
@@ -163,7 +163,7 @@ bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 dynamic_array_t *fat32_split_filename_to_lfn(const char *filename, uint32_t checksum);
 uint8_t get_lfn_checksum(const unsigned char *dos_filename, const unsigned char *dos_extension);
 fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, const char *filename);
-bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes);
-
+bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes, fat32_basic_file_info_t *result);
+bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint8_t attributes, fat32_basic_file_info_t *result);
 
 #endif

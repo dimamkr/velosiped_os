@@ -136,7 +136,7 @@ uint32_t strchr_r(const char *str, char chr)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-bool_t is_matching_pattern(const char *str, const char *pattern)
+bool_t is_matching_pattern(const char *str, const char *pattern, bool_t ignore_case)
 {
     uint32_t y_size = strlen(str) + 1;
     uint32_t x_size = strlen(pattern) + 1;
@@ -164,7 +164,7 @@ bool_t is_matching_pattern(const char *str, const char *pattern)
                     bitmap_set_bit(&dp, x_size * i + j);
                 break;
             default:
-                if (str[i] == pattern[j] && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                if ((str[i] == pattern[j] || (ignore_case && UPPER(str[i]) == UPPER(pattern[j]))) && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
                     bitmap_set_bit(&dp, x_size * i + j);
             }
 

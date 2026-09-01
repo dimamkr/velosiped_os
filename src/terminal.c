@@ -253,7 +253,7 @@ bool_t terminal_print_listdir(argparse_command_t *command)
             pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
     }
 
-    listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
+    listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
 
     if (listdir == NULL)
     {
@@ -411,7 +411,7 @@ bool_t terminal_view(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
 
     if (files == NULL)
     {
@@ -491,7 +491,7 @@ bool_t terminal_change_dir(argparse_command_t *command)
         return false;
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
 
     if (files == NULL)
     {
@@ -582,7 +582,7 @@ bool_t terminal_write(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern);
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
 
     if (files == NULL)
     {
@@ -768,7 +768,49 @@ bool_t terminal_newfile(argparse_command_t *command)
         return false;
     }
     
-    if (!fat32_create_file(&info, dynamic_array_get_top(path), filename, attributes))
+    if (!fat32_create_file(&info, dynamic_array_get_top(path), filename, attributes, NULL))
+    {
+        konsole_println("Error: filesystem error");
+        return false;
+    }
+    
+    return true;
+}
+
+bool_t terminal_newdir(argparse_command_t *command)
+{
+    const char *dirname = NULL;
+    uint8_t attributes = 0;
+
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == NULL)
+            dirname = arg->name;
+        else if (strcmp(arg->name, "attr") == 0)
+        {
+            if (strcmp(arg->value, "hidden") == 0)
+                attributes |= FAT32_ATTRIBUTE_HIDDEN;
+            else if (strcmp(arg->value, "system") == 0)
+                attributes |= FAT32_ATTRIBUTE_SYSTEM;
+            else if (strcmp(arg->value, "readonly") == 0)
+                attributes |= FAT32_ATTRIBUTE_READONLY;
+            else
+            {
+                konsole_printf("Error: unknown directory attribute '%s'\n", arg->value);
+                return false;
+            }
+        }
+    }
+
+    if (dirname == NULL || strlen(dirname) == 0)
+    {
+        konsole_println("Error: directory name not specified");
+        return false;
+    }
+    
+    if (!fat32_create_directory(&info, dynamic_array_get_top(path), dirname, attributes, NULL))
     {
         konsole_println("Error: filesystem error");
         return false;
@@ -810,14 +852,12 @@ void terminal_main_loop()
     terminal_register_command_handler("ticks", terminal_print_ticks);
     terminal_register_command_handler("datetime", terminal_print_datetime);
     terminal_register_command_handler("disks", terminal_print_disks);
-    terminal_register_command_handler("listdir", terminal_print_listdir);
     terminal_register_command_handler("ls", terminal_print_listdir);
     terminal_register_command_handler("view", terminal_view);
-    terminal_register_command_handler("cat", terminal_view);
-    terminal_register_command_handler("chdir", terminal_change_dir);
     terminal_register_command_handler("cd", terminal_change_dir);
     terminal_register_command_handler("write", terminal_write);
     terminal_register_command_handler("newfile", terminal_newfile);
+    terminal_register_command_handler("newdir", terminal_newdir);
 
     konsole_println("");
 
