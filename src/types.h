@@ -1,6 +1,5 @@
 #ifndef TYPES
 #define TYPES
-#endif
 
 #include <stdbool.h>
 
@@ -35,3 +34,5 @@ typedef bool bool_t;
 
 #define likely(x) __builtin_expect(!!(x), 1)   // Скорее всего ИСТИНА
 #define unlikely(x) __builtin_expect(!!(x), 0) // Скорее всего ЛОЖЬ
+
+#endif
