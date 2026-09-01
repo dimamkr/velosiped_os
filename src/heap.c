@@ -1,5 +1,6 @@
 #include "heap.h"
 #include "ram.h"
+#include "task.h"
 
 // segregated lists heap
 // инварианты:
@@ -222,6 +223,8 @@ static inline byte_t *try_malloc_from_bucket(heap_void_block_t *n, uint32_t inde
 
 void *malloc(uint32_t size)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (size == 0)
     {
         return NULL;
@@ -259,6 +262,8 @@ void *malloc(uint32_t size)
 
 void *alligned_malloc(uint32_t size, uint32_t alignment)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (size == 0 || alignment == 0)
     {
         return NULL;
@@ -317,6 +322,8 @@ void *alligned_malloc(uint32_t size, uint32_t alignment)
 
 void free(void *ptr)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (!ptr)
         return;
 
@@ -342,6 +349,8 @@ void free(void *ptr)
 
 void *realloc(void *ptr, uint32_t size)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (ptr == NULL)
         return malloc(size);
     if (size == 0)

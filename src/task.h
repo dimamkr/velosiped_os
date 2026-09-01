@@ -3,10 +3,6 @@
 
 #include "types.h"
 #include "heap.h"
-#include "timer.h"
-#include "system.h"
-#include "konsole.h"
-#include "linked_list.h"
 #include "task_event.h"
 
 #define MAX_TASKS 32
@@ -62,5 +58,19 @@ void task_wait_until(task_event_t *ev);
 
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
+
+// трюк для автоматической расстановки task_lock/unlock
+
+static inline void __task_unlock_trick()
+{
+    task_unlock();
+}
+
+#define TASK_LOCKED_FUNCTION                                                                  \
+    do                                                                                        \
+    {                                                                                         \
+        uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
+        task_lock();                                                                          \
+    } while (0);
 
 #endif
