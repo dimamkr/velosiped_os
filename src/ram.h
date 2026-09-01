@@ -21,12 +21,12 @@
 
 #define KERNEL_END (KHEAP_END)
 
-static inline uint32_t ram_kernel_to_virt(uint32_t phys_addr)
+static inline void *ram_kernel_to_virt(void *phys_addr)
 {
     return phys_addr + KERNEL_VIRTUAL_START;
 }
 
-static inline uint32_t ram_kernel_to_phys(uint32_t virt_addr)
+static inline void *ram_kernel_to_phys(void *virt_addr)
 {
     return virt_addr - KERNEL_VIRTUAL_START;
 }

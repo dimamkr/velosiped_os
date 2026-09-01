@@ -87,9 +87,9 @@ bool_t ahci_init_port(byte_t port_num)
 
     // выделяем выровненное место под структуры согласно спецификации
     // наглядно: https://wiki.osdev.org/AHCI
-    cmd_list[port_num] = alligned_malloc(32 * sizeof(ahci_cmd_header_t), 1024);
-    cmd_table[port_num] = alligned_malloc(32 * sizeof(ahci_cmd_table_t), 128);
-    received_fis[port_num] = alligned_malloc(256, 256);
+    cmd_list[port_num] = ram_kernel_to_phys(alligned_malloc(32 * sizeof(ahci_cmd_header_t), 1024));
+    cmd_table[port_num] = ram_kernel_to_phys(alligned_malloc(32 * sizeof(ahci_cmd_table_t), 128));
+    received_fis[port_num] = ram_kernel_to_phys(alligned_malloc(256, 256));
 
     ahci_stop_port(port);
 
@@ -140,7 +140,7 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
     byte_t *cmd_answer_buffer = malloc(cmd_answer_buffer_size); // выделяем буффер под ответ
 
     // заполняем prdt entry (достаточно одной записи)
-    command_table->prdt[0].dba = (uint32_t)cmd_answer_buffer;
+    command_table->prdt[0].dba = (uint32_t)ram_kernel_to_phys(cmd_answer_buffer);
     command_table->prdt[0].dbc = cmd_answer_buffer_size - 1;
 
     ahci_fis_h2d_t *fis = (ahci_fis_h2d_t *)(command_table->cfis);
@@ -244,6 +244,8 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
 bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write)
 {
+    buffer = ram_kernel_to_phys(buffer);
+    
     if (sectors_count == 0 || buffer == NULL)
         return false;
 
