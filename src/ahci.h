@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "dynamic_array.h"
+#include "ram.h"
 
 #define PCI_CLASS_CODE_AHCI 0x010601
 
