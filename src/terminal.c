@@ -731,6 +731,52 @@ bool_t terminal_write(argparse_command_t *command)
     return true;
 }
 
+bool_t terminal_newfile(argparse_command_t *command)
+{
+    const char *filename = NULL;
+    uint8_t attributes = 0;
+
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == NULL)
+            filename = arg->name;
+        else if (strcmp(arg->name, "attr") == 0)
+        {
+            if (strcmp(arg->value, "hidden") == 0)
+                attributes |= FAT32_ATTRIBUTE_HIDDEN;
+            else if (strcmp(arg->value, "archive") == 0)
+                attributes |= FAT32_ATTRIBUTE_ARCHIVE;
+            else if (strcmp(arg->value, "system") == 0)
+                attributes |= FAT32_ATTRIBUTE_SYSTEM;
+            else if (strcmp(arg->value, "readonly") == 0)
+                attributes |= FAT32_ATTRIBUTE_READONLY;
+            else
+            {
+                konsole_printf("Error: unknown file attribute '%s'\n", arg->value);
+                return false;
+            }
+        }
+    }
+
+    if (attributes == 0)
+        attributes = FAT32_ATTRIBUTE_ARCHIVE;
+    if (filename == NULL || strlen(filename) == 0)
+    {
+        konsole_println("Error: filename not specified");
+        return false;
+    }
+    
+    if (!fat32_create_file(&info, dynamic_array_get_top(path), filename, attributes))
+    {
+        konsole_println("Error: filesystem error");
+        return false;
+    }
+    
+    return true;
+}
+
 // --------- Хэндлер ---------
 
 void terminal_handle_command(const char *buffer)
@@ -771,6 +817,7 @@ void terminal_main_loop()
     terminal_register_command_handler("chdir", terminal_change_dir);
     terminal_register_command_handler("cd", terminal_change_dir);
     terminal_register_command_handler("write", terminal_write);
+    terminal_register_command_handler("newfile", terminal_newfile);
 
     konsole_println("");
 

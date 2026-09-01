@@ -119,6 +119,10 @@ void memswap(void *buff_1, void *buff_2, uint32_t size)
     }
 }
 
+bool_t uint32_less(void *a, void *b)
+{
+    return *(uint32_t*)a < *(uint32_t*)b;
+}
 
 void panic(char *msg, char *file, uint32_t line)
 {

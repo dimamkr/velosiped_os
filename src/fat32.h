@@ -19,6 +19,9 @@
 #define FAT32_ATTRIBUTE_DIRECTORY 0x10
 #define FAT32_ATTRIBUTE_ARCHIVE 0x20
 
+#define FAT32_ATTRIBUTE_LFN 0x0F
+#define FAT32_ATTRIBUTE_DELETED 0xE5
+
 #define FAT32_HAS_READING_ERROR(position) (((position).fat_value == FAT32_BAD_CLUSTER) || ((position).fat_value == FAT32_EMPTY_CLUSTER))
 #define FAT32_IS_LAST_CLUSTER(position) ((position).fat_value > FAT32_BAD_CLUSTER)
 
@@ -121,6 +124,8 @@ typedef struct {
 
 typedef struct {
     char *filename;
+    byte_t dos_filename [8];
+    byte_t dos_extension [3];
     uint32_t attributes;
     datetime_fat_t creation_datetime;
     datetime_fat_t last_modify_datetime;
@@ -129,6 +134,11 @@ typedef struct {
     uint32_t entry_cluster_num;
     uint16_t entry_index;
 } fat32_basic_file_info_t;
+
+typedef struct {
+    char name [8];
+    char extension [3];
+} fat32_dos_filename_t;
 
 bool_t fat32_read_initial_sector_sync(fat32_info_t *fat_info, fat32_initial_sector_t *init_sector);
 bool_t fat32_write_initial_sector_sync(fat32_info_t *fat_info, fat32_initial_sector_t *init_sector);
@@ -150,5 +160,10 @@ bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster);
 bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
 bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+dynamic_array_t *fat32_split_filename_to_lfn(const char *filename, uint32_t checksum);
+uint8_t get_lfn_checksum(const unsigned char *dos_filename, const unsigned char *dos_extension);
+fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, const char *filename);
+bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes);
+
 
 #endif

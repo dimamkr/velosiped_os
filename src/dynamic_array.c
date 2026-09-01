@@ -155,7 +155,7 @@ void dynamic_array_clear(dynamic_array_t *array)
 
 void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t r_index, dynamic_array_less_cb less)
 {
-    if (l_index == r_index)
+    if (l_index == r_index || r_index == -1)
         return;
 
     uint32_t l = l_index;
