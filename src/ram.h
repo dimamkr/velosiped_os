@@ -21,6 +21,9 @@
 
 #define KERNEL_END (KHEAP_END)
 
+// адрес начиная с которого инициализируются адреса для MMIO
+#define MMIO_VIRT_BASE 0xF0000000
+
 static inline void *ram_kernel_to_virt(void *phys_addr)
 {
     return phys_addr + KERNEL_VIRTUAL_START;

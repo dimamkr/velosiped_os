@@ -59,8 +59,7 @@ __attribute__((optimize("O3,unroll-loops"))) void string_to_upper(char *s)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t
-strstr(const char *haystack, const char *needle)
+uint32_t strstr(const char *haystack, const char *needle)
 {
     // КМП с z-функцией
 
@@ -109,8 +108,35 @@ strstr(const char *haystack, const char *needle)
     return -1;
 }
 
-__attribute__((optimize("O0")))
-bool_t is_matching_pattern(const char *str, const char *pattern)
+__attribute__((optimize("O3,unroll-loops")))
+uint32_t strchr(const char *str, char chr)
+{
+    uint32_t result = 0;
+
+    for (;str[result] != '\0' && str[result] != chr;result++);
+
+    if (str[result] == '\0')
+        result = -1;
+
+    return result;
+}
+
+__attribute__((optimize("O3,unroll-loops")))
+uint32_t strchr_r(const char *str, char chr)
+{
+    uint32_t result = -1;
+
+    for (uint32_t i = 0;str[i] != '\0';i++)
+    {
+        if (str[i] == chr)
+            result = i;
+    }
+
+    return result;
+}
+
+__attribute__((optimize("O3,unroll-loops")))
+bool_t is_matching_pattern(const char *str, const char *pattern, bool_t ignore_case)
 {
     uint32_t y_size = strlen(str) + 1;
     uint32_t x_size = strlen(pattern) + 1;
@@ -138,7 +164,7 @@ bool_t is_matching_pattern(const char *str, const char *pattern)
                     bitmap_set_bit(&dp, x_size * i + j);
                 break;
             default:
-                if (str[i] == pattern[j] && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
+                if ((str[i] == pattern[j] || (ignore_case && UPPER(str[i]) == UPPER(pattern[j]))) && bitmap_test_bit(&dp, x_size * (i + 1) + (j + 1)))
                     bitmap_set_bit(&dp, x_size * i + j);
             }
 
@@ -156,8 +182,7 @@ bool_t is_matching_pattern(const char *str, const char *pattern)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t
-wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
+uint32_t wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
 {
     uint32_t i = 0, j = 0;
 
@@ -182,6 +207,48 @@ wide_char_to_utf8(char *dst, const wchar_t *src, uint32_t dst_size)
     }
 
     dst[j] = '\0';
+    return j;
+}
+
+__attribute__((optimize("O3,unroll-loops")))
+uint32_t utf8_to_wide_char(wchar_t *dst, const char *src, uint32_t dst_size)
+{
+    uint32_t i = 0;
+    uint32_t j = 0;
+
+    while (src[i] != 0 && j < dst_size)
+    {
+        uint32_t codepoint = 0;
+
+        if ((src[i] & 0x80) == 0)
+        {
+            codepoint = src[i];
+            i += 1;
+        }
+        else if ((src[i] & 0xE0) == 0xC0)
+        {
+            codepoint = (src[i] & 0x1F) << 6;
+            codepoint |= (src[i + 1] & 0x3F);
+            i += 2;
+        }
+        else if ((src[i] & 0xF0) == 0xE0)
+        {
+            codepoint = (src[i] & 0x0F) << 12;
+            codepoint |= (src[i + 1] & 0x3F) << 6;
+            codepoint |= (src[i + 2] & 0x3F);
+            i += 3;
+        }
+        else
+        {
+            dst[j++] = L'?';
+            i += 1;
+            continue;
+        }
+
+        dst[j++] = (wchar_t)codepoint;
+    }
+
+    dst[j] = L'\0';
     return j;
 }
 

@@ -96,6 +96,18 @@ void fat32_next_cluster_sync(fat32_info_t *info, fat32_position_t *position)
     position->fat_value = fat32_fat_at_sync(info, position->cluster_num);
 }
 
+void fat32_destroy_files_list(dynamic_array_t *list)
+{
+    for (uint32_t i = 0;i < list->elements_count;i++)
+    {
+        fat32_basic_file_info_t *file = dynamic_array_get_by_index(list, i);
+
+        free(file->filename);
+    }
+
+    dynamic_array_destroy(list);
+}
+
 dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info)
 {
     fat32_position_t position = {0};
@@ -104,6 +116,8 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
 
     dynamic_array_t *result = dynamic_array_create(sizeof(fat32_basic_file_info_t));
     dynamic_array_t *lfn_entries = dynamic_array_create(sizeof(fat32_lfn_record_t));
+    uint32_t first_lfn_entry_cluster = 0;
+    uint16_t first_lfn_entry_index = 0;
 
     uint32_t entries_per_cluster = 16 * info->sectors_per_cluster;
     fat32_directory_entry_t *buffer = malloc(32 * entries_per_cluster);
@@ -113,7 +127,7 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
         if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
         {
             free(buffer);
-            dynamic_array_destroy(result);
+            fat32_destroy_files_list(result);
             dynamic_array_destroy(lfn_entries);
             return NULL;
         }
@@ -131,12 +145,20 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
                     continue;
 
                 case 0x0F: // lfn-запись
+                    if (first_lfn_entry_cluster == 0)
+                    {
+                        first_lfn_entry_cluster = position.cluster_num;
+                        first_lfn_entry_index = i;
+                    }
                     dynamic_array_push_front(lfn_entries, buffer + i);
                     break;
 
                 default:
                 {
-                    fat32_basic_file_info_t file_info;
+                    fat32_basic_file_info_t file_info = {0};
+
+                    file_info.first_entry_cluster_num = position.cluster_num;
+                    file_info.first_entry_index = i;
 
                     if (lfn_entries->elements_count != 0)
                     {
@@ -163,6 +185,11 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
                         realloc(file_info.filename, wide_char_to_utf8(file_info.filename, wide_filename, wide_filename_size) + 1);
                         free(wide_filename);
                         dynamic_array_clear(lfn_entries);
+
+                        file_info.first_entry_cluster_num = first_lfn_entry_cluster;
+                        file_info.first_entry_index = first_lfn_entry_index;
+
+                        first_lfn_entry_cluster = 0;
                     }
                     else
                     {
@@ -191,6 +218,9 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
                     file_info.entry_cluster_num = position.cluster_num;
                     file_info.entry_index = i;
 
+                    memcpy(file_info.dos_filename, buffer[i].file_record.dos_filename, 8);
+                    memcpy(file_info.dos_extension, buffer[i].file_record.dos_extension, 3);
+
                     dynamic_array_push_back(result, &file_info);
                     
                     break;
@@ -207,13 +237,7 @@ dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_
 
     if (FAT32_HAS_READING_ERROR(position))
     {
-        for (uint32_t i = 0;i < result->elements_count;i++)
-        {
-            fat32_basic_file_info_t *file_info = dynamic_array_get_by_index(result, i);
-            free(file_info->filename);
-        }
-
-        dynamic_array_destroy(result);
+        fat32_destroy_files_list(result);
         return NULL;
     }
 
@@ -281,7 +305,7 @@ void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info
     result->filename = strdup(dir_name);
 }
 
-dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern)
+dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern, bool_t ignore_case)
 {
     dynamic_array_t *result = dynamic_array_create(sizeof(fat32_basic_file_info_t));
     dynamic_array_t *files = fat32_read_directory(info, dir_info);
@@ -301,7 +325,7 @@ dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *d
     {
         fat32_basic_file_info_t *entry = dynamic_array_get_by_index(files, i);
 
-        if (is_matching_pattern(entry->filename, pattern))
+        if (is_matching_pattern(entry->filename, pattern, ignore_case))
             dynamic_array_push_back(result, entry);
         else
             free(entry->filename);
@@ -405,6 +429,9 @@ bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster)
             break;
     }
 
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+
     return true;
 }
 
@@ -430,6 +457,7 @@ bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t 
     entries[entry_index].file_record.creation_time = file_info->creation_datetime.time;
     entries[entry_index].file_record.last_modify_date = modified_fat_dt.date;
     entries[entry_index].file_record.last_modify_time = modified_fat_dt.time;
+    entries[entry_index].file_record.last_access_date = modified_fat_dt.date;
     
     if (!disk_write_sync(info->disk_id, entry_sector, 1, entries))
         return false;
@@ -478,6 +506,9 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
         current_position -= cluster_size;
     }
 
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+
     void *temp_buffer = malloc(cluster_size * 512);
     uint32_t non_writed_buffer_size = buffer_size;
     uint32_t buffer_index = 0;
@@ -516,7 +547,11 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 
     free(temp_buffer);
 
-    new_file_info.size = max(file_info->size, start_position + buffer_size);
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+
+    if (!(new_file_info.attributes & FAT32_ATTRIBUTE_DIRECTORY))
+        new_file_info.size = max(file_info->size, start_position + buffer_size);
 
     if (!fat32_update_directory_entry(info, &new_file_info))
         return false;
@@ -539,3 +574,414 @@ bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
     return fat32_update_directory_entry(info, &new_file_info);
 }
 
+dynamic_array_t *fat32_split_filename_to_lfn(const char *filename, uint32_t checksum)
+{
+    uint32_t length = strlen(filename);
+    dynamic_array_t *result = dynamic_array_create(sizeof(fat32_lfn_record_t));
+
+    for (uint32_t i = 0;i < length;i += 13)
+    {
+        unsigned char temp_utf8 [14] = {0};
+        memcpy(temp_utf8, filename + i, min(length - i, 13));
+        wchar_t temp_wchar [27] = {0};
+        utf8_to_wide_char(temp_wchar, temp_utf8, 27);
+
+        fat32_lfn_record_t record = {0};
+
+        record.attributes = FAT32_ATTRIBUTE_LFN;
+        record.checksum = checksum;
+        record.order = i + 13 >= length ? 0x45 : (i / 13) + 1; // 0x45 - маркер последнего в цепочке LFN
+
+        memcpy(record.name_part_1, temp_wchar, 5 * sizeof(wchar_t));
+        memcpy(record.name_part_2, temp_wchar + 5, 6 * sizeof(wchar_t));
+        memcpy(record.name_part_3, temp_wchar + 11, 2 * sizeof(wchar_t));
+
+        dynamic_array_push_front(result, &record);
+    }
+
+    return result;
+}
+
+uint8_t fat32_get_lfn_checksum(fat32_dos_filename_t dos_filename)
+{
+    uint8_t result = 0;
+    
+    for (uint8_t i = 0;i < 8;i++)
+        result = ((result & 1) << 7) + (result >> 1) + dos_filename.name[i];
+    for (uint8_t i = 0;i < 3;i++)
+        result = ((result & 1) << 7) + (result >> 1) + dos_filename.extension[i];
+        
+    return result;
+}
+
+fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, const char *filename)
+{
+    uint32_t length = strlen(filename);
+    char *filename_copy = strdup(filename);
+    string_to_upper(filename_copy);
+    uint32_t dot = strchr_r(filename, '.');
+    
+    char *name = filename_copy;
+    char *extension = NULL;
+
+    if (dot != -1)
+    {
+        filename_copy[dot] = '\0';
+        extension = filename_copy + dot + 1;
+    }
+    else
+        extension = filename_copy + length;
+
+    fat32_dos_filename_t result_dos_filename = {0};
+
+    memset(result_dos_filename.name, ' ', 8);
+    memset(result_dos_filename.extension, ' ', 3);
+
+    memcpy(result_dos_filename.name, name, min(strlen(name), 8));
+    memcpy(result_dos_filename.extension, extension, min(strlen(extension), 3));
+
+    bool_t have_such_file = false;
+
+    if (strlen(name) <= 8 && strlen(extension) <= 3)
+    {
+        for (uint32_t i = 0;i < directory_files->elements_count;i++)
+        {
+            fat32_basic_file_info_t *file = dynamic_array_get_by_index(directory_files, i);
+
+            if (memcmp(file->dos_filename, result_dos_filename.name, 8) && memcmp(file->dos_extension, result_dos_filename.extension, 3))
+            {
+                have_such_file = true;
+                break;
+            }
+        }
+    }
+    
+    // если имя файла больше 8, или расширение больше 3, или такой файл уже существует, то генерируем сокращение
+    if (strlen(name) > 8 || strlen(extension) > 3 || have_such_file)
+    {
+        dynamic_array_t *conflicts = dynamic_array_create(sizeof(uint32_t));
+
+        for (uint32_t i = 0;i < directory_files->elements_count;i++)
+        {
+            fat32_basic_file_info_t *file = dynamic_array_get_by_index(directory_files, i);
+
+            char file_dos_filename_copy [8];
+
+            uint8_t tilde = strchr_r(file->dos_filename, '~');
+
+            if (tilde == 0xFF)
+                continue;
+
+            memcpy(file_dos_filename_copy, file->dos_filename, 8);
+            file_dos_filename_copy[tilde] = '\0';
+
+            if (memcmp(filename_copy, file_dos_filename_copy, tilde) && memcmp(result_dos_filename.extension, file->dos_extension, 3))
+            {
+                uint32_t index = string_to_uint32(file_dos_filename_copy + tilde + 1, 10);
+
+                dynamic_array_push_back(conflicts, &index);
+            }
+        }
+
+        dynamic_array_quicksort(conflicts, 0, conflicts->elements_count - 1, uint32_less);
+        uint32_t mex = 1;
+
+        for (uint32_t i = 0;i < conflicts->elements_count;i++)
+            if (mex != *(uint32_t*)dynamic_array_get_by_index(conflicts, i))
+                break;
+            else
+                mex++;
+
+        char str_mex [12] = {0};
+        uint32_to_string(mex, str_mex, 10);
+
+        uint8_t mex_length = strlen(str_mex);
+        result_dos_filename.name[8 - mex_length - 1] = '~';
+        memcpy(result_dos_filename.name + 8 - mex_length, str_mex, mex_length);
+    }
+
+    free(filename_copy);
+
+    return result_dos_filename;
+}
+
+bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes, fat32_basic_file_info_t *result)
+{
+    if (*filename == 0)
+        return false;
+
+    dynamic_array_t *files_with_such_name = fat32_find_files(info, dir_info, filename, false);
+
+    if (files_with_such_name->elements_count != 0)
+    {
+        fat32_destroy_files_list(files_with_such_name);
+        return false;
+    }
+
+    dynamic_array_destroy(files_with_such_name);
+
+    dynamic_array_t *dir_files = fat32_read_directory(info, dir_info);
+    fat32_dos_filename_t dos_filename = fat32_get_dos_filename(dir_files, filename);
+
+    uint8_t checksum = fat32_get_lfn_checksum(dos_filename);
+    dynamic_array_t *lfn_entries = NULL;
+    uint16_t new_entries_count = 1;
+
+    lfn_entries = fat32_split_filename_to_lfn(filename, checksum);
+    new_entries_count += lfn_entries->elements_count;
+
+    fat32_destroy_files_list(dir_files);
+
+    fat32_file_record_t record = {0};
+    
+    datetime_t now_dt;
+    datetime_get(&now_dt);
+    datetime_fat_t now_fat_dt;
+    datetime_fat_from_datetime(&now_dt, &now_fat_dt);
+
+    record.attributes = attributes;
+    record.creation_date = now_fat_dt.date;
+    record.creation_time = now_fat_dt.time;
+    record.last_modify_date = now_fat_dt.date;
+    record.last_modify_time = now_fat_dt.time;
+    record.last_access_date = now_fat_dt.date;
+
+    memcpy(record.dos_filename, dos_filename.name, 8);
+    memcpy(record.dos_extension, dos_filename.extension, 3);
+
+    // ищем подходящее пустое место в папке, куда уберутся lfn-записи и сама запись файла
+    uint16_t empty_sequence_length = 0;
+    uint32_t empty_sequence_start_cluster = 0;
+    uint16_t empty_sequence_start_index = 0;
+
+    fat32_position_t position = {0};
+    position.cluster_num = dir_info->cluster_num;
+    position.fat_value = fat32_fat_at_sync(info, position.cluster_num);
+
+    uint32_t entries_per_cluster = 16 * info->sectors_per_cluster;
+    fat32_directory_entry_t *buffer = malloc(32 * entries_per_cluster);
+
+    for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
+    {
+        if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
+        {
+            free(buffer);
+            dynamic_array_destroy(lfn_entries);
+            return false;
+        }
+
+        for (uint16_t i = 0;i < entries_per_cluster;i++)
+        {
+            if (buffer[i].plain_bytes[0] == 0 || buffer[i].file_record.attributes == FAT32_ATTRIBUTE_DELETED)
+            {
+                if (empty_sequence_length == 0)
+                {
+                    empty_sequence_start_cluster = position.cluster_num;
+                    empty_sequence_start_index = i;
+                }
+                empty_sequence_length++;
+            }
+            else
+                empty_sequence_length = 0;
+
+            if (buffer[i].plain_bytes[0] == 0)
+                empty_sequence_length = -1;
+
+            if (empty_sequence_length >= new_entries_count)
+                break;
+        }
+
+        if (empty_sequence_length >= new_entries_count)
+            break;
+
+        if (FAT32_IS_LAST_CLUSTER(position))
+        {
+            if (empty_sequence_length == 0)
+            {
+                empty_sequence_start_cluster = fat32_take_new_cluster_sync(info, position.cluster_num);
+                empty_sequence_start_index = 0;
+            }
+
+            fat32_take_new_cluster_sync(info, position.cluster_num);
+            
+            break;
+        }
+    }
+
+    if (FAT32_HAS_READING_ERROR(position))
+    {
+        free(buffer);
+        dynamic_array_destroy(lfn_entries);
+        return false;
+    }
+
+    // записываем туда наши records
+    position.cluster_num = empty_sequence_start_cluster;
+    position.fat_value = fat32_fat_at_sync(info, position.cluster_num);
+    uint16_t entry_index = empty_sequence_start_index;
+    uint16_t start_index = empty_sequence_start_index;
+
+    for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
+    {
+        if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
+        {
+            free(buffer);
+            dynamic_array_destroy(lfn_entries);
+            return false;
+        }
+
+        for (uint16_t i = start_index;i < entries_per_cluster;i++)
+        {
+            if (lfn_entries && lfn_entries->elements_count)
+            {
+                memcpy(buffer + i, dynamic_array_get_bottom(lfn_entries), sizeof(fat32_lfn_record_t));
+                dynamic_array_pop_front(lfn_entries);
+            }
+            else
+            {
+                memcpy(buffer + i, &record, sizeof(fat32_file_record_t));
+                entry_index = i;
+            }
+            
+            new_entries_count--;
+
+            if (new_entries_count == 0)
+                break;
+        }
+
+        start_index = 0;
+
+        if (!fat32_write_cluster_sync(info, position.cluster_num, buffer))
+        {
+            free(buffer);
+            dynamic_array_destroy(lfn_entries);
+            return false;
+        }
+
+        if (new_entries_count == 0)
+            break;
+    }
+
+    free(buffer);
+
+    if (lfn_entries)
+        dynamic_array_destroy(lfn_entries);
+
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+
+    if (result)
+    {
+        result->filename = filename;
+        result->attributes = record.attributes;
+        result->creation_datetime.date = record.creation_date;
+        result->creation_datetime.time = record.creation_time;
+        result->last_modify_datetime.date = record.last_modify_date;
+        result->last_modify_datetime.time = record.last_modify_time;
+
+        memcpy(result->dos_filename, dos_filename.name, 8);
+        memcpy(result->dos_extension, dos_filename.extension, 3);
+
+        result->cluster_num = 0;
+        result->size = 0;
+
+        result->entry_cluster_num = position.cluster_num;
+        result->entry_index = entry_index;
+        result->first_entry_cluster_num = empty_sequence_start_cluster;
+        result->first_entry_index = empty_sequence_start_index;
+    }
+
+    return true;
+}
+
+bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint8_t attributes, fat32_basic_file_info_t *result)
+{
+    fat32_basic_file_info_t new_dir;
+
+    if (!fat32_create_file(info, dir_info, dirname, attributes | FAT32_ATTRIBUTE_DIRECTORY, &new_dir))
+        return false;
+
+    fat32_file_record_t special_records [2] = {0};
+
+    special_records[0].attributes = FAT32_ATTRIBUTE_DIRECTORY;
+    special_records[0].creation_date = new_dir.creation_datetime.date;
+    special_records[0].creation_time = new_dir.creation_datetime.time;
+    special_records[0].last_modify_date = new_dir.last_modify_datetime.date;
+    special_records[0].last_modify_time = new_dir.last_modify_datetime.time;
+    special_records[0].last_access_date = new_dir.last_modify_datetime.date;
+
+    memcpy(special_records[0].dos_filename, ".       ", 8);
+    memcpy(special_records[0].dos_extension, "   ", 3);
+
+    memcpy(special_records + 1, special_records, sizeof(fat32_file_record_t));
+
+    special_records[1].dos_filename[1] = '.';
+
+    uint32_t new_cluster = fat32_take_new_cluster_sync(info, 0);
+
+    special_records[0].cluster_num_lo = new_cluster & 0xFFFF;
+    special_records[0].cluster_num_high = new_cluster >> 16;
+
+    new_dir.cluster_num = new_cluster;
+
+    if (!fat32_update_directory_entry(info, &new_dir))
+        return false;
+    if (!fat32_write_file_sync(info, &new_dir, 0, special_records, 2 * sizeof(fat32_file_record_t)))
+        return false;
+
+    if (result)
+        memcpy(result, &new_dir, sizeof(fat32_basic_file_info_t));
+
+    return true;
+}
+
+bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info)
+{
+    uint32_t start_index = file_info->first_entry_index;
+    fat32_position_t position = {0};
+    position.cluster_num = file_info->first_entry_cluster_num;
+    position.fat_value = fat32_fat_at_sync(info, position.cluster_num);
+
+    uint32_t entries_per_cluster = 16 * info->sectors_per_cluster;
+    fat32_directory_entry_t *buffer = malloc(32 * entries_per_cluster);
+
+    for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
+    {
+        if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
+            return false;
+
+        bool_t non_lfn_entry = false;
+        
+        for (uint32_t i = start_index;i < entries_per_cluster;i++)
+        {
+            non_lfn_entry = buffer[i].plain_bytes[0x0B] != FAT32_ATTRIBUTE_LFN;
+
+            buffer[i].plain_bytes[0x0B] = FAT32_ATTRIBUTE_DELETED;
+
+            if (non_lfn_entry)
+                break;
+        }
+
+        if (!fat32_write_cluster_sync(info, position.cluster_num, buffer))
+            return false;
+
+        if (non_lfn_entry)
+            break;
+    }
+
+    if (FAT32_HAS_READING_ERROR(position))
+        return false;
+    
+    return true;
+}
+
+bool_t fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info)
+{
+    if (!fat32_erase_file_sync(info, file_info))
+        return false;
+
+    if (!fat32_remove_directory_entry(info, file_info))
+        return false;
+
+    return true;
+}
