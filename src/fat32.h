@@ -133,6 +133,8 @@ typedef struct {
     uint32_t cluster_num;
     uint32_t entry_cluster_num;
     uint16_t entry_index;
+    uint32_t first_entry_cluster_num;
+    uint16_t first_entry_index;
 } fat32_basic_file_info_t;
 
 typedef struct {
@@ -163,7 +165,10 @@ bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 dynamic_array_t *fat32_split_filename_to_lfn(const char *filename, uint32_t checksum);
 uint8_t get_lfn_checksum(const unsigned char *dos_filename, const unsigned char *dos_extension);
 fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, const char *filename);
+void fat32_destroy_files_list(dynamic_array_t *list);
 bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes, fat32_basic_file_info_t *result);
 bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint8_t attributes, fat32_basic_file_info_t *result);
+bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+bool_t fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 
 #endif

@@ -245,15 +245,27 @@ bool_t terminal_print_listdir(argparse_command_t *command)
 {
     dynamic_array_t *listdir;
     char *pattern = NULL;
+    bool_t ignore_case = false;
 
     for (uint32_t i = 0;i < command->arguments->elements_count;i++)
     {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
-        if (command->arguments->elements_count != 0)
-            pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
+        if (arg->value == 0)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
+        }
     }
 
-    listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
+    listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
 
     if (listdir == NULL)
     {
@@ -470,28 +482,27 @@ bool_t terminal_view(argparse_command_t *command)
 bool_t terminal_change_dir(argparse_command_t *command)
 {
     char *pattern = NULL;
+    bool_t ignore_case = false;
 
-    if (command->arguments->elements_count > 1)
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
     {
-        konsole_println("Error: too many arguments");
-        return false;
-    }
-    if (command->arguments->elements_count != 0)
-        pattern = ((argparse_argument_t*)dynamic_array_get_bottom(command->arguments))->name;
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
-    if (pattern == NULL)
-    {
-        while (path->elements_count > 1)
+        if (arg->value == 0)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "opt") == 0)
         {
-            fat32_basic_file_info_t *current_directory = dynamic_array_get_top(path);
-            free(current_directory->filename);
-            dynamic_array_pop_back(path);
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
         }
-
-        return false;
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
 
     if (files == NULL)
     {
@@ -547,6 +558,7 @@ bool_t terminal_write(argparse_command_t *command)
     bool_t hex = false;
     bool_t overwrite = false;
     bool_t append = false;
+    bool_t ignore_case = false;
     
     for (uint32_t i = 0;i < command->arguments->elements_count;i++)
     {
@@ -574,6 +586,8 @@ bool_t terminal_write(argparse_command_t *command)
                 overwrite = true;
             else if (strcmp(arg->value, "append") == 0)
                 append = true;
+            else if (strcmp(arg->value, "ignore-case"))
+                ignore_case = true;
             else
             {
                 konsole_printf("Error: unknown option '%s'\n", arg->value);
@@ -582,7 +596,7 @@ bool_t terminal_write(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
 
     if (files == NULL)
     {
@@ -819,6 +833,57 @@ bool_t terminal_newdir(argparse_command_t *command)
     return true;
 }
 
+bool_t terminal_remove(argparse_command_t *command)
+{
+    char *pattern = NULL;
+    bool_t ignore_case = false;
+
+    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == 0)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
+        }
+    }
+
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+
+    if (files == NULL)
+    {
+        konsole_println("Error: disk error");
+        return false;
+    }
+
+    if (files->elements_count == 0)
+    {
+        konsole_println("Error: no files found");
+        dynamic_array_destroy(files);
+        return false;
+    }
+
+    for (uint32_t i = 0;i < files->elements_count;i++)
+    {
+        fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
+
+        if (!fat32_remove_file(&info, file))
+            konsole_printf("Error: can not remove file '%s'\n", file->filename);
+    }
+
+    fat32_destroy_files_list(files);
+
+    return true;
+}
+
 // --------- Хэндлер ---------
 
 void terminal_handle_command(const char *buffer)
@@ -858,6 +923,7 @@ void terminal_main_loop()
     terminal_register_command_handler("write", terminal_write);
     terminal_register_command_handler("newfile", terminal_newfile);
     terminal_register_command_handler("newdir", terminal_newdir);
+    terminal_register_command_handler("rm", terminal_remove);
 
     konsole_println("");
 
