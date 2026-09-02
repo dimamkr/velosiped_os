@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "linked_list.h"
+#include "pointer_utils.h"
 
 typedef struct
 {
@@ -26,5 +27,7 @@ void *hash_table_get(hash_table_t *hash_table, void *key, uint32_t key_size);
 void hash_table_reserve(hash_table_t *hash_table, uint32_t buff_count);
 
 extern const uint32_t primes[32];
+
+AUTOCLEANUP_DEFINE_FUNC(hash_table)
 
 #endif

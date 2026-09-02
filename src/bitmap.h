@@ -2,6 +2,7 @@
 #define BITMAP_H
 
 #include "types.h"
+#include "pointer_utils.h"
 
 #define BLC 32
 #define REM 31
@@ -39,5 +40,7 @@ uint32_t bitmap_find_first_one(bitmap_t *this, uint32_t start_index);
 void bitmap_set_interval(bitmap_t *this, uint32_t start_index, uint32_t end_index);
 void bitmap_clear_interval(bitmap_t *this, uint32_t start_index, uint32_t end_index);
 uint32_t bitmap_alloc_interval(bitmap_t *this, uint32_t length);
+
+AUTOCLEANUP_DEFINE_FUNC(bitmap)
 
 #endif

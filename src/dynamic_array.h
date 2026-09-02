@@ -5,6 +5,7 @@
 #include "types.h"
 #include "system.h"
 #include "random.h"
+#include "pointer_utils.h"
 
 typedef struct
 {
@@ -15,7 +16,7 @@ typedef struct
     uint32_t start, end;
 } dynamic_array_t;
 
-typedef bool_t (*dynamic_array_less_cb) (void *a, void *b);
+typedef bool_t (*dynamic_array_less_cb)(void *a, void *b);
 
 dynamic_array_t *dynamic_array_create(uint32_t size_of_element);
 void dynamic_array_destroy(dynamic_array_t *array);
@@ -30,5 +31,7 @@ void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t 
 #define dynamic_array_set_by_index(array, index, value) (memcpy(dynamic_array_get_by_index(array, index), value, (array)->size_of_element))
 #define dynamic_array_get_bottom(array) dynamic_array_get_by_index(array, 0)
 #define dynamic_array_get_top(array) ((void *)((array)->buffer + (((array)->end - 1) & ((array)->size - 1)) * (array)->size_of_element))
+
+AUTOCLEANUP_DEFINE_FUNC(dynamic_array)
 
 #endif
