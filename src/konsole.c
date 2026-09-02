@@ -244,7 +244,6 @@ void konsole_printf(const char *format, ...)
         format++;
     }
     va_end(args);
-    task_unlock();
 }
 
 // TODO блокировка прерываний тут
