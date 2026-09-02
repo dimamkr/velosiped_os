@@ -109,7 +109,7 @@ static inline const char *terminal_get_input_line()
         konsole_println("");
         return terminal_input_buff;
     }
-    
+
     return NULL;
 }
 
@@ -125,9 +125,9 @@ bool_t terminal_print_help(argparse_command_t *command)
     konsole_print("Avaliable commands: ");
     bool_t comma = false;
 
-    for (uint32_t i = 0;i < primes[cmd_handlers->buff_count_index];i++)
+    for (uint32_t i = 0; i < primes[cmd_handlers->buff_count_index]; i++)
     {
-        for (linked_list_node_t *node = *(cmd_handlers->key_buff_root + i);node;node = node->right)
+        for (linked_list_node_t *node = *(cmd_handlers->key_buff_root + i); node; node = node->right)
         {
             unsigned char *key = node->value;
 
@@ -231,7 +231,7 @@ bool_t terminal_print_disks(argparse_command_t *command)
 
 bool_t terminal_print_path(argparse_command_t *command)
 {
-    for (uint8_t i = 0;i < path->elements_count;i++)
+    for (uint8_t i = 0; i < path->elements_count; i++)
     {
         fat32_basic_file_info_t *dir = dynamic_array_get_by_index(path, i);
 
@@ -247,22 +247,11 @@ bool_t terminal_print_listdir(argparse_command_t *command)
     char *pattern = NULL;
     bool_t ignore_case = false;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
-        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
-        if (arg->value == 0)
-            pattern = arg->name;
-        else if (strcmp(arg->name, "opt") == 0)
-        {
-            if (strcmp(arg->value, "ignore-case") == 0)
-                ignore_case = true;
-            else
-            {
-                konsole_printf("Error: invalid option '%s'\n", arg->value);
-                return false;
-            }
-        }
+        if (command->arguments->elements_count != 0)
+            pattern = ((argparse_argument_t *)dynamic_array_get_bottom(command->arguments))->name;
     }
 
     listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
@@ -283,7 +272,7 @@ bool_t terminal_print_listdir(argparse_command_t *command)
         return false;
     }
 
-    for (uint32_t i = 0;i < listdir->elements_count;i++)
+    for (uint32_t i = 0; i < listdir->elements_count; i++)
     {
         fat32_basic_file_info_t *file_info = dynamic_array_get_by_index(listdir, i);
 
@@ -336,7 +325,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
     {
         konsole_println("Which one?");
 
-        for (uint32_t i = 0;i < files->elements_count;i++)
+        for (uint32_t i = 0; i < files->elements_count; i++)
         {
             fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
 
@@ -344,10 +333,10 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
             datetime_datetime_from_fat(&(file->creation_datetime), &dt);
 
             konsole_printf("[%d]: '%s' (%s), created at %d-%d-%d %d:%d:%d",
-                i,
-                file->filename,
-                file->attributes & FAT32_ATTRIBUTE_DIRECTORY ? "dir" : "file",
-                dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
+                           i,
+                           file->filename,
+                           file->attributes & FAT32_ATTRIBUTE_DIRECTORY ? "dir" : "file",
+                           dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
 
             if (!(file->attributes & FAT32_ATTRIBUTE_DIRECTORY))
                 konsole_printf(", size: %d B", file->size);
@@ -379,7 +368,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
         }
     }
 
-    for (uint32_t i = 0;i < files->elements_count;i++)
+    for (uint32_t i = 0; i < files->elements_count; i++)
     {
         if (i == choice)
             continue;
@@ -399,7 +388,7 @@ bool_t terminal_view(argparse_command_t *command)
     char *pattern = NULL;
     bool_t hex = false;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
         argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
@@ -464,7 +453,7 @@ bool_t terminal_view(argparse_command_t *command)
 
     if (hex)
     {
-        for (uint32_t i = 0;i < buffer_size - 1;i++)
+        for (uint32_t i = 0; i < buffer_size - 1; i++)
             konsole_printf("%x ", (uint32_t)buffer[i]);
         konsole_println("");
     }
@@ -482,73 +471,76 @@ bool_t terminal_view(argparse_command_t *command)
 bool_t terminal_change_dir(argparse_command_t *command)
 {
     char *pattern = NULL;
-    bool_t ignore_case = false;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    if (command->arguments->elements_count > 1)
     {
-        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+        konsole_println("Error: too many arguments");
+        return false;
+    }
+    if (command->arguments->elements_count != 0)
+        pattern = ((argparse_argument_t *)dynamic_array_get_bottom(command->arguments))->name;
 
-        if (arg->value == 0)
-            pattern = arg->name;
-        else if (strcmp(arg->name, "opt") == 0)
+    if (arg->value == 0)
+        pattern = arg->name;
+    else if (strcmp(arg->name, "opt") == 0)
+    {
+        if (strcmp(arg->value, "ignore-case") == 0)
+            ignore_case = true;
+        else
         {
-            if (strcmp(arg->value, "ignore-case") == 0)
-                ignore_case = true;
-            else
-            {
-                konsole_printf("Error: invalid option '%s'\n", arg->value);
-                return false;
-            }
+            konsole_printf("Error: invalid option '%s'\n", arg->value);
+            return false;
         }
     }
+}
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
 
-    if (files == NULL)
-    {
-        konsole_println("Error: disk error");
-        return false;
-    }
+if (files == NULL)
+{
+    konsole_println("Error: disk error");
+    return false;
+}
 
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such directory");
-        dynamic_array_destroy(files);
-        return false;
-    }
+if (files->elements_count == 0)
+{
+    konsole_println("Error: No such directory");
+    dynamic_array_destroy(files);
+    return false;
+}
 
-    fat32_basic_file_info_t *dir = terminal_resolve_filename(files);
+fat32_basic_file_info_t *dir = terminal_resolve_filename(files);
 
-    if (dir == NULL)
-    {
-        return false;
-    }
-    if (!(dir->attributes & FAT32_ATTRIBUTE_DIRECTORY))
-    {
-        free(dir);
-        konsole_println("Error: it isn't directory");
-        return false;
-    }
-
-    if (strcmp(dir->filename, ".") == 0)
-    {
-        free(dir);
-        return true;
-    }
-    else if (strcmp(dir->filename, "..") == 0)
-    {
-        fat32_basic_file_info_t *current_directory = dynamic_array_get_top(path);
-        free(current_directory->filename);
-        dynamic_array_pop_back(path);
-    }
-    else
-    {
-        dynamic_array_push_back(path, dir);
-    }
-
+if (dir == NULL)
+{
+    return false;
+}
+if (!(dir->attributes & FAT32_ATTRIBUTE_DIRECTORY))
+{
     free(dir);
+    konsole_println("Error: it isn't directory");
+    return false;
+}
 
+if (strcmp(dir->filename, ".") == 0)
+{
+    free(dir);
     return true;
+}
+else if (strcmp(dir->filename, "..") == 0)
+{
+    fat32_basic_file_info_t *current_directory = dynamic_array_get_top(path);
+    free(current_directory->filename);
+    dynamic_array_pop_back(path);
+}
+else
+{
+    dynamic_array_push_back(path, dir);
+}
+
+free(dir);
+
+return true;
 }
 
 bool_t terminal_write(argparse_command_t *command)
@@ -558,9 +550,8 @@ bool_t terminal_write(argparse_command_t *command)
     bool_t hex = false;
     bool_t overwrite = false;
     bool_t append = false;
-    bool_t ignore_case = false;
-    
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
         argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
@@ -638,7 +629,7 @@ bool_t terminal_write(argparse_command_t *command)
         file->size = 0;
         file->cluster_num = 0;
     }
-        
+
     konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
 
     const unsigned char *input_line;
@@ -653,10 +644,10 @@ bool_t terminal_write(argparse_command_t *command)
     {
         while (input_line = terminal_get_input_line())
         {
-            unsigned char write_byte [3];
+            unsigned char write_byte[3];
             uint8_t cursor = 0;
 
-            for (unsigned char *cur = input_line;;cur++)
+            for (unsigned char *cur = input_line;; cur++)
             {
                 if (*cur == ' ' || *cur == '\0')
                 {
@@ -688,7 +679,7 @@ bool_t terminal_write(argparse_command_t *command)
                 }
                 else
                     write_byte[cursor++] = *cur;
-                
+
                 if (cursor > 3)
                 {
                     free(buffer);
@@ -750,7 +741,7 @@ bool_t terminal_newfile(argparse_command_t *command)
     const char *filename = NULL;
     uint8_t attributes = 0;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
         argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
@@ -781,13 +772,13 @@ bool_t terminal_newfile(argparse_command_t *command)
         konsole_println("Error: filename not specified");
         return false;
     }
-    
+
     if (!fat32_create_file(&info, dynamic_array_get_top(path), filename, attributes, NULL))
     {
         konsole_println("Error: filesystem error");
         return false;
     }
-    
+
     return true;
 }
 
@@ -796,7 +787,7 @@ bool_t terminal_newdir(argparse_command_t *command)
     const char *dirname = NULL;
     uint8_t attributes = 0;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
         argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
@@ -823,13 +814,13 @@ bool_t terminal_newdir(argparse_command_t *command)
         konsole_println("Error: directory name not specified");
         return false;
     }
-    
+
     if (!fat32_create_directory(&info, dynamic_array_get_top(path), dirname, attributes, NULL))
     {
         konsole_println("Error: filesystem error");
         return false;
     }
-    
+
     return true;
 }
 
@@ -838,7 +829,7 @@ bool_t terminal_remove(argparse_command_t *command)
     char *pattern = NULL;
     bool_t ignore_case = false;
 
-    for (uint32_t i = 0;i < command->arguments->elements_count;i++)
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
         argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
 
@@ -871,7 +862,7 @@ bool_t terminal_remove(argparse_command_t *command)
         return false;
     }
 
-    for (uint32_t i = 0;i < files->elements_count;i++)
+    for (uint32_t i = 0; i < files->elements_count; i++)
     {
         fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
 
@@ -892,7 +883,7 @@ void terminal_handle_command(const char *buffer)
     argparse_parse_command(buffer, &command);
 
     terminal_command_handler_cb *handler = hash_table_get(cmd_handlers, command.command_name, strlen(command.command_name) + 1);
-    
+
     if (handler)
         (*handler)(&command);
     else
@@ -903,7 +894,7 @@ void terminal_handle_command(const char *buffer)
 
 void terminal_main_loop()
 {
-    fat32_get_bootable_partition_info_sync(&info);
+    fat32_get_bootable_partition_info_sync(&info); // FIX падает тут
     path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
     fat32_basic_file_info_t root;
     fat32_mount(&info, "ROOT", &root);

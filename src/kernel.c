@@ -14,7 +14,6 @@
 #include "pmm.h"
 
 void kernel_main_task(void *);
-void kernel_continue(void);
 
 // ------------------------------------------------------------
 // Битовая карта физической памяти (глобальная)
@@ -92,7 +91,7 @@ void kernel_main_task(void *_)
     interrupt_enable();
 
     PRINT_INIT("AHCI");
-    if (false && ahci_init()) // TODO почему прерывание 14 при ahci_init()
+    if (ahci_init())
     {
         _ahci_supported = true;
         PRINT_OK;
