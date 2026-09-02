@@ -903,7 +903,7 @@ void terminal_handle_command(const char *buffer)
 
 void terminal_main_loop()
 {
-    fat32_get_bootable_partition_info_sync(&info); // FIX вот тут падает
+    fat32_get_bootable_partition_info_sync(&info);
     path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
     fat32_basic_file_info_t root;
     fat32_mount(&info, "ROOT", &root);

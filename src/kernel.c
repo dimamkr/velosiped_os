@@ -42,8 +42,9 @@ void kernel_main_task(void *);
 
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
-    interrupt_disable();
     memcpy(_boot_disk_signature, param, 6); // сохраняем сигнатуру диска для поиска
+    
+    interrupt_disable();
 
     heap_init();
 
@@ -91,7 +92,7 @@ void kernel_main_task(void *_)
     interrupt_enable();
 
     PRINT_INIT("AHCI");
-    if (false && ahci_init()) // TODO почему прерывание 14 при ahci_init()
+    if (ahci_init()) // TODO почему прерывание 14 при ahci_init()
     {
         _ahci_supported = true;
         PRINT_OK;

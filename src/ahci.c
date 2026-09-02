@@ -134,8 +134,8 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba); // FIX вот тут падает
+    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
     memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
     byte_t *cmd_answer_buffer = malloc(cmd_answer_buffer_size); // выделяем буффер под ответ
@@ -219,8 +219,8 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
     uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
+    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
     memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
     ahci_fis_h2d_t *fis = (ahci_fis_h2d_t *)(command_table->cfis);
@@ -264,8 +264,8 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
 
         uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-        ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-        ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
+        ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+        ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
         memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
         uint8_t prdt_count = 0;

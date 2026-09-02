@@ -494,9 +494,6 @@ protected_mode:
     mov ebp, STACK_TOP
     mov esp, ebp
 
-    lea eax, datetime
-    push eax ; передаем аргументом адрес сигнатуры
-
     ; настройка paging
     jmp setup_paging
 
@@ -555,8 +552,10 @@ setup_paging:
     ; готовим стек к полному переносу ядра наверх
     lea esp, [esp + VIRTUAL_START]
 
-    ; Делаем прыжок на высокий адрес ядра
-    jmp 0xC0010000
+    lea eax, datetime
+    push eax ; передаем аргументом адрес сигнатуры
+    ; Передаем управление ядру
+    call 0xC0010000
 
 hang:
     hlt
