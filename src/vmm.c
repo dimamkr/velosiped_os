@@ -3,7 +3,7 @@
 #include "paging.h"
 #include "ram.h"
 
-page_dict *kernel_page_dict;
+page_dict_t *kernel_page_dict;
 
 // инициализация нормального paging для ядра
 void vmm_init(void)
@@ -16,7 +16,7 @@ void vmm_init(void)
     // переброс системных данных наверх
     for (uint32_t phys_addr = 0; phys_addr < (KERNEL_END - KERNEL_VIRTUAL_START); phys_addr += PAGE_SIZE)
     {
-        page_dict_map_page_to_phys(kernel_page_dict, KERNEL_VIRTUAL_START + phys_addr, phys_addr, PAGE_KERNEL);
+        page_dict_map_page_to_phys(kernel_page_dict, KERNEL_VIRTUAL_START + phys_addr, phys_addr, PAGE_KERNEL_FLAGS);
     }
 
     page_dict_switch(kernel_page_dict);
@@ -49,4 +49,36 @@ void *vmm_map_mmio(uint32_t phys, uint32_t size)
 
     // возвращаем указатель, который соответствует данному физическому
     return (void *)(virt_aligned + offset);
+}
+
+static inline void copy_kenel_page_dict(page_dict_t *pd)
+{
+    page_dict_copy(pd, kernel_page_dict);
+}
+
+page_dict_t *vmm_create_process_kernel_page_dict()
+{
+    page_dict_t *pd = page_dict_create();
+    copy_kenel_page_dict(pd);
+
+    return pd;
+}
+
+void vmm_create_process_memory_paging(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t align)
+{
+    for (; virt_start < page_get_num(size + align) * PAGE_SIZE; virt_start += PAGE_SIZE)
+    {
+        page_dict_map_page(pd, virt_start, PAGE_KERNEL_FLAGS);
+    }
+}
+
+uint32_t vmm_create_process_stack_paging(page_dict_t *pd, uint32_t size, uint32_t align)
+{
+    uint32_t virt;
+    for (; virt < page_get_num(size + align) * PAGE_SIZE; virt += PAGE_SIZE)
+    {
+        page_dict_map_page(pd, virt, PAGE_KERNEL_FLAGS);
+    }
+
+    return ALIGNED(virt, STACK_ALIGN);
 }

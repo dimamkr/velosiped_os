@@ -34,4 +34,9 @@ static inline void *ram_kernel_to_phys(void *virt_addr)
     return virt_addr - KERNEL_VIRTUAL_START;
 }
 
+// TODO везде добавить
+#define STACK_ALIGN 16
+
+#define ALIGNED(addr, align) ((uint32_t)addr & ~((uint32_t)align - 1))
+
 #endif
