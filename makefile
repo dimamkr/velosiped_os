@@ -102,7 +102,7 @@ run-debug: build-debug
 	@echo "========================================="
 	@echo "Starting QEMU with GDB server (for VS Code)..."
 	@echo "========================================="
-	@(nohup qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
+	@(nohup qemu-system-i386 -d int -D build/interrupts.log -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
 	    -no-reboot -display sdl -vga std -s -S -m 256 \
 	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@echo "Waiting for QEMU to open port 1234..."

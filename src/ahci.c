@@ -4,6 +4,7 @@
 #include <heap.h>
 #include "konsole.h"
 #include "task.h"
+#include "vmm.h"
 
 static ahci_hba_mem_t *hba;
 
@@ -32,7 +33,7 @@ bool_t ahci_init()
     pci_turn_commands(base_ahci_info->device_offset, PCI_CMD_MEM_SPACE, true);
     pci_turn_commands(base_ahci_info->device_offset, PCI_CMD_IO_SPACE, true);
 
-    hba = (ahci_hba_mem_t *)(base_ahci_info->bar[5] & 0xFFFFFFF0); // находим регистры HBA по адресу из bar5
+    hba = (ahci_hba_mem_t *)vmm_map_mmio(base_ahci_info->bar[5] & 0xFFFFFFF0, sizeof(ahci_hba_mem_t)); // находим регистры HBA по адресу из bar5
 
     dynamic_array_destroy(ahci_devices);
 
@@ -87,9 +88,9 @@ bool_t ahci_init_port(byte_t port_num)
 
     // выделяем выровненное место под структуры согласно спецификации
     // наглядно: https://wiki.osdev.org/AHCI
-    cmd_list[port_num] = alligned_malloc(32 * sizeof(ahci_cmd_header_t), 1024);
-    cmd_table[port_num] = alligned_malloc(32 * sizeof(ahci_cmd_table_t), 128);
-    received_fis[port_num] = alligned_malloc(256, 256);
+    cmd_list[port_num] = ram_kernel_to_phys(alligned_malloc(32 * sizeof(ahci_cmd_header_t), 1024));
+    cmd_table[port_num] = ram_kernel_to_phys(alligned_malloc(32 * sizeof(ahci_cmd_table_t), 128));
+    received_fis[port_num] = ram_kernel_to_phys(alligned_malloc(256, 256));
 
     ahci_stop_port(port);
 
@@ -100,8 +101,8 @@ bool_t ahci_init_port(byte_t port_num)
 
     for (uint8_t i = 0; i < 32; i++)
     {
-        cmd_list[port_num][i].ctba = (uint32_t)(cmd_table[port_num] + i);
-        cmd_list[port_num][i].ctbau = 0;
+        ((ahci_cmd_header_t *)ram_kernel_to_virt(cmd_list[port_num]))[i].ctba = (uint32_t)(cmd_table[port_num] + i);
+        ((ahci_cmd_header_t *)ram_kernel_to_virt(cmd_list[port_num]))[i].ctbau = 0;
     }
 
     ahci_start_port(port);
@@ -133,14 +134,14 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
+    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
     memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
     byte_t *cmd_answer_buffer = malloc(cmd_answer_buffer_size); // выделяем буффер под ответ
 
     // заполняем prdt entry (достаточно одной записи)
-    command_table->prdt[0].dba = (uint32_t)cmd_answer_buffer;
+    command_table->prdt[0].dba = (uint32_t)ram_kernel_to_phys(cmd_answer_buffer);
     command_table->prdt[0].dbc = cmd_answer_buffer_size - 1;
 
     ahci_fis_h2d_t *fis = (ahci_fis_h2d_t *)(command_table->cfis);
@@ -218,8 +219,8 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
     uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
+    ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+    ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
     memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
     ahci_fis_h2d_t *fis = (ahci_fis_h2d_t *)(command_table->cfis);
@@ -244,6 +245,8 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
 bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write)
 {
+    buffer = ram_kernel_to_phys(buffer);
+    
     if (sectors_count == 0 || buffer == NULL)
         return false;
 
@@ -261,8 +264,8 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
 
         uint8_t cmd_num = find_free_command_slot(port_num); // ищем свободный слот для команды
 
-        ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)port->clb + cmd_num;
-        ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(command_header->ctba);
+        ahci_cmd_header_t *command_header = (ahci_cmd_header_t *)ram_kernel_to_virt((void*)port->clb) + cmd_num;
+        ahci_cmd_table_t *command_table = (ahci_cmd_table_t *)(ram_kernel_to_virt((void*)command_header->ctba));
         memset(command_table, 0, sizeof(ahci_cmd_table_t));
 
         uint8_t prdt_count = 0;

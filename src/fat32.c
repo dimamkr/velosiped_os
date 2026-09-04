@@ -34,6 +34,10 @@ bool_t fat32_get_info_sync(fat32_info_t *info)
 bool_t fat32_get_bootable_partition_info_sync(fat32_info_t *info)
 {
     info->disk_id = disk_get_boot_disk_id();
+
+    if (info->disk_id == 0xFF)
+        return false;
+    
     info->partition_start = mbr_get_bootable_partition(info->disk_id);
 
     return fat32_get_info_sync(info);

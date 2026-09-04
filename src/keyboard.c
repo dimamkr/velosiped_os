@@ -272,11 +272,7 @@ void keyboard_bottom_callback(isr_data_t data)
 
 void keyboard_init()
 {
-    keyboard_event = malloc(sizeof(task_event_t));
-    if (keyboard_event)
-    {
-        task_event_init(keyboard_event);
-    }
+    keyboard_event = task_event_create();
     outb(KEYBOARD_STATUS_PORT, 0xAE); // включить клавиатуру
     interrupt_register(IRQ1, keyboard_top_callback, keyboard_bottom_callback);
 }

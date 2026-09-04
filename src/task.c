@@ -4,6 +4,7 @@
 #include "system.h"
 #include "konsole.h"
 #include "linked_list.h"
+#include "vmm.h"
 
 task_t tasks[MAX_TASKS];
 static linked_list_node_t *current_task_node;
@@ -19,6 +20,8 @@ task_t *to_destroy_accumulator = NULL;
 extern void task_switch(task_t *prev, task_t *next);
 extern void task_switch_from_isr(void);
 extern void goto_current_task(void);
+
+extern page_dict_t *kernel_page_dict;
 
 #pragma GCC optimize("no-optimize-sibling-calls")
 
@@ -37,6 +40,7 @@ void scheduler_start()
     goto_current_task();
 }
 
+// ВАЖНО РАЗМЕР СТЕКА ВЫРОВНЕН ПО STACK_ALIGN
 static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     task_t *task = &tasks[task_count];
@@ -44,9 +48,8 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
     task->state = TASK_READY;
     ++task_count;
 
-    task->stack_start = malloc(stack_size);
-    if (!task->stack_start)
-        PANIC("Cannot allocate stack for task");
+    // стек должен быть выровнен
+    task->stack_start = alligned_malloc(stack_size, STACK_ALIGN);
     task->stack_size = stack_size;
 
     uint32_t *sp = (uint32_t *)((uint32_t)task->stack_start + stack_size);
@@ -85,6 +88,8 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
     task->esp = (uint32_t)sp;
     task->ebp = 0;
 
+    task->page_dict = kernel_page_dict;
+
     return task;
 }
 
@@ -106,6 +111,16 @@ void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
         PANIC("TOO MANY TASKS");
 
     task_t *task = task_init_default(entry, arg, stack_size);
+
+    linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
+    task->node = node;
+}
+
+// задача но со своим словарем страниц
+void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict)
+{
+    task_t *task = task_init_default(entry, arg, stack_size);
+    task->page_dict = page_dict;
 
     linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
     task->node = node;
@@ -167,7 +182,7 @@ void task_set_current(task_t *task)
 }
 
 // Подготовка переключения
-void task_switch_prepare(task_t *prev, task_t *next)
+static inline void task_switch_prepare_state(task_t *prev, task_t *next)
 {
     if (prev->state == TASK_RUNNING)
     {
@@ -186,6 +201,15 @@ void task_yield()
 
 void task_destroy_from_accumulator()
 {
+    if (to_destroy_accumulator->page_dict != kernel_page_dict)
+    {
+        // ВАЖНО ЧИСТЯТСЯ СТРАНИЦЫ ЯДРА ОЧЕНЬ ПЛОХО !!!!!!!!!!!!!
+        // TODO нельзя чтобы область ядра считалась свободной
+        // page_dict_destroy(to_destroy_accumulator->page_dict);
+    }
+
+    vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
+
     linked_list_erase(&current_task_node, to_destroy_accumulator->node);
     free(to_destroy_accumulator->stack_start);
     to_destroy_accumulator = NULL;
@@ -205,6 +229,16 @@ void task_exit()
     to_destroy_accumulator->state = TASK_TERMINATED;
     task_set_current(task_get_next());
     goto_current_task();
+}
+
+void task_switch_prepare()
+{
+    task_t *next = task_get_next();
+
+    // страницы ядра точно выделены
+    vmm_page_dict_switch(current_task->page_dict, next->page_dict);
+
+    task_switch_prepare_state(current_task, next);
 }
 
 // Блокировка задачи

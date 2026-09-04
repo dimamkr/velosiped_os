@@ -36,20 +36,14 @@ task_switch_from_isr:
     mov eax, [current_task]
     mov [eax + 4], esp
 
-    ; Выбираем следующую задачу
-    call task_get_next
-    test eax, eax
-    jz .no_task
-
-    ; Подготовка переключения (обновляет current_task)
-    push eax
-    push dword [current_task]
+    ; все приготовления для которых не нужна ручная работа с регистрами 
     call task_switch_prepare
-    add esp, 8
 
     ; Загружаем ESP новой задачи
     mov eax, [current_task]
     mov esp, [eax + 4]
+
+    ;TODO делать в будущем переключение стека тут (так как не всегда стек в области видимости ядра)
 
     ; Восстанавливаем контекст новой задачи
     pop ds

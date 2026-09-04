@@ -1,5 +1,6 @@
 #include "heap.h"
 #include "ram.h"
+#include "task.h"
 
 // segregated lists heap
 // инварианты:
@@ -17,9 +18,9 @@
 // i-й элемент это указатель на корень с соотв разбросом размеров
 heap_void_block_t *heap_void_bucket_root[HEAP_VOID_BUCKET_COUNT];
 
-#define RIGHT_EDGE_SIZE (sizeof(heap_end_block_t))
-#define SERVICE_FIELDS_SIZE (sizeof(heap_void_block_t) + RIGHT_EDGE_SIZE)
 #define LEFT_EDGE_SIZE (sizeof(heap_void_block_t))
+#define RIGHT_EDGE_SIZE (sizeof(heap_end_block_t))
+#define SERVICE_FIELDS_SIZE (LEFT_EDGE_SIZE + RIGHT_EDGE_SIZE)
 
 // наим степень двойки не меньшая числа
 static inline uint32_t get_void_block_size_index(uint32_t size)
@@ -164,18 +165,19 @@ static inline void heap_void_block_try_merge(heap_void_block_t *void_block)
 
 void heap_init()
 {
+    uint32_t heap_end_block = KHEAP_END - SERVICE_FIELDS_SIZE;
     // вспомогательные блоки для верной навигации по соседним
-    create_data_block((byte_t *)KHEAP_START_BLOCK, 0);
-    create_data_block((byte_t *)KHEAP_END_BLOCK, 0);
+    create_data_block((byte_t *)KHEAP_START, 0);
+    create_data_block((byte_t *)heap_end_block, 0);
 
     for (uint32_t i = 0; i < HEAP_VOID_BUCKET_COUNT; ++i)
     {
         heap_void_bucket_root[i] = NULL;
     }
 
-    byte_t *void_block_start = get_block_end((byte_t *)KHEAP_START_BLOCK);
+    byte_t *void_block_start = get_block_end((byte_t *)KHEAP_START);
 
-    create_void_block_default(void_block_start, (uint32_t)(KHEAP_END_BLOCK - (uint32_t)void_block_start - SERVICE_FIELDS_SIZE));
+    create_void_block_default(void_block_start, (uint32_t)(heap_end_block - (uint32_t)void_block_start - SERVICE_FIELDS_SIZE));
     heap_void_bucket_add_begin(heap_void_bucket_root + get_void_block_size_index(((heap_void_block_t *)void_block_start)->size),
                                (heap_void_block_t *)void_block_start);
 }
@@ -221,6 +223,8 @@ static inline byte_t *try_malloc_from_bucket(heap_void_block_t *n, uint32_t inde
 
 void *malloc(uint32_t size)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (size == 0)
     {
         return NULL;
@@ -258,6 +262,8 @@ void *malloc(uint32_t size)
 
 void *alligned_malloc(uint32_t size, uint32_t alignment)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (size == 0 || alignment == 0)
     {
         return NULL;
@@ -316,6 +322,8 @@ void *alligned_malloc(uint32_t size, uint32_t alignment)
 
 void free(void *ptr)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (!ptr)
         return;
 
@@ -341,6 +349,8 @@ void free(void *ptr)
 
 void *realloc(void *ptr, uint32_t size)
 {
+    TASK_LOCKED_FUNCTION;
+
     if (ptr == NULL)
         return malloc(size);
     if (size == 0)

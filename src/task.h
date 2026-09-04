@@ -3,16 +3,12 @@
 
 #include "types.h"
 #include "heap.h"
-#include "timer.h"
-#include "system.h"
-#include "konsole.h"
-#include "linked_list.h"
 #include "task_event.h"
+#include "paging.h"
 
 #define MAX_TASKS 32
 #define TASK_AUTO_SWITCH_FREQ 100
 
-#define STACK_SIZE_TINY KB / 4
 #define STACK_SIZE_SMALL KB
 #define STACK_SIZE_LARGE MB
 #define STACK_SIZE_ENORMOUS 4 * MB
@@ -34,8 +30,11 @@ typedef struct
     uint32_t ebp;
     uint32_t eip; // точка входа
 
+    uint32_t *raw_stack_start;
     uint32_t *stack_start; // выделенный стек
     uint32_t stack_size;
+
+    page_dict_t *page_dict;
 
     task_state_t state;
     uint32_t activation_time;
@@ -57,10 +56,24 @@ void task_lock(void);
 void task_unlock(void);
 task_t *task_get_next(void);
 void task_set_current(task_t *task);
-void task_switch_prepare(task_t *prev, task_t *next);
 void task_wait_until(task_event_t *ev);
+void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict);
 
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
+
+// трюк для автоматической расстановки task_lock/unlock
+
+static inline void __task_unlock_trick()
+{
+    task_unlock();
+}
+
+#define TASK_LOCKED_FUNCTION                                                                  \
+    do                                                                                        \
+    {                                                                                         \
+        uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
+        task_lock();                                                                          \
+    } while (0);
 
 #endif

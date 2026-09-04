@@ -494,13 +494,69 @@ protected_mode:
     mov ebp, STACK_TOP
     mov esp, ebp
 
+    ; настройка paging
+    jmp setup_paging
+
+; ------------------------------------------------------------
+; Настройка paging достаточного для загрузки ядра
+; ------------------------------------------------------------
+setup_paging:
+    ; Адреса структур
+    ; (0x10000 это 64 кб) 
+    %define PAGE_DIR_ADDR   0x60000
+    %define FLAGS 0x83
+    %define BLOCKS_COUNT 16
+    ; смещение нуля
+    %define VIRTUAL_START 0xC0000000
+
+    ; ----- Включить поддержку 4 МБ страниц (PSE) -----
+    mov eax, cr4
+    or eax, 0x00000010          ; бит PSE (4-й бит)
+    mov cr4, eax
+    ; потом в ядре выключим поддержку 4 мб страниц
+
+    ; Очистим каталог
+    mov edi, PAGE_DIR_ADDR
+    mov ecx, 1024 ; сколько uint32_t 
+    xor eax, eax ; зануляем eax (чем заполняем)
+    rep stosd
+
+    ; Заполняем таблицу страниц: identity mapping для первых 64 МБ
+    mov edi, PAGE_DIR_ADDR
+    mov ecx, BLOCKS_COUNT
+    mov eax, FLAGS   ; присутствует, чтение/запись, супервизор, без таблиц
+.fill_table_low:
+    stosd
+    add eax, 0x400000       ; следующая страница (+4 мб)
+    loop .fill_table_low ; пока ecx не ноль, jmp на метку
+
+    ; аналогично
+    ; +0xC0000000
+    lea edi, [PAGE_DIR_ADDR+0x300*4]
+    mov ecx, BLOCKS_COUNT
+    mov eax, FLAGS
+.fill_table_high:
+    stosd
+    add eax, 0x400000
+    loop .fill_table_high
+
+    ; Загружаем адрес каталога в CR3
+    mov eax, PAGE_DIR_ADDR
+    mov cr3, eax
+
+    ; Включаем бит PG в CR0
+    mov eax, cr0
+    or eax, 0x80000000
+    mov cr0, eax
+
+    ; готовим стек к полному переносу ядра наверх
+    lea esp, [esp + VIRTUAL_START]
+
     lea eax, datetime
     push eax ; передаем аргументом адрес сигнатуры
-    ; Передаём управление ядру
-    call KERNEL_LOAD_SEGMENT << 4;
+    ; Передаем управление ядру
+    call 0xC0010000
 
-    ; Если ядро вернёт управление (не должно) – зависаем
-    cli
-.hang:
+hang:
     hlt
-    jmp .hang
+    jmp hang

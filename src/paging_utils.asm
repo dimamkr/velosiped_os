@@ -1,7 +1,7 @@
 [Global paging_load_directory]
 [Global enable_paging]       
 
-; принимает указатель на директорию
+; принимает физ адрес директории
 paging_load_directory:                
     mov eax, [esp+4]            ; Load the address of the page directory into EAX. (+4 из-за адреса возврата)
     mov cr3, eax                ; Load the page directory base address into CR3.                   

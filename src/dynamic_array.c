@@ -163,10 +163,10 @@ void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t 
     void *l_value = dynamic_array_get_by_index(array, l);
     void *r_value = dynamic_array_get_by_index(array, r);
     void *mid_value = malloc(array->size_of_element);
-    
+
     memcpy(mid_value,
-    dynamic_array_get_by_index(array, l_index + (rand() % (r_index - l_index + 1))),
-    array->size_of_element);
+           dynamic_array_get_by_index(array, l_index + (rand() % (r_index - l_index + 1))),
+           array->size_of_element);
 
     while (l <= r)
     {
@@ -180,14 +180,16 @@ void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t 
         }
         else if (cmp_r_mid)
         {
-            if (r > 0) r--;
+            if (r > 0)
+                r--;
             r_value = dynamic_array_get_by_index(array, r);
         }
         else if (!cmp_l_mid && !cmp_r_mid)
         {
             memswap(l_value, r_value, array->size_of_element);
             l++;
-            if (r > 0) r--;
+            if (r > 0)
+                r--;
             l_value = dynamic_array_get_by_index(array, l);
             r_value = dynamic_array_get_by_index(array, r);
         }
@@ -197,4 +199,18 @@ void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t 
         dynamic_array_quicksort(array, l_index, l - 1, less);
     if (l < r_index)
         dynamic_array_quicksort(array, l, r_index, less);
+}
+
+void dynamic_array_copy(dynamic_array_t *dst, dynamic_array_t *src)
+{
+    if (dst == src)
+        return;
+
+    dst->buffer = realloc(dst->buffer, src->size * src->size_of_element);
+    memcpy(dst->buffer, src->buffer, src->size * src->size_of_element);
+    dst->size = src->size;
+    dst->elements_count = src->elements_count;
+    dst->size_of_element = src->size_of_element;
+    dst->start = src->start;
+    dst->end = src->end;
 }

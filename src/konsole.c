@@ -145,25 +145,25 @@ void konsole_putch(char ch)
 
 void konsole_print(const char *text)
 {
-    task_lock();
+    TASK_LOCKED_FUNCTION;
     for (int i = 0; text[i] != 0; ++i)
     {
         konsole_putch(text[i]);
     }
-    task_unlock();
 }
 
 void konsole_println(const char *text)
 {
-    task_lock();
+    TASK_LOCKED_FUNCTION;
+
     konsole_print(text);
     konsole_print("\n");
-    task_unlock();
 }
 
 void konsole_printf(const char *format, ...)
 {
-    task_lock();
+    TASK_LOCKED_FUNCTION;
+
     va_list args;
     va_start(args, format);
 
@@ -244,7 +244,6 @@ void konsole_printf(const char *format, ...)
         format++;
     }
     va_end(args);
-    task_unlock();
 }
 
 // TODO блокировка прерываний тут
