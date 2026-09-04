@@ -27,6 +27,22 @@ __attribute__((optimize("O3,unroll-loops"))) int strcmp(const char *a, const cha
     }
 }
 
+__attribute__((optimize("O3,unroll-loops"))) int strncmp(const char *a, const char *b, uint32_t n)
+{
+    for (int i = 0;i < n; ++i)
+    {
+        if (a[i] == b[i])
+        {
+            if (a[i] == '\0')
+                return 0;
+        }
+        else
+        {
+            return a[i] > b[i] ? 1 : -1;
+        }
+    }
+}
+
 char *strdup(const char *src)
 {
     uint32_t len = strlen(src);
@@ -46,6 +62,27 @@ void strcat(char *a, const char *b)
     a[len_a + len_b] = '\0';
 }
 
+int toupper (int c) // для совместимости с std
+{
+    return UPPER((char)c);
+}
+
+int tolower (int c) // для совместимости с std
+{
+    return LOWER((char)c);
+}
+
+int isxdigit(int c) // для совместимости с std
+{
+    return '0' <= c && c <= '9' || 'a' <= LOWER(c) && LOWER(c) <= 'f';
+}
+
+int isprint(int c) // для совместимости с std
+{
+    return (c >= 0x20 && c <= 0x7E);
+}
+
+
 __attribute__((optimize("O3,unroll-loops"))) void string_to_lower(char *s)
 {
     for (; *s; s++)
@@ -59,7 +96,7 @@ __attribute__((optimize("O3,unroll-loops"))) void string_to_upper(char *s)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t strstr(const char *haystack, const char *needle)
+char *strstr(const char *needle, const char *haystack)
 {
     // КМП с z-функцией
 
@@ -98,14 +135,20 @@ uint32_t strstr(const char *haystack, const char *needle)
             free(united);
             free(z_func);
 
-            return i - len_needle;
+            return (char*)haystack + i - len_needle;
         }
     }
 
     free(united);
     free(z_func);
 
-    return -1;
+    return NULL;
+}
+
+__attribute__((optimize("O3,unroll-loops")))
+void strcpy(char *dst, const char *src)
+{
+    memcpy(dst, src, strlen(src) + 1);
 }
 
 __attribute__((optimize("O3,unroll-loops")))
@@ -261,24 +304,27 @@ void uint32_to_string(uint32_t number, char *result, uint8_t base)
         result[--len] = DIGIT_BY_INDEX(number % base);
 }
 
-uint32_t string_to_uint32(char *str, uint8_t base)
+uint32_t strtoul(const char *str, const char **endsym, uint8_t base)
 {
     uint32_t result = 0;
-    uint32_t str_length = strlen(str);
-    uint32_t mul = 1;
 
-    if (str_length == 0)
-        return -1;
+    if (endsym)
+        *endsym = str;
 
-    for (uint32_t i = str_length - 1; i != -1; i--)
+    for (uint32_t i = 0; str[i] != '\0'; i++)
     {
+        if (str[i] == ' ' || str[i] == '\t')
+            continue;
+
         uint32_t index = INDEX_BY_DIGIT(str[i]);
 
         if (index >= base)
-            return -1;
+            break;
 
-        result += index * mul;
-        mul *= base;
+        result = result * base + index;
+
+        if (endsym)
+            (*endsym)++;
     }
 
     return result;

@@ -83,7 +83,7 @@ bool_t fat32_read_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *b
     return disk_read_sync(info->disk_id, cluster_start, info->sectors_per_cluster, buffer);
 }
 
-bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, const void *buffer)
+bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *buffer)
 {
     uint32_t cluster_start = info->data_offset + (cluster_num - 2) * info->sectors_per_cluster;
 
@@ -677,7 +677,7 @@ fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, co
 
             if (memcmp(filename_copy, file_dos_filename_copy, tilde) && memcmp(result_dos_filename.extension, file->dos_extension, 3))
             {
-                uint32_t index = string_to_uint32(file_dos_filename_copy + tilde + 1, 10);
+                uint32_t index = strtoul(file_dos_filename_copy + tilde + 1, NULL, 10);
 
                 dynamic_array_push_back(conflicts, &index);
             }
@@ -872,7 +872,7 @@ bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, 
 
     if (result)
     {
-        result->filename = filename;
+        result->filename = strdup(filename);
         result->attributes = record.attributes;
         result->creation_datetime.date = record.creation_date;
         result->creation_datetime.time = record.creation_time;

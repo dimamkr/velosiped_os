@@ -20,13 +20,32 @@ RM      = rm -rf
 SRC_DIR   = src
 BUILD_DIR = build
 
+# ACPICA
+ACPICA_DIR = $(SRC_DIR)/acpica
+ACPICA_INCLUDE = $(ACPICA_DIR)/include
+ACPICA_SOURCES = $(wildcard $(ACPICA_DIR)/components/*/*.c)
+ACPICA_SOURCES := $(filter-out $(ACPICA_DIR)/components/debugger/%, $(ACPICA_SOURCES))
+ACPICA_SOURCES := $(filter-out $(ACPICA_DIR)/components/disassembler/%, $(ACPICA_SOURCES))
+ACPICA_OBJECTS = $(patsubst $(ACPICA_DIR)/%.c, $(BUILD_DIR)/acpica/%.o, $(ACPICA_SOURCES))
+ACPICA_SOURCES := $(filter-out $(ACPICA_DIR)/components/utilities/%, $(ACPICA_SOURCES))
+
 # Флаги для релизной сборки
 CFLAGS_RELEASE = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR)
+                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR) -Werror
 
 # Флаги для отладочной сборки
 CFLAGS_DEBUG   = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR)
+                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR) -Werror
+
+# Флаги для ACPICA (отключаем варнинги, которые мешают сборке)
+# ACPICA
+ACPICA_CFLAGS = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
+ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
+ACPICA_CFLAGS += -DACPI_APPLICATION
+ACPICA_CFLAGS += -DACPI_SYSTEM_HEADERS
+ACPICA_CFLAGS += -DACPI_DEBUGGER=0
+ACPICA_CFLAGS += -DACPI_DISASSEMBLER=0
+ACPICA_CFLAGS += -U__linux__ -U__gnu_linux__
 
 # Флаги для NASM (релиз и отладка)
 NASMFLAGS_RELEASE = -f elf32
@@ -49,7 +68,7 @@ ASM_SOURCES = $(filter-out $(SRC_DIR)/boot1.asm $(SRC_DIR)/boot2.asm, $(ALL_ASM)
 # Объектные файлы
 C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
 ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
-OBJECTS     = $(C_OBJECTS) $(ASM_OBJECTS)
+OBJECTS = $(C_OBJECTS) $(ASM_OBJECTS) $(ACPICA_OBJECTS)
 
 # ============================================================
 # Основные цели
@@ -146,6 +165,12 @@ $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf | $(BUILD_DIR)
 	@echo "Kernel data: "
 	readelf -l $<
 	@echo "kernel.bin file size: $$(wc -c < $@) bytes"
+
+# Сборка ACPICA
+$(BUILD_DIR)/acpica/%.o: $(ACPICA_DIR)/%.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	@echo "1.4 Compiling ACPICA $<..."
+	$(CC) $(CFLAGS) $(ACPICA_CFLAGS) -I$(ACPICA_INCLUDE) -c -o $@ $<
 
 $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
 	@echo "Creating disk image with MBR and FAT32..."

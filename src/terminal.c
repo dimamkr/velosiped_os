@@ -366,7 +366,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
         }
         else
         {
-            choice = string_to_uint32(choice_str, 10);
+            choice = strtoul(choice_str, NULL, 10);
 
             if (choice != -1 && choice < files->elements_count)
                 memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
@@ -406,9 +406,9 @@ bool_t terminal_view(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value, 10);
+            start_pos = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "bytes") == 0)
-            bytes_count = string_to_uint32(arg->value, 10);
+            bytes_count = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -567,7 +567,7 @@ bool_t terminal_write(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value, 10);
+            start_pos = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -656,7 +656,7 @@ bool_t terminal_write(argparse_command_t *command)
             unsigned char write_byte [3];
             uint8_t cursor = 0;
 
-            for (unsigned char *cur = input_line;;cur++)
+            for (const unsigned char *cur = input_line;;cur++)
             {
                 if (*cur == ' ' || *cur == '\0')
                 {
@@ -670,7 +670,7 @@ bool_t terminal_write(argparse_command_t *command)
                         realloc(buffer, buffer_size);
                     }
 
-                    uint32_t byte_num = string_to_uint32(write_byte, 16);
+                    uint32_t byte_num = strtoul(write_byte, NULL, 16);
 
                     if (byte_num != -1)
                     {

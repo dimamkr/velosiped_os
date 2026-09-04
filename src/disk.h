@@ -32,7 +32,7 @@ disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_
 bool_t disk_flush_cache_sync(uint8_t disk_id);
 bool_t disk_prefetch_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count);
 bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer);
-bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, const void *buffer);
+bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer);
 uint8_t disk_get_boot_disk_id();
 
 extern byte_t _boot_disk_signature [6];
