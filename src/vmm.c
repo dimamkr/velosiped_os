@@ -2,8 +2,10 @@
 #include "pmm.h"
 #include "paging.h"
 #include "ram.h"
+#include "task.h"
 
 page_dict_t *kernel_page_dict;
+extern task_t *current_task;
 
 // инициализация нормального paging для ядра
 void vmm_init(void)
@@ -51,15 +53,22 @@ void *vmm_map_mmio(uint32_t phys, uint32_t size)
     return (void *)(virt_aligned + offset);
 }
 
-static inline void copy_kenel_page_dict(page_dict_t *pd)
+void vmm_unmap_page(uint32_t virt_addr)
 {
-    page_dict_copy(pd, kernel_page_dict);
+    page_dict_unmap_page(current_task->page_dict, virt_addr);
+}
+
+// для создания процессов
+//-------------------------------------------------------------------
+static inline void copy_linked_kernel_page_dict(page_dict_t *pd)
+{
+    page_dict_copy_linked(pd, kernel_page_dict);
 }
 
 page_dict_t *vmm_create_process_kernel_page_dict()
 {
     page_dict_t *pd = page_dict_create();
-    copy_kenel_page_dict(pd);
+    copy_linked_kernel_page_dict(pd); // TODO сделать тут copy-linked (копирование чисто записей)
 
     return pd;
 }

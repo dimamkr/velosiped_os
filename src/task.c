@@ -203,9 +203,7 @@ void task_destroy_from_accumulator()
 {
     if (to_destroy_accumulator->page_dict != kernel_page_dict)
     {
-        // ВАЖНО ЧИСТЯТСЯ СТРАНИЦЫ ЯДРА ОЧЕНЬ ПЛОХО !!!!!!!!!!!!!
-        // TODO нельзя чтобы область ядра считалась свободной
-        // page_dict_destroy(to_destroy_accumulator->page_dict);
+        page_dict_destroy(to_destroy_accumulator->page_dict);
     }
 
     vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
