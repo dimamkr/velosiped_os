@@ -2,6 +2,7 @@
 #define KONSOLE
 
 #include "types.h"
+#include <stdarg.h>
 
 #define COLOR_BLACK 0x0
 #define COLOR_BLUE 0x1
@@ -30,8 +31,8 @@ void konsole_print(const char *text);
 void konsole_println(const char *text);
 void konsole_set_color(uint32_t fg, uint32_t bg);
 void konsole_scroll_down();
+void konsole_vprintf(const char *format, va_list args);
 void konsole_printf(const char *format, ...);
-void konsole_printfln(const char *format, ...);
 bool konsole_view_scroll_up();
 bool konsole_view_scroll_down();
 

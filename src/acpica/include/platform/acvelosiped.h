@@ -26,8 +26,73 @@ typedef bool_t BOOLEAN;
 
 typedef void FILE;
 
-#define ACPI_USE_SYSTEM_INTTYPES    1
-#define ACPI_USE_SYSTEM_CLIBRARY    1
+#define ACPI_USE_SYSTEM_INTTYPES 0
+#define ACPI_USE_SYSTEM_CLIBRARY 0
+
+#ifndef ACPI_DIV_64_BY_32
+#define ACPI_DIV_64_BY_32(n_hi, n_lo, d32, q32, r32) \
+{                                         \
+    asm (                                 \
+        "div %2"                          \
+        : "+a"(q32), "+d"(r32)            \
+        : "r"(d32)                        \
+        :                                 \
+    );                                    \
+}
+#endif
+
+#ifndef ACPI_MUL_64_BY_32
+#define ACPI_MUL_64_BY_32(n_hi, n_lo, m32, p32, c32) \
+{                                         \
+    asm (                                 \
+        "mul %2"                          \
+        : "+a"(p32), "+d"(c32)            \
+        : "r"(d32)                        \
+        :                                 \
+    );                                    \
+}
+#endif
+
+#ifndef ACPI_SHIFT_LEFT_64_BY_32
+#define ACPI_SHIFT_LEFT_64_BY_32(n_hi, n_lo, s32) \
+{                                         \
+    asm (                                 \
+        "and $31, %2\n"                     \
+        "shld %2, %0, %1\n"                 \
+        "shl %2, %0"                      \
+        : "+a"(n_lo), "+d"(n_hi)          \
+        : "c"(s32)                        \
+        :                                 \
+    );                                    \
+}
+#endif
+
+#ifndef ACPI_SHIFT_RIGHT_64_BY_32
+#define ACPI_SHIFT_RIGHT_64_BY_32(n_hi, n_lo, s32) \
+{                                         \
+    asm (                                 \
+        "and $31, %2\n"                     \
+        "shrd %2, %1, %0\n"                 \
+        "shr %2, %1"                      \
+        : "+a"(n_lo), "+d"(n_hi)          \
+        :                       "c"(s32)  \
+        :                                 \
+    );                                    \
+}
+#endif
+
+#ifndef ACPI_SHIFT_RIGHT_64
+#define ACPI_SHIFT_RIGHT_64(n_hi, n_lo) \
+{                                         \
+    asm (                                 \
+        "shr $1, %1\n"                      \
+        "rcr $1, %0"                      \
+        : "+a"(n_lo), "+d"(n_hi)          \
+        :                                 \
+        :                                 \
+    );                                    \
+}
+#endif
 
 void *AcpiOsAllocate(ACPI_SIZE Size);
 void AcpiOsFree(void *Memory);

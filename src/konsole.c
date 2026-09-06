@@ -2,7 +2,6 @@
 #include "dynamic_array.h"
 #include "task.h"
 #include "ram.h"
-#include <stdarg.h>
 
 // адрес начала видеопамяти
 konsole_symbol_t *konsole_start = (konsole_symbol_t *)VIDEO_MEMORY_START;
@@ -160,12 +159,9 @@ void konsole_println(const char *text)
     konsole_print("\n");
 }
 
-void konsole_printf(const char *format, ...)
+void konsole_vprintf(const char *format, va_list args)
 {
     TASK_LOCKED_FUNCTION;
-
-    va_list args;
-    va_start(args, format);
 
     while (*format)
     {
@@ -243,6 +239,18 @@ void konsole_printf(const char *format, ...)
         }
         format++;
     }
+}
+
+__attribute__((__format__(__printf__, 1, 2)))
+void konsole_printf(const char *format, ...)
+{
+    TASK_LOCKED_FUNCTION;
+
+    va_list args;
+    va_start(args, format);
+
+    konsole_vprintf(format, args);
+    
     va_end(args);
 }
 

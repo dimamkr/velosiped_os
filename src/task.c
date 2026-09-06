@@ -104,7 +104,7 @@ void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
     task_set_current(&tasks[1]); // задача ядра
 }
 
-// Создание новой задачи
+// Создание новой задачи, возвращает pid
 void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     if (task_count >= MAX_TASKS)

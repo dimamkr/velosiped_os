@@ -1,17 +1,20 @@
 #include "syncapi.h"
 #include "task.h"
+#include "timer.h"
 
 
 semaphore_t *semaphore_create(uint32_t max_count)
 {
     semaphore_t *result = malloc(sizeof(semaphore_t));
     result->count = max_count;
+    result->max_count = max_count;
     result->owners = 0;
+    result->destroyed = false;
 
     return result;
 }
 
-bool_t semaphore_acquire(semaphore_t *semaphore, uint32_t count)
+bool_t semaphore_acquire(semaphore_t *semaphore, uint32_t count, uint16_t timeout)
 {
     /*
      * Нам нужно сделать, чтобы если semaphore->count >= count, мы вычли, и сделать это все блокирующе
@@ -20,10 +23,11 @@ bool_t semaphore_acquire(semaphore_t *semaphore, uint32_t count)
      */
 
     __sync_fetch_and_add(&(semaphore->owners), 1);
+    uint32_t wait_start = timer_get_time();
 
     while (true)
     {
-        if (semaphore->destroyed)
+        if (semaphore->destroyed || timeout != SYNC_TIMEOUT_INFINITE && timer_get_time() - wait_start >= timeout)
         {
             __sync_fetch_and_sub(&(semaphore->owners), 1);
             return false;
@@ -32,7 +36,7 @@ bool_t semaphore_acquire(semaphore_t *semaphore, uint32_t count)
         uint32_t old = semaphore->count;
 
         if (old < count)
-            continue;
+            task_yield();
 
         uint32_t next = old - count;
 

@@ -53,14 +53,27 @@ char *strdup(const char *src)
     return result;
 }
 
-void strcat(char *a, const char *b)
+void strcat(char *dst, const char *src)
 {
-    uint32_t len_a = strlen(a);
-    uint32_t len_b = strlen(b);
+    uint32_t len_dst = strlen(dst);
+    uint32_t len_src = strlen(src);
 
-    memcpy(a + len_a, b, len_b);
-    a[len_a + len_b] = '\0';
+    memcpy(dst + len_dst, src, len_src);
+    dst[len_dst + len_src] = '\0';
 }
+
+char *strncat(char *dst, const char *src, uint32_t n)
+{
+    uint32_t len_dst = strlen(dst);
+    uint32_t len_src = strlen(src);
+    uint32_t cnt = min(len_src, n);
+
+    memcpy(dst + len_dst, src, cnt);
+    dst[len_dst + cnt] = '\0';
+    
+    return dst;
+}
+
 
 int toupper (int c) // для совместимости с std
 {
@@ -77,9 +90,24 @@ int isxdigit(int c) // для совместимости с std
     return '0' <= c && c <= '9' || 'a' <= LOWER(c) && LOWER(c) <= 'f';
 }
 
+int isdigit(int c) // для совместимости с std
+{
+    return '0' <= c && c <= '9';
+}
+
+int isspace(int c) // для совместимости с std
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+}
+
 int isprint(int c) // для совместимости с std
 {
     return (c >= 0x20 && c <= 0x7E);
+}
+
+int isalpha(int c) // для совместимости с std
+{
+    return ('a' <= LOWER(c) && LOWER(c) <= 'z');
 }
 
 
@@ -146,10 +174,26 @@ char *strstr(const char *needle, const char *haystack)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-void strcpy(char *dst, const char *src)
+char *strcpy(char *dst, const char *src)
 {
     memcpy(dst, src, strlen(src) + 1);
+
+    return dst;
 }
+
+__attribute__((optimize("O3,unroll-loops")))
+char *strncpy(char *dst, const char *src, uint32_t n)
+{
+    uint32_t length = strlen(src);
+
+    memcpy(dst, src, min(length + 1, n));
+
+    if (length + 1 < n)
+        memset(dst, '\0', n - (length + 1));
+
+    return dst;
+}
+
 
 __attribute__((optimize("O3,unroll-loops")))
 uint32_t strchr(const char *str, char chr)
@@ -313,7 +357,7 @@ uint32_t strtoul(const char *str, const char **endsym, uint8_t base)
 
     for (uint32_t i = 0; str[i] != '\0'; i++)
     {
-        if (str[i] == ' ' || str[i] == '\t')
+        if (isspace(str[i]))
             continue;
 
         uint32_t index = INDEX_BY_DIGIT(str[i]);
