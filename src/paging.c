@@ -102,7 +102,7 @@ static page_container_t *get_or_create_table(page_dict_t *pd, uint32_t pd_id, ui
     if (entry & PAGE_PRESENT)
     {
         // Таблица уже существует – возвращаем её виртуальный адрес
-        return (page_container_t *)PAGE_ADDR(entry);
+        return (page_container_t *)ram_kernel_to_virt((void *)PAGE_ADDR(entry));
     }
 
     page_container_t *new_table = page_container_create(1);
@@ -185,7 +185,6 @@ void page_dict_destroy(page_dict_t *pd)
     free(pd);
 }
 
-// TODO переписать чтобы работало оптимально
 //  глубокое копирование
 void page_dict_copy(page_dict_t *dst, page_dict_t *src)
 {
