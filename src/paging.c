@@ -8,6 +8,11 @@
 // ВНИМАНИЕ ЕСЛИ В ЯДРЕ СОЗДАСТСЯ НОВАЯ ТАБЛИЦА ТО НИКАКОЙ ПРОЦЕСС НЕ УЗНАЕТ ОБ ЭТОМ
 // нужно сделать обработку этого через выделение при прерывании ошибки доступа
 
+// TODO выделять таблицы не в куче ядра а в отдельных фреймах
+// это нужно для того, чтобы с помощью счетчика pmm вести учет того, сколько процессов ссылаются на таблицу
+// (для этого же эффекта с кучей придется использовать костыли, поэтому решение такое)
+// то есть надо сделать отдельный диапазон в памяти занятый процессом ядра, откуда можно отщипывать память под служебные вещи
+
 // в записях первые 11 битов под флаги, оставшиеся под адрес (начала таблицы или начала страницы) выровненный по 4 кб
 // в виртуальном адресе первые 10 бит - индекс в директории, 10 бит индекса в таблице, 12 бит - смещение относительно начала страницы
 
@@ -29,7 +34,7 @@ static inline void tlb_cache_flush(uint32_t virt_addr)
 // возвращает вирт адрес page_container_t
 page_container_t *page_container_create(bool clean)
 {
-    // переписать без malloc
+    // в будущем переписать без malloc (если понадобится)
     page_container_t *virt = alligned_malloc(PAGE_SIZE, PAGE_SIZE);
     if (clean)
     {
@@ -129,6 +134,22 @@ void page_dict_map_page(page_dict_t *pd, uint32_t virt_addr, uint32_t flags)
     tlb_cache_flush(virt_addr);
 }
 
+void page_dict_map_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t flags)
+{
+    uint32_t virt_aligned = page_alligned_left(virt_start);
+    uint32_t offset = virt_start - virt_aligned;
+
+    // cколько страниц нужно отобразить, чтобы покрыть [virt_start, virt_start+size)
+    uint32_t page_count = page_get_num(offset + size);
+
+    for (uint32_t i = 0; i < page_count; i++)
+    {
+        uint32_t virt_page = virt_aligned + i * PAGE_SIZE;
+        // TODO без лишних flush
+        page_dict_map_page(pd, virt_page, flags);
+    }
+}
+
 // Отобразить виртуальный адрес на конкретный физический фрейм (адреса кратны 4 кб)
 void page_dict_map_page_to_phys(page_dict_t *pd, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags)
 {
@@ -142,6 +163,31 @@ void page_dict_map_page_to_phys(page_dict_t *pd, uint32_t virt_addr, uint32_t ph
     page_table->data[pt_idx] = phys_addr | flags | PAGE_PRESENT;
 
     tlb_cache_flush(virt_addr);
+}
+
+// отстатки от деления на 4кб (смещения) одинаковы у вирт и физ адресов
+void page_dict_map_interval_to_phys(page_dict_t *pd, uint32_t virt_start, uint32_t phys_start, uint32_t size, uint32_t flags)
+{
+    uint32_t phys_aligned = page_alligned_left(phys_start);
+    uint32_t offset = phys_start - phys_aligned;
+
+    // cколько страниц нужно отобразить, чтобы покрыть [phys, phys+size)
+    uint32_t page_count = page_get_num(offset + size);
+
+    // резервируем виртуальный адрес (выровненный по странице)
+    uint32_t virt_aligned = page_alligned_left(virt_start);
+
+    if (unlikely(offset != virt_start - virt_aligned))
+    {
+        PANIC("BAD ADDRS OFFSET");
+    }
+
+    for (uint32_t i = 0; i < page_count; i++)
+    {
+        uint32_t phys_page = phys_aligned + i * PAGE_SIZE;
+        uint32_t virt_page = virt_aligned + i * PAGE_SIZE;
+        page_dict_map_page_to_phys(pd, virt_page, phys_page, flags);
+    }
 }
 
 // Убрать отображение страницы
@@ -166,6 +212,22 @@ void page_dict_unmap_page(page_dict_t *pd, uint32_t virt_addr)
     // Очищаем запись в таблице
     pt->data[pt_idx] = 0;
     tlb_cache_flush(virt_addr);
+}
+
+void page_dict_unmap_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size)
+{
+    uint32_t virt_aligned = page_alligned_left(virt_start);
+    uint32_t offset = virt_start - virt_aligned;
+
+    // cколько страниц нужно отобразить, чтобы покрыть [virt_start, virt_start+size)
+    uint32_t page_count = page_get_num(offset + size);
+
+    for (uint32_t i = 0; i < page_count; i++)
+    {
+        uint32_t virt_page = virt_aligned + i * PAGE_SIZE;
+        // TODO без лишних flush
+        page_dict_unmap_page(pd, virt_page);
+    }
 }
 
 // Уничтожить всё адресное пространство
@@ -203,14 +265,15 @@ void page_dict_copy(page_dict_t *dst, page_dict_t *src)
     }
 }
 
-void page_dict_copy_linked(page_dict_t *dst, page_dict_t *src)
-{
-    page_container_copy(dst->page_dir, src->page_dir);
-    for (uint32_t pd_idx = 0; pd_idx < PAGE_DIR_ENTRIES; ++pd_idx)
-    {
-        uint32_t entry = src->page_dir->data[pd_idx];
-        if (!(entry & PAGE_PRESENT))
-            continue;
-        page_table_set_copied(CONTAINER_FROM_DIR_ELEMENT(entry));
-    }
-}
+// TODO нельзя использовать так как удаляет чужие таблицы
+// void page_dict_copy_linked(page_dict_t *dst, page_dict_t *src)
+// {
+//     page_container_copy(dst->page_dir, src->page_dir);
+//     for (uint32_t pd_idx = 0; pd_idx < PAGE_DIR_ENTRIES; ++pd_idx)
+//     {
+//         uint32_t entry = src->page_dir->data[pd_idx];
+//         if (!(entry & PAGE_PRESENT))
+//             continue;
+//         page_table_set_copied(CONTAINER_FROM_DIR_ELEMENT(entry));
+//     }
+// }

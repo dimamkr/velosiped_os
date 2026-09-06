@@ -21,15 +21,4 @@ static inline void vmm_page_dict_switch(page_dict_t *prev, page_dict_t *next)
     }
 }
 
-// мин число страниц содержащих столько-то памяти
-static inline uint32_t page_get_num(uint32_t size)
-{
-    return (size + 4095) >> 12;
-}
-
-static uint32_t page_alligned_left(uint32_t addr)
-{
-    return addr & ~4095;
-}
-
 #endif

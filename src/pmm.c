@@ -31,16 +31,12 @@ uint32_t pmm_alloc_frame()
     TASK_LOCKED_FUNCTION;
 
     uint32_t index = bitmap_alloc_interval(pmm_bitmap, 1);
-
-    pmm_access_count[index]++;
-
-    if (likely(index < pmm_bitmap->bits_count))
+    if (unlikely(index >= pmm_bitmap->bits_count))
     {
-        return index * PAGE_SIZE;
+        PANIC("BAD PMM FRAME ALLOC");
     }
-
-    PANIC("BAD PMM FRAME ALLOC");
-    return 0;
+    pmm_access_count[index]++;
+    return index * PAGE_SIZE;
 }
 
 bool pmm_free_frame(uint32_t phys_addr)
@@ -68,6 +64,30 @@ void pmm_set_alloced(uint32_t phys_addr)
     TASK_LOCKED_FUNCTION;
 
     uint32_t index = get_page_num(phys_addr);
+    if (unlikely(index >= pmm_bitmap->bits_count))
+    {
+        PANIC("BAD PMM FRAME SET ALLOCED");
+    }
     pmm_access_count[index]++;
     bitmap_set_bit(pmm_bitmap, index);
+}
+
+uint32_t pmm_get_counter(uint32_t phys_addr)
+{
+    uint32_t index = get_page_num(phys_addr);
+    if (unlikely(index >= pmm_bitmap->bits_count))
+    {
+        PANIC("BAD PMM GET COUNTER");
+    }
+    return pmm_access_count[index];
+}
+
+bool_t pmm_test_frame(uint32_t phys_addr)
+{
+    uint32_t index = get_page_num(phys_addr);
+    if (unlikely(index >= pmm_bitmap->bits_count))
+    {
+        PANIC("BAD PMM TEST FRAME");
+    }
+    return bitmap_test_bit(pmm_bitmap, index);
 }

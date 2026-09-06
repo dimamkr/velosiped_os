@@ -45,7 +45,9 @@
 #define EM_X86_64 62  /* AMD64 */
 #define EM_AVR 0x1F   /* AVR */
 #define EM_RISCV 0xF3 /* RISC-V */
-/* можно добавить другие по необходимости */
+
+// сегменты
+#define PT_LOAD 1 // programm type loadable segment
 
 /* ---- Некоторые вспомогательные макросы для проверок ---- */
 #define ELF_IS_32BIT(ehdr) ((ehdr)->e_ident[EI_CLASS] == ELFCLASS32)
@@ -75,24 +77,24 @@ typedef struct
     elf32_half e_shentsize; // размер section header
     elf32_half e_shnum;     // количество section headers
     elf32_half e_shstrndx;  // индекс строковой таблицы секций
-} elf32_ehdr_t;
+} elf32_ehdr_t;             // elf executable header
 
 // Program header (Phdr) – 32 байта
 typedef struct
 {
     elf32_word p_type;   // PT_LOAD (1), PT_INTERP (3), PT_NULL (0)...
     elf32_off p_offset;  // смещение в файле
-    elf32_addr p_vaddr;  // виртуальный адрес загрузки
-    elf32_addr p_paddr;  // физический (обычно не используется)
+    elf32_addr p_vaddr;  // виртуальный адрес загрузки сегмента
+    elf32_addr p_paddr;  // физический (не используется)
     elf32_word p_filesz; // размер в файле
     elf32_word p_memsz;  // размер в памяти (может быть больше из-за BSS)
     elf32_word p_flags;  // права (PF_R, PF_W, PF_X)
     elf32_word p_align;  // выравнивание (обычно 0x1000 для страниц)
-} elf32_phdr_t;
+} elf32_phdr_t;          // elf programm header
 
-bool elf_check(void *file_buff);
+bool_t elf_check(void *file_buff);
 void elf_print_info(void *file_buff);
-bool elf_try_exec(void *file_buff, task_t **new_task);
-void elf_test();
+
+bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container);
 
 #endif
