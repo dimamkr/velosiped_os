@@ -59,6 +59,8 @@ void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
 void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict);
 
+bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_size);
+
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
 
@@ -69,11 +71,8 @@ static inline void __task_unlock_trick()
     task_unlock();
 }
 
-#define TASK_LOCKED_FUNCTION                                                                  \
-    do                                                                                        \
-    {                                                                                         \
-        uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
-        task_lock();                                                                          \
-    } while (0);
+#define TASK_LOCKED_FUNCTION                                                              \
+    uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
+    task_lock();
 
 #endif

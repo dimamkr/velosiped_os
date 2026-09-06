@@ -1,8 +1,6 @@
 #include "elf.h"
 #include "konsole.h"
-
-#include "elf.h"
-#include "konsole.h"
+#include "vmm.h"
 
 /* Массивы строк для преобразования числовых значений */
 static const char *elf_class_str[] = {
@@ -121,7 +119,7 @@ void elf_print_info(void *file_buff)
     konsole_println("======================================");
 }
 
-bool elf_check(void *file_buff)
+bool_t elf_check(void *file_buff)
 {
     elf32_ehdr_t *ehdr = (elf32_ehdr_t *)file_buff;
 
@@ -137,4 +135,60 @@ bool elf_check(void *file_buff)
         return false;
 
     return true;
+}
+
+extern task_t *current_task;
+
+// TODO сделать нормальный код для загрузки больших последовательных кусков с флагами в словарь
+
+// Создаёт задачу из ELF-образа (ядро, без пользовательского режима)
+bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container)
+{
+    TASK_LOCKED_FUNCTION;
+
+    if (!elf_check(elf_data))
+    {
+        return 0;
+    }
+
+    elf32_ehdr_t *ehdr = (elf32_ehdr_t *)elf_data;
+
+    // Создаём отдельное адресное пространство на основе ядерного
+    *page_dict_container = vmm_create_process_kernel_page_dict();
+
+    page_dict_t *old_page_dict = current_task->page_dict;
+
+    // временное переключение на новый словарь
+    page_dict_switch(*page_dict_container);
+
+    // Обработка program headers (загружаемые сегменты)
+    elf32_phdr_t *phdr = (elf32_phdr_t *)(elf_data + ehdr->e_phoff);
+    for (uint32_t i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+
+        uint32_t vaddr = phdr[i].p_vaddr;
+        uint32_t memsz = phdr[i].p_memsz;
+        uint32_t filesz = phdr[i].p_filesz;
+        uint32_t offset = phdr[i].p_offset;
+
+        page_dict_map_interval(*page_dict_container, vaddr, memsz, PAGE_KERNEL_FLAGS);
+
+        // Копируем данные из файла в виртуальную память
+        memcpy((void *)vaddr, elf_data + offset, filesz);
+
+        // по соглашению лишние байты заполнены нулями
+        if (memsz > filesz)
+        {
+            memset((void *)(vaddr + filesz), 0, memsz - filesz);
+        }
+    }
+
+    // Точка входа
+    *entry_container = ehdr->e_entry;
+
+    page_dict_switch(old_page_dict);
+
+    return 1;
 }

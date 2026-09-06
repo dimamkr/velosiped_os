@@ -5,14 +5,16 @@
 #include "konsole.h"
 #include "linked_list.h"
 #include "vmm.h"
+#include "elf.h"
 
 task_t tasks[MAX_TASKS];
 static linked_list_node_t *current_task_node;
 static uint32_t task_count;
 static bool skipped_scheduler_tick = false;
-static bool locked = false;
+static uint32_t locked = 0;
 
 task_t *current_task = NULL;
+task_t *kernel_task = NULL;
 volatile uint32_t need_reschedule;
 
 task_t *to_destroy_accumulator = NULL;
@@ -97,23 +99,35 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
 void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
     task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_LARGE);
+    lazy->page_dict = kernel_page_dict;
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
     task_set_current(lazy);
 
     task_create(k_entry, arg, stack_size);
+    kernel_task = &tasks[1];
+    kernel_task->page_dict = kernel_page_dict;
     task_set_current(&tasks[1]); // задача ядра
 }
 
-// Создание новой задачи, возвращает pid
+static inline void _task_create_node(task_t *task)
+{
+    linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
+    task->node = node;
+}
+
+// Создание новой задачи
 void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     if (task_count >= MAX_TASKS)
         PANIC("TOO MANY TASKS");
 
     task_t *task = task_init_default(entry, arg, stack_size);
+    if (current_task)
+    {
+        task->page_dict = current_task->page_dict;
+    }
 
-    linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
-    task->node = node;
+    _task_create_node(task);
 }
 
 // задача но со своим словарем страниц
@@ -122,8 +136,21 @@ void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, 
     task_t *task = task_init_default(entry, arg, stack_size);
     task->page_dict = page_dict;
 
-    linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
-    task->node = node;
+    _task_create_node(task);
+}
+
+// создать процесс на основе elf файла
+// сама создает словарь
+bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_size)
+{
+    uint32_t entry;
+    page_dict_t *page_dict;
+    if (!elf_load(elf_data, &entry, &page_dict))
+    {
+        return false;
+    }
+
+    task_create_process((void (*)(void *))entry, arg, stack_size, page_dict);
 }
 
 static inline void process_task_state(task_t *task, uint32_t time_milisec)
@@ -203,9 +230,7 @@ void task_destroy_from_accumulator()
 {
     if (to_destroy_accumulator->page_dict != kernel_page_dict)
     {
-        // ВАЖНО ЧИСТЯТСЯ СТРАНИЦЫ ЯДРА ОЧЕНЬ ПЛОХО !!!!!!!!!!!!!
-        // TODO нельзя чтобы область ядра считалась свободной
-        // page_dict_destroy(to_destroy_accumulator->page_dict);
+        page_dict_destroy(to_destroy_accumulator->page_dict);
     }
 
     vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
@@ -218,7 +243,8 @@ void task_destroy_from_accumulator()
 // Завершение задачи
 void task_exit()
 {
-    task_lock();
+    // другого способа защитить критические структуры нет
+    asm volatile("cli");
 
     if (current_task->pid == 0)
     {
@@ -252,13 +278,13 @@ void task_sleep(uint32_t time_milisec)
 
 void task_lock()
 {
-    locked = true;
+    locked++;
 }
 
 void task_unlock()
 {
-    locked = false;
-    if (skipped_scheduler_tick)
+    locked--;
+    if (locked == 0 && skipped_scheduler_tick)
     {
         task_yield();
     }

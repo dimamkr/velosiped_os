@@ -33,8 +33,7 @@ typedef struct
 
 typedef struct
 {
-    page_container_t *page_dir;   // вирт адрес директории
-    dynamic_array_t *page_tables; // хранит вирт адреса таблиц
+    page_container_t *page_dir; // вирт адрес директории
 } page_dict_t;
 
 // Создание нового пустого каталога
@@ -45,11 +44,27 @@ void page_dict_unmap_page(page_dict_t *pd, uint32_t virt_addr);
 void page_dict_destroy(page_dict_t *pd);
 void page_dict_map_page_to_phys(page_dict_t *pd, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
 void page_dict_copy(page_dict_t *dst, page_dict_t *src);
+void page_dict_copy_linked(page_dict_t *dst, page_dict_t *src);
+
+void page_dict_map_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t flags);
+void page_dict_map_interval_to_phys(page_dict_t *pd, uint32_t virt_start, uint32_t phys_start, uint32_t size, uint32_t flags);
+void page_dict_unmap_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size);
 
 // переключение на данный каталог
 static inline void page_dict_switch(page_dict_t *pd)
 {
     paging_load_directory((uint32_t)ram_kernel_to_phys(pd->page_dir));
+}
+
+// мин число страниц содержащих столько-то памяти
+static inline uint32_t page_get_num(uint32_t size)
+{
+    return (size + 4095) >> 12;
+}
+
+static uint32_t page_alligned_left(uint32_t addr)
+{
+    return addr & ~4095;
 }
 
 #endif
