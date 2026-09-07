@@ -31,6 +31,23 @@ static inline void tlb_cache_flush(uint32_t virt_addr)
     asm volatile("invlpg (%0)" : : "r"(virt_addr) : "memory");
 }
 
+// общая функция приведения адреса
+uint32_t page_dict_vaddr_to_phys(page_dict_t *pd, void *virt_addr)
+{
+    uint32_t pd_index = PD_INDEX(virt_addr);
+    uint32_t pt_index = PT_INDEX(virt_addr);
+    uint32_t offset = OFFSET(virt_addr);
+
+    int32_t dir_entry = pd->page_dir->data[pd_index];
+    ASSERT(dir_entry & PAGE_PRESENT);
+
+    page_container_t *pt = CONTAINER_FROM_DIR_ELEMENT(dir_entry);
+    uint32_t pt_entry = pt->data[pt_index];
+    ASSERT(pt_entry & PAGE_PRESENT);
+
+    return PAGE_ADDR(pt_entry) + offset;
+}
+
 // возвращает вирт адрес page_container_t
 page_container_t *page_container_create(bool clean)
 {

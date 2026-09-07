@@ -29,6 +29,11 @@ void vmm_init(void)
     page_dict_switch(kernel_page_dict);
 }
 
+uint32_t vmm_vaddr_to_phys(void *virt_addr)
+{
+    return page_dict_vaddr_to_phys(current_task->page_dict, virt_addr);
+}
+
 static uint32_t mmio_next_virt = MMIO_VIRT_BASE;
 // вирт аллокация целого числа страниц начиная с физ адреса
 // возвращает виртуальный адрес данного физического
@@ -52,9 +57,9 @@ void *vmm_map_mmio(uint32_t phys, uint32_t size)
     return (void *)(virt_aligned + offset);
 }
 
-void vmm_unmap_page(uint32_t virt_addr)
+void vmm_unmap_page(void *virt_addr)
 {
-    page_dict_unmap_page(current_task->page_dict, virt_addr);
+    page_dict_unmap_page(current_task->page_dict, (uint32_t)virt_addr);
 }
 
 // для создания процессов

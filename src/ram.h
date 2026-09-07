@@ -1,6 +1,8 @@
 #ifndef RAM_H
 #define RAM_H
 
+#include "system.h"
+
 // схема физической оперативной памяти
 
 // TODO получать размер ram из прерывания биоса когда все остальное заработает
@@ -27,11 +29,13 @@
 
 static inline void *ram_kernel_to_virt(void *phys_addr)
 {
+    ASSERT((uint32_t)phys_addr <= (KERNEL_END - RAM_VIRTUAL_START));
     return phys_addr + RAM_VIRTUAL_START;
 }
 
 static inline void *ram_kernel_to_phys(void *virt_addr)
 {
+    ASSERT((uint32_t)virt_addr >= RAM_VIRTUAL_START);
     return virt_addr - RAM_VIRTUAL_START;
 }
 

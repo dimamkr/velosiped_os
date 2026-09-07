@@ -49,6 +49,7 @@ void page_dict_copy_linked(page_dict_t *dst, page_dict_t *src);
 void page_dict_map_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t flags);
 void page_dict_map_interval_to_phys(page_dict_t *pd, uint32_t virt_start, uint32_t phys_start, uint32_t size, uint32_t flags);
 void page_dict_unmap_interval(page_dict_t *pd, uint32_t virt_start, uint32_t size);
+uint32_t page_dict_vaddr_to_phys(page_dict_t *pd, void *virt_addr);
 
 // переключение на данный каталог
 static inline void page_dict_switch(page_dict_t *pd)
