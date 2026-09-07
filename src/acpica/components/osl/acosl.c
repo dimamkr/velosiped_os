@@ -33,7 +33,7 @@ ACPI_PHYSICAL_ADDRESS AcpiOsGetRootPointer(void)
     // сканируем адреса, ищем таблицу
     // диапазон 0x000E0000-0x000FFFFF, выравнивание 16 байт
 
-    void *start_scan_addr = ram_kernel_to_virt((void*)0x000E0000);
+    void *start_scan_addr = vmm_map_mmio(0x000E0000, 131072);
     void *end_scan_addr = start_scan_addr + 131072;
 
     for (void *cur = start_scan_addr;cur < end_scan_addr;cur += 16)
@@ -172,9 +172,7 @@ void AcpiOsFree(void *Memory)
 
 void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS Where, ACPI_SIZE Length)
 {
-    if (Where + Length < 64*MB)
-        return ram_kernel_to_virt((void*)(uint32_t)Where);
-    return vmm_map_mmio((uint32_t)Where, Length / 4096 + ((Length % 4096) > 0));
+    return vmm_map_mmio((uint32_t)Where, Length);
 }
                    
 void AcpiOsUnmapMemory(void *LogicalAddress, ACPI_SIZE Size)
@@ -511,16 +509,14 @@ void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *Format, ...)
     va_list args;
     va_start(args, Format);
 
-    konsole_print(Format);
-    //konsole_vprintf(Format, args);
+    konsole_vprintf(Format, args);
     
     va_end(args);
 }
 
 void AcpiOsVprintf(const char *Format, va_list Args)
 {
-    konsole_print(Format);
-    //konsole_vprintf(Format, Args);
+    konsole_vprintf(Format, Args);
 }
 
 void AcpiOsRedirectOutput(void *Destination)

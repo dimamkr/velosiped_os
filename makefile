@@ -81,11 +81,11 @@ OBJECTS = $(C_OBJECTS) $(ASM_OBJECTS) $(ACPICA_OBJECTS)
 # ============================================================
 
 # Сборка (релиз) – очистка + сборка образа
-all: clean $(BUILD_DIR)/myos.img
+all: $(BUILD_DIR)/myos.img
 	@echo "✅ Build completed (release)."
 
 # Сборка с отладочной информацией
-build-debug: clean
+build-debug:
 	@echo "Building with debug info..."
 	$(MAKE) debug-internal
 

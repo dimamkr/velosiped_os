@@ -111,6 +111,9 @@ void kernel_main_task(void *_)
     ACPI_STATUS result;
 
     PRINT_INIT("ACPI");
+    konsole_println("");
+
+    konsole_set_warning_color();
 
     if (ACPI_FAILURE(result = AcpiInitializeSubsystem()))
     {
