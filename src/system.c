@@ -44,8 +44,7 @@ void halt()
 }
 
 // размер в байтах
-__attribute__((optimize("O3,unroll-loops")))
-void memcpy(void *dst, const void *src, uint32_t size)
+__attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
 {
     byte_t *_dst = dst;
     const byte_t *_src = src;
@@ -76,11 +75,12 @@ void memset(void *ptr, byte_t value, uint32_t size)
 // оптимизировать
 // размер в байтах; возвращает равны ли
 __attribute__((optimize("O3,unroll-loops")))
-bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size)
+bool_t
+memcmp(void *ptr_a, void *ptr_b, uint32_t size)
 {
     uint32_t i = 0;
 
-    for (; i+4 <= size; i += 4)
+    for (; i + 4 <= size; i += 4)
     {
         if (*((uint32_t *)(ptr_a + i)) != *((uint32_t *)(ptr_b + i)))
         {
@@ -99,29 +99,28 @@ bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size)
     return true;
 }
 
-__attribute__((optimize("O3,unroll-loops")))
-void memswap(void *buff_1, void *buff_2, uint32_t size)
+__attribute__((optimize("O3,unroll-loops"))) void memswap(void *buff_1, void *buff_2, uint32_t size)
 {
     uint32_t i = 0;
 
-    for (;i+4 <= size;i += 4)
+    for (; i + 4 <= size; i += 4)
     {
-        uint32_t tmp = *((uint32_t*)buff_1);
-        *((uint32_t*)buff_1) = *((uint32_t*)buff_2);
-        *((uint32_t*)buff_2) = tmp;
+        uint32_t tmp = *((uint32_t *)buff_1);
+        *((uint32_t *)buff_1) = *((uint32_t *)buff_2);
+        *((uint32_t *)buff_2) = tmp;
     }
 
-    for (;i < size;i++)
+    for (; i < size; i++)
     {
-        byte_t tmp = *((byte_t*)buff_1);
-        *((byte_t*)buff_1) = *((byte_t*)buff_2);
-        *((byte_t*)buff_2) = tmp;
+        byte_t tmp = *((byte_t *)buff_1);
+        *((byte_t *)buff_1) = *((byte_t *)buff_2);
+        *((byte_t *)buff_2) = tmp;
     }
 }
 
 bool_t uint32_less(void *a, void *b)
 {
-    return *(uint32_t*)a < *(uint32_t*)b;
+    return *(uint32_t *)a < *(uint32_t *)b;
 }
 
 void panic(char *msg, char *file, uint32_t line)
@@ -171,4 +170,12 @@ void panic(char *msg, char *file, uint32_t line)
 
     konsole_print("\nSystem halted.\n");
     halt();
+}
+
+// TODO написать более понятный вывод
+void panic_assert(char *msg, char *file, uint32_t line)
+{
+    konsole_set_panic_color();
+    konsole_println("ASSERT FAILED");
+    panic(msg, file, line);
 }

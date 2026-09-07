@@ -10,6 +10,7 @@
 
 bitmap_t *pmm_bitmap;
 uint32_t *pmm_access_count; // сколько задач покрывают на эту память
+uint32_t pmm_alloc_frame_start_addr;
 
 static inline uint32_t get_page_num(uint32_t phys_addr)
 {
@@ -23,6 +24,8 @@ void pmm_init()
 
     pmm_access_count = (uint32_t *)malloc(sizeof(uint32_t) * PAGES_COUNT);
     memset(pmm_access_count, 0, sizeof(uint32_t) * PAGES_COUNT);
+
+    pmm_alloc_frame_start_addr = get_page_num((uint32_t)ram_kernel_to_phys((void *)KERNEL_END) + 4 * KB);
 }
 
 // найти первую свободную страницу и получить адрес ее начала
@@ -30,7 +33,7 @@ uint32_t pmm_alloc_frame()
 {
     TASK_LOCKED_FUNCTION;
 
-    uint32_t index = bitmap_alloc_interval(pmm_bitmap, 1);
+    uint32_t index = bitmap_alloc_interval(pmm_bitmap, pmm_alloc_frame_start_addr);
     if (unlikely(index >= pmm_bitmap->bits_count))
     {
         PANIC("BAD PMM FRAME ALLOC");

@@ -66,13 +66,14 @@ extern volatile uint32_t need_reschedule;
 
 // трюк для автоматической расстановки task_lock/unlock
 
-static inline void __task_unlock_trick()
+static inline void __task_unlock_trick(void *_)
 {
+    (void)_;
     task_unlock();
 }
 
-#define TASK_LOCKED_FUNCTION                                                              \
-    uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
+#define TASK_LOCKED_FUNCTION                                                                                      \
+    __attribute__((unused)) uint32_t __task_lock_guard __attribute__((cleanup(__task_unlock_trick))) = 0xABACABA; \
     task_lock();
 
 #endif
