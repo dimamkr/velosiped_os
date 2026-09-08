@@ -3,6 +3,22 @@
 
 #include "types.h"
 
+#define IDT_SEL_KERNEL_CS 0x08 /* сегмент кода ядра */
+#define IDT_SEL_USER_CS 0x1B   /* сегмент кода пользователя */
+
+/* Типы шлюзов (флаги) */
+#define IDT_FLAG_PRESENT 0x80
+#define IDT_FLAG_RING0 0x00
+#define IDT_FLAG_RING3 0x60
+#define IDT_FLAG_INTERRUPT 0x0E /* 32-битный шлюз прерывания */
+#define IDT_FLAG_TRAP 0x0F      /* 32-битный шлюз ловушки */
+
+/* Комбинированные флаги (готовые для idt_set_gate) */
+#define IDT_GATE_KERNEL_INT (IDT_FLAG_PRESENT | IDT_FLAG_RING0 | IDT_FLAG_INTERRUPT) // 0x8E
+#define IDT_GATE_KERNEL_TRAP (IDT_FLAG_PRESENT | IDT_FLAG_RING0 | IDT_FLAG_TRAP)     // 0x8F
+#define IDT_GATE_USER_INT (IDT_FLAG_PRESENT | IDT_FLAG_RING3 | IDT_FLAG_INTERRUPT)   // 0xEE
+#define IDT_GATE_USER_TRAP (IDT_FLAG_PRESENT | IDT_FLAG_RING3 | IDT_FLAG_TRAP)       // 0xEF
+
 // Describes one IDT entry
 typedef struct
 {
@@ -56,7 +72,9 @@ extern void isr29(void);
 extern void isr30(void);
 extern void isr31(void);
 
-extern void isr48(void);
+extern void isr48(void); // смена контекста задач
+
+extern void isr128(void); // syscall
 
 // IRQ handlers (ISR 32-47)
 extern void irq0(void);

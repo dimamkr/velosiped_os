@@ -132,9 +132,8 @@ void bitmap_clear_interval(bitmap_t *this, uint32_t start_index, uint32_t end_in
 }
 
 // заполненяет 1 первый найденный интервал и возвращает индекс начала
-uint32_t bitmap_alloc_interval(bitmap_t *this, uint32_t length)
+uint32_t bitmap_alloc_interval(bitmap_t *this, uint32_t start_index, uint32_t length)
 {
-    uint32_t start_index = 0;
 
     while (start_index < this->bits_count)
     {

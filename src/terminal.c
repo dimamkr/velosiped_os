@@ -12,6 +12,7 @@
 #include "task.h"
 #include "argparse.h"
 #include "hash_table.h"
+#include "elf.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -884,6 +885,74 @@ bool_t terminal_remove(argparse_command_t *command)
     return true;
 }
 
+void foo(void *arg)
+{
+    konsole_println(arg);
+}
+
+bool_t terminal_exec(argparse_command_t *command)
+{
+    char *file_name = NULL;
+    char *process_arg = NULL;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == NULL && i == 0)
+            file_name = arg->name;
+        if (arg->value == NULL && i == 1)
+        {
+            process_arg = malloc(strlen(arg->name) + 1);
+            memcpy(process_arg, arg->name, strlen(arg->name) + 1);
+        }
+    }
+
+    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), file_name, false);
+
+    if (files == NULL)
+    {
+        konsole_println("Error: disk error");
+        return false;
+    }
+
+    if (files->elements_count == 0)
+    {
+        konsole_println("Error: No such file");
+        dynamic_array_destroy(files);
+        return false;
+    }
+
+    fat32_basic_file_info_t *file = terminal_resolve_filename(files);
+
+    if (file == NULL)
+    {
+        return false;
+    }
+    if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+    {
+        free(file);
+        konsole_println("Error: it isn't file");
+        return false;
+    }
+
+    void *buff = malloc(file->size + 1);
+
+    fat32_read_file(&info, file, 0, buff, file->size);
+
+    if (!task_create_process_from_elf(buff, process_arg, STACK_SIZE_SMALL))
+    {
+        konsole_println("Error: it isn't elf file");
+    }
+    task_yield();
+
+    free(file);
+    free(process_arg);
+    free(buff);
+
+    return true;
+}
+
 // --------- Хэндлер ---------
 
 void terminal_handle_command(const char *buffer)
@@ -924,6 +993,8 @@ void terminal_main_loop()
     terminal_register_command_handler("newfile", terminal_newfile);
     terminal_register_command_handler("newdir", terminal_newdir);
     terminal_register_command_handler("rm", terminal_remove);
+
+    terminal_register_command_handler("exec", terminal_exec);
 
     konsole_println("");
 
