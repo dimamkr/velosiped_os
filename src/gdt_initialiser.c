@@ -1,14 +1,13 @@
 #include "gdt_initialiser.h"
 #include "system.h"
+#include "tss.h"
 
 #pragma GCC optimize("no-optimize-sibling-calls")
 
 // Number of GDT entries
-#define GDT_COUNT 5
+#define GDT_COUNT 6
 // Number of IDT entries
 #define IDT_COUNT 256
-
-static void gdt_set_gate(int32_t, uint32_t, uint32_t, uint8_t, uint8_t);
 
 gdt_entry_t gdt_entries[GDT_COUNT];
 gdt_ptr_t gdt_ptr;
@@ -141,10 +140,14 @@ void gdt_init(void)
    */
 
    gdt_flush((uint32_t)&gdt_ptr);
+
+   tss_init(5);
 }
 
-static void gdt_set_gate(int32_t number, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity)
+void gdt_set_gate(int32_t number, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity)
 {
+   ASSERT(number < GDT_COUNT);
+
    gdt_entries[number].base_low = (base & 0xFFFF);
    gdt_entries[number].base_middle = (base >> 16) & 0xFF;
    gdt_entries[number].base_high = (base >> 24) & 0xFF;

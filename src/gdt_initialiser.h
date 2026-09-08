@@ -23,4 +23,6 @@ typedef struct
 
 void gdt_init(void);
 
+void gdt_set_gate(int32_t number, uint32_t base, uint32_t limit, uint8_t access, uint8_t granularity);
+
 #endif
