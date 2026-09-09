@@ -58,4 +58,18 @@ __attribute__((always_inline, artificial)) inline uint32_t _uint32_min(uint32_t 
     return a < b ? a : b;
 }
 
+#define min2(x, y) ({              \
+    typeof(x) _min1 = (x);         \
+    typeof(y) _min2 = (y);         \
+    (void)(&_min1 == &_min2);      \
+    _min1 < _min2 ? _min1 : _min2; \
+})
+
+#define max2(x, y) ({              \
+    typeof(x) _max1 = (x);         \
+    typeof(y) _max2 = (y);         \
+    (void)(&_max1 == &_max2);      \
+    _max1 > _max2 ? _max1 : _max2; \
+})
+
 #endif
