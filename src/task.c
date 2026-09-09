@@ -151,6 +151,7 @@ bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_si
     }
 
     task_create_process((void (*)(void *))entry, arg, stack_size, page_dict);
+    return true;
 }
 
 static inline void process_task_state(task_t *task, uint32_t time_milisec)

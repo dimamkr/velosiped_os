@@ -17,10 +17,6 @@
 
 void kernel_main_task(void *);
 
-// ------------------------------------------------------------
-// Битовая карта физической памяти (глобальная)
-// ------------------------------------------------------------
-
 #define PRINT_INIT(x)                   \
     do                                  \
     {                                   \
@@ -45,7 +41,7 @@ void kernel_main_task(void *);
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
     memcpy(_boot_disk_signature, param, 6); // сохраняем сигнатуру диска для поиска
-    
+
     interrupt_disable();
 
     heap_init();
@@ -94,7 +90,7 @@ void kernel_main_task(void *_)
     interrupt_enable();
 
     PRINT_INIT("AHCI");
-    if (ahci_init()) // TODO почему прерывание 14 при ahci_init()
+    if (ahci_init())
     {
         _ahci_supported = true;
         PRINT_OK;
@@ -153,6 +149,11 @@ void kernel_main_task(void *_)
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране
     // TODO дамп памяти
+
+    // TODO отдельная задача с большим стеком для тяжелых не супер требовательных
+    // к скорости bottom обработчиков прерываний
+
+    // TODO пользовательские процессы из 3 кольца и безопасность
 
     // for (int i = 1; i < 8; ++i)
     // {

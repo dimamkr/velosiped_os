@@ -33,7 +33,7 @@ uint32_t pmm_alloc_frame()
 {
     TASK_LOCKED_FUNCTION;
 
-    uint32_t index = bitmap_alloc_interval(pmm_bitmap, pmm_alloc_frame_start_addr);
+    uint32_t index = bitmap_alloc_interval(pmm_bitmap, pmm_alloc_frame_start_addr, 1);
     if (unlikely(index >= pmm_bitmap->bits_count))
     {
         PANIC("BAD PMM FRAME ALLOC");

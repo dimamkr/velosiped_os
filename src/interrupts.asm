@@ -6,6 +6,11 @@
 [EXTERN task_switch_from_isr]
 [EXTERN need_reschedule]
 
+[EXTERN syscall_handler]
+
+; TODO рефакторинг
+; много повторяющегося кода
+
 isr_common:
 	pusha                ; pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
 
@@ -157,7 +162,7 @@ IRQ 15, 47
 
 
 [GLOBAL isr48]
-; прерывание смены контекста
+; прерывание смены контекста 0x30
 isr48:
     cli
     push byte 0          ; фиктивный код ошибки
@@ -176,3 +181,36 @@ yield_common:
     mov gs, ax
 
     jmp task_switch_from_isr   ; делает переключение и iret
+
+[GLOBAL isr128]
+; прерывание syscall 0x128
+isr128:
+	cli
+    push byte 0          ; фиктивный код ошибки
+    push byte 128        ; номер прерывания
+    jmp syscall_common
+
+syscall_common:
+	pusha
+    mov ax, ds
+    push eax
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; вызываем обработчик ядра
+	push esp ; передача указателя на аргумент (чтобы не создался код очистки)
+    call syscall_handler
+    add esp, 4
+
+    pop eax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    popa ; возвращаемое значение хранится в eax и тут восстанавливается
+    add esp, 8
+    iret

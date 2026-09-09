@@ -30,7 +30,6 @@ typedef struct
     uint32_t ebp;
     uint32_t eip; // точка входа
 
-    uint32_t *raw_stack_start;
     uint32_t *stack_start; // выделенный стек
     uint32_t stack_size;
 
