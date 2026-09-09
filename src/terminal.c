@@ -1110,6 +1110,7 @@ void terminal_init()
     terminal_register_command_handler("exec", terminal_exec);
     terminal_register_command_handler("poweroff", terminal_poweroff);
     terminal_register_command_handler("reboot", terminal_reboot);
+}
 
 void terminal_main_loop()
 {
