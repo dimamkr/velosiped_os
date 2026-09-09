@@ -53,6 +53,8 @@ bool pmm_free_frame(uint32_t phys_addr)
         return false;
     }
 
+    ASSERT(phys_addr >= (KERNEL_END - RAM_VIRTUAL_START));
+
     if (unlikely(bitmap_test_bit(pmm_bitmap, index) == 0))
     {
         PANIC("BAD PMM FRAME FREE");

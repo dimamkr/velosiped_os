@@ -45,6 +45,8 @@ void scheduler_start()
 // ВАЖНО РАЗМЕР СТЕКА ВЫРОВНЕН ПО STACK_ALIGN
 static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
+    ASSERT(task_count < MAX_TASKS);
+
     task_t *task = &tasks[task_count];
     task->pid = task_count;
     task->state = TASK_READY;
@@ -118,9 +120,6 @@ static inline void _task_create_node(task_t *task)
 // Создание новой задачи
 void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
-    if (task_count >= MAX_TASKS)
-        PANIC("TOO MANY TASKS");
-
     task_t *task = task_init_default(entry, arg, stack_size);
     if (current_task)
     {
