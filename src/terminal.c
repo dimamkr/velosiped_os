@@ -19,16 +19,68 @@ static int terminal_input_buff_lenght;
 static bool_t terminal_EOI_flag;
 static bool_t terminal_cancelled_flag;
 
+dynamic_array_t *command_history; // хранит указатели на начала строк (char*)
+int command_history_index;
+
 fat32_info_t info;
 fat32_basic_file_info_t root;
 dynamic_array_t *path;
 
 hash_table_t *cmd_handlers;
 
-static inline void terminal_buff_add_symbol(char symbol)
+static inline void terminal_input_buff_add_symbol(char symbol)
 {
     terminal_input_buff[terminal_input_buff_lenght] = symbol;
     terminal_input_buff_lenght++;
+}
+
+static inline void terminal_command_erase_last()
+{
+    if (terminal_input_buff_lenght > 0)
+    {
+        konsole_putch('\b');
+        terminal_input_buff[--terminal_input_buff_lenght] = 0;
+    }
+}
+
+static inline void terminal_command_clear()
+{
+    while (terminal_input_buff_lenght)
+    {
+        terminal_command_erase_last();
+    }
+}
+
+static inline void terminal_input_buff_reload_from_command_history()
+{
+    if (command_history_index == command_history->elements_count)
+    {
+        terminal_command_clear();
+        return;
+    }
+
+    if (command_history_index < 0)
+        return;
+
+    char *command = *(char **)dynamic_array_get_by_index(command_history, command_history_index);
+
+    terminal_command_clear();
+    for (uint32_t i = 0; i < strlen(command); ++i)
+    {
+        terminal_input_buff_add_symbol(command[i]);
+        konsole_putch(command[i]);
+    }
+}
+
+static inline void terminal_command_history_add()
+{
+    char *str = malloc(terminal_input_buff_lenght + 1);
+    memcpy(str, terminal_input_buff, terminal_input_buff_lenght);
+    str[terminal_input_buff_lenght] = 0; // чтобы было понятно где конец строки
+
+    dynamic_array_push_back(command_history, &str);
+
+    command_history_index = command_history->elements_count;
 }
 
 void terminal_process_keyboard_events(void)
@@ -55,7 +107,7 @@ void terminal_process_keyboard_events(void)
             }
             else if (LOWER(ev.keycode) == 'c')
             {
-                terminal_buff_add_symbol(0);
+                terminal_input_buff_add_symbol(0);
                 terminal_cancelled_flag = true;
                 continue;
             }
@@ -65,25 +117,29 @@ void terminal_process_keyboard_events(void)
         switch (ev.keycode)
         {
         case KEY_BACKSPACE:
-            if (terminal_input_buff_lenght > 0)
-            {
-                konsole_putch('\b');
-                terminal_input_buff[--terminal_input_buff_lenght] = 0;
-            }
+            terminal_command_erase_last();
             break;
         case KEY_ENTER:
-            terminal_buff_add_symbol(0);
+            terminal_input_buff_add_symbol(0);
             terminal_EOI_flag = true;
             break;
         case KEY_SPACE:
-            terminal_buff_add_symbol(' ');
+            terminal_input_buff_add_symbol(' ');
             konsole_putch(' ');
+            break;
+        case KEY_UP:
+            command_history_index = max2(command_history_index - 1, 0);
+            terminal_input_buff_reload_from_command_history();
+            break;
+        case KEY_DOWN:
+            command_history_index = min2(command_history_index + 1, command_history->elements_count);
+            terminal_input_buff_reload_from_command_history();
             break;
         default:
             if (ev.keycode < 0x80)
             { // ASCII
                 char ch = (char)ev.keycode;
-                terminal_buff_add_symbol(ch);
+                terminal_input_buff_add_symbol(ch);
                 konsole_putch(ch);
             }
             // Остальные спецклавиши игнорируем
@@ -107,6 +163,7 @@ static inline const char *terminal_get_input_line()
 
     if (terminal_EOI_flag)
     {
+        terminal_command_history_add();
         konsole_println("");
         return terminal_input_buff;
     }
@@ -890,10 +947,12 @@ void foo(void *arg)
     konsole_println(arg);
 }
 
+// TODO почему если кучу раз подряд запустить то прерывание 14
 bool_t terminal_exec(argparse_command_t *command)
 {
     char *file_name = NULL;
-    char *process_arg = NULL;
+    char *process_arg = malloc(3);
+    memcpy(process_arg, ";(", 3);
 
     for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
@@ -903,6 +962,7 @@ bool_t terminal_exec(argparse_command_t *command)
             file_name = arg->name;
         if (arg->value == NULL && i == 1)
         {
+            free(process_arg);
             process_arg = malloc(strlen(arg->name) + 1);
             memcpy(process_arg, arg->name, strlen(arg->name) + 1);
         }
@@ -940,7 +1000,7 @@ bool_t terminal_exec(argparse_command_t *command)
 
     fat32_read_file(&info, file, 0, buff, file->size);
 
-    if (!task_create_process_from_elf(buff, process_arg, STACK_SIZE_SMALL))
+    if (!task_create_process_from_elf(buff, process_arg, 10 * STACK_SIZE_LARGE))
     {
         konsole_println("Error: it isn't elf file");
     }
@@ -970,7 +1030,7 @@ void terminal_handle_command(const char *buffer)
     argparse_free_command(&command);
 }
 
-void terminal_main_loop()
+void terminal_init()
 {
     fat32_get_bootable_partition_info_sync(&info);
     path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
@@ -979,6 +1039,9 @@ void terminal_main_loop()
     dynamic_array_push_back(path, &root);
 
     cmd_handlers = hash_table_create();
+
+    command_history = dynamic_array_create(sizeof(char *));
+    command_history_index = 0;
 
     terminal_register_command_handler("help", terminal_print_help);
     terminal_register_command_handler("time", terminal_print_time);
@@ -993,11 +1056,12 @@ void terminal_main_loop()
     terminal_register_command_handler("newfile", terminal_newfile);
     terminal_register_command_handler("newdir", terminal_newdir);
     terminal_register_command_handler("rm", terminal_remove);
-
     terminal_register_command_handler("exec", terminal_exec);
+}
 
+void terminal_main_loop()
+{
     konsole_println("");
-
     while (1)
     {
         terminal_print_path(NULL);
