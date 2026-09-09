@@ -373,7 +373,6 @@ AcpiPsGetDepthNext (
         Arg = AcpiPsGetArg (Parent, 0);
         while (Arg && (Arg != Origin) && (Arg != Op))
         {
-
             ASL_CV_LABEL_FILENODE (Arg);
             Arg = Arg->Common.Next;
         }

@@ -101,7 +101,7 @@ run: all
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
 	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -no-reboot -display sdl -vga std -m 256
+	    -display sdl -vga std -m 256
 
 # Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug
@@ -109,7 +109,7 @@ run-debug: build-debug
 	@echo "Starting QEMU with GDB server (for VS Code)..."
 	@echo "========================================="
 	@(nohup qemu-system-i386 -d int -D build/interrupts.log -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -no-reboot -display sdl -vga std -s -S -m 256 \
+	    -display sdl -vga std -s -S -m 256 \
 	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@echo "Waiting for QEMU to open port 1234..."
 	@timeout=0; \
@@ -181,7 +181,7 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	@echo "Creating disk image with MBR and FAT32..."
 
 	# создание тестового elf файла
-	bash test/elf/build_test.sh
+	# bash test/elf/build_test.sh
 
 	# 1. Пустой образ 64 МБ
 	dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
@@ -195,7 +195,7 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	# 4. Создаём временную папку с контентом
 	mkdir -p fat32_content
 	# 4.1 Текстовые файлы
-	cp test/elf/test_elf.elf fat32_content/E
+	# cp test/elf/test_elf.elf fat32_content/E
 	echo "Hello, FAT32 World!" > fat32_content/hello.txt
 	echo "This is a test file for FAT32 parser." > fat32_content/info.txt
 	echo "Line 1" > fat32_content/multiline.txt

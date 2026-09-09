@@ -46,7 +46,7 @@ ACPI_PHYSICAL_ADDRESS AcpiOsGetRootPointer(void)
                 checksum += *(byte_t*)cur1;
 
             if (checksum == 0)
-                return (ACPI_PHYSICAL_ADDRESS)(uint32_t)ram_kernel_to_phys(cur);
+                return (ACPI_PHYSICAL_ADDRESS)vmm_vaddr_to_phys(cur);
         }
     }
 
@@ -112,7 +112,12 @@ ACPI_STATUS AcpiOsCreateSemaphore(UINT32 MaxUnits, UINT32 InitialUnits, ACPI_SEM
 
     *OutHandle = semaphore_create(MaxUnits);
     
-    if (semaphore_acquire(*OutHandle, InitialUnits, SYNC_TIMEOUT_INFINITE))
+    if (InitialUnits != MaxUnits)
+    {
+        if (semaphore_acquire(*OutHandle, MaxUnits - InitialUnits, SYNC_TIMEOUT_INFINITE))
+            return AE_OK;
+    }
+    else
         return AE_OK;
 
     semaphore_destroy(*OutHandle);
@@ -172,7 +177,10 @@ void AcpiOsFree(void *Memory)
 
 void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS Where, ACPI_SIZE Length)
 {
-    return vmm_map_mmio((uint32_t)Where, Length);
+    void *result = vmm_map_mmio((uint32_t)Where, Length);
+    // konsole_printf("Map %08x -> %08x\n", (uint32_t)Where, result);
+
+    return result;
 }
                    
 void AcpiOsUnmapMemory(void *LogicalAddress, ACPI_SIZE Size)
@@ -182,7 +190,7 @@ void AcpiOsUnmapMemory(void *LogicalAddress, ACPI_SIZE Size)
 
 ACPI_STATUS AcpiOsGetPhysicalAddress(void *LogicalAddress, ACPI_PHYSICAL_ADDRESS *PhysicalAddress)
 {
-    *PhysicalAddress = (ACPI_PHYSICAL_ADDRESS)(uint32_t)ram_kernel_to_phys(LogicalAddress);
+    *PhysicalAddress = vmm_vaddr_to_phys(LogicalAddress);
 
     return AE_OK;
 }
@@ -202,11 +210,14 @@ struct ACPI_CACHE {
 
 ACPI_STATUS AcpiOsCreateCache(char *CacheName, UINT16 ObjectSize, UINT16 MaxDepth, ACPI_CACHE_T **ReturnCache)
 {
+    // return AE_OK;
+    TASK_LOCKED_FUNCTION;
+
     struct ACPI_CACHE *result = malloc(sizeof(struct ACPI_CACHE));
     result->object_size = (uint32_t)ObjectSize;
     result->max_depth = MaxDepth;
     result->buffer = malloc((uint32_t)MaxDepth * (uint32_t)ObjectSize);
-    result->free_blocks = dynamic_array_create(2);
+    result->free_blocks = dynamic_array_create(sizeof(uint16_t));
 
     for (uint16_t i = 0;i < MaxDepth;i++)
         dynamic_array_push_back(result->free_blocks, &i);
@@ -218,6 +229,9 @@ ACPI_STATUS AcpiOsCreateCache(char *CacheName, UINT16 ObjectSize, UINT16 MaxDept
 
 ACPI_STATUS AcpiOsDeleteCache(ACPI_CACHE_T *Cache)
 {
+    return AE_OK;
+    TASK_LOCKED_FUNCTION;
+
     struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
 
     free(cache->buffer);
@@ -229,32 +243,60 @@ ACPI_STATUS AcpiOsDeleteCache(ACPI_CACHE_T *Cache)
 
 ACPI_STATUS AcpiOsPurgeCache(ACPI_CACHE_T *Cache)
 {
+    return AE_OK;
+
+    /*
+    TASK_LOCKED_FUNCTION;
+
     struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
 
     dynamic_array_clear(cache->free_blocks);
+    for (uint16_t i = 0;i < cache->max_depth;i++)
+        dynamic_array_push_back(cache->free_blocks, &i);
 
     return AE_OK;
+    */
 }
 
 void *AcpiOsAcquireObject(ACPI_CACHE_T *Cache)
 {
+    // return AcpiOsAllocateZeroed(10000);
+    TASK_LOCKED_FUNCTION;
+
     struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
 
     if (cache->free_blocks->elements_count == 0)
-        return NULL;
+    {
+        return AcpiOsAllocateZeroed(cache->object_size);
+    }
 
-    void *result = cache->buffer + (uint32_t)cache->object_size * (*(uint16_t*)dynamic_array_get_bottom(cache->free_blocks));
+    uint16_t *index = dynamic_array_get_bottom(cache->free_blocks);
+
+    void *result = cache->buffer + ((uint32_t)cache->object_size) * (uint32_t)(*index);
     dynamic_array_pop_front(cache->free_blocks);
+
+    memset(result, '\0', cache->object_size);
 
     return result;
 }
 
 ACPI_STATUS AcpiOsReleaseObject (ACPI_CACHE_T *Cache, void *Object)
 {
+    // free(Object);
+    // return AE_OK;
+    TASK_LOCKED_FUNCTION;
+
     struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
 
-    uint16_t index = (uint32_t)(Object - cache->buffer) / cache->object_size;
+    uint32_t index = (uint32_t)(Object - cache->buffer) / cache->object_size;
+    uint32_t remainder = (uint32_t)(Object - cache->buffer) % cache->object_size;
 
+    if (index >= cache->max_depth || remainder != 0)
+    {
+        AcpiOsFree(Object);
+        return AE_OK;
+    }
+    
     dynamic_array_push_back(cache->free_blocks, &index);
 
     return AE_OK;
@@ -379,7 +421,7 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 
 ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 *Value, UINT32 Width)
 {
-    void *addr = vmm_map_mmio(Address, 1);
+    void *addr = vmm_map_mmio(Address, Width / 8);
 
     switch (Width)
     {
@@ -399,7 +441,7 @@ ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 *Value, UINT3
 
 ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 Value, UINT32 Width)
 {
-    void *addr = vmm_map_mmio(Address, 1);
+    void *addr = vmm_map_mmio(Address, Width / 8);
 
     switch (Width)
     {
@@ -445,6 +487,7 @@ ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 *V
 
 ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 Value, UINT32 Width)
 {
+    konsole_printf("WritePci called\n");
     if (Width < 32)
     {
         uint32_t old = pci_read(PCI_MAKE_DEVICE_OFFSET(PciId->Bus, PciId->Device, PciId->Function), Reg & 0xFC);
