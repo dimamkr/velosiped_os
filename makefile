@@ -20,13 +20,38 @@ RM      = rm -rf
 SRC_DIR   = src
 BUILD_DIR = build
 
+# ACPICA
+ACPICA_DIR = $(SRC_DIR)/acpica
+ACPICA_INCLUDE = $(ACPICA_DIR)/include
+
+ALL_ACPICA_SOURCES = $(wildcard $(ACPICA_DIR)/components/*/*.c)
+
+# Runtime ACPICA для ядра:
+# debugger и disassembler не нужны.
+ACPICA_SOURCES = $(filter-out \
+    $(ACPICA_DIR)/components/debugger/%.c \
+    $(ACPICA_DIR)/components/disassembler/%.c \
+    $(ACPICA_DIR)/components/resources/rsdump.c, \
+    $(ALL_ACPICA_SOURCES))
+
+ACPICA_OBJECTS = $(patsubst \
+    $(ACPICA_DIR)/%.c, \
+    $(BUILD_DIR)/acpica/%.o, \
+    $(ACPICA_SOURCES))
+
 # Флаги для релизной сборки
 CFLAGS_RELEASE = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR)
+                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR) -Werror
 
 # Флаги для отладочной сборки
 CFLAGS_DEBUG   = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR)
+                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR) -Werror
+
+# Флаги для ACPICA (отключаем варнинги, которые мешают сборке)
+# ACPICA
+ACPICA_CFLAGS = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
+ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
+ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
 
 # Флаги для NASM (релиз и отладка)
 NASMFLAGS_RELEASE = -f elf32
@@ -49,18 +74,18 @@ ASM_SOURCES = $(filter-out $(SRC_DIR)/boot1.asm $(SRC_DIR)/boot2.asm, $(ALL_ASM)
 # Объектные файлы
 C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
 ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
-OBJECTS     = $(C_OBJECTS) $(ASM_OBJECTS)
+OBJECTS = $(C_OBJECTS) $(ASM_OBJECTS) $(ACPICA_OBJECTS)
 
 # ============================================================
 # Основные цели
 # ============================================================
 
 # Сборка (релиз) – очистка + сборка образа
-all: clean $(BUILD_DIR)/myos.img
+all: $(BUILD_DIR)/myos.img
 	@echo "✅ Build completed (release)."
 
 # Сборка с отладочной информацией
-build-debug: clean
+build-debug:
 	@echo "Building with debug info..."
 	$(MAKE) debug-internal
 
@@ -76,7 +101,7 @@ run: all
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
 	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -no-reboot -display sdl -vga std -m 256
+	    -display sdl -vga std -m 256
 
 # Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug
@@ -84,7 +109,7 @@ run-debug: build-debug
 	@echo "Starting QEMU with GDB server (for VS Code)..."
 	@echo "========================================="
 	@(nohup qemu-system-i386 -d int -D build/interrupts.log -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -no-reboot -display sdl -vga std -s -S -m 256 \
+	    -display sdl -vga std -s -S -m 256 \
 	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@echo "Waiting for QEMU to open port 1234..."
 	@timeout=0; \
@@ -147,11 +172,16 @@ $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf | $(BUILD_DIR)
 	readelf -l $<
 	@echo "kernel.bin file size: $$(wc -c < $@) bytes"
 
+# Сборка ACPICA
+$(BUILD_DIR)/acpica/%.o: $(ACPICA_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(ACPICA_CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
 	@echo "Creating disk image with MBR and FAT32..."
 
 	# создание тестового elf файла
-	bash test/elf/build_test.sh
+	# bash test/elf/build_test.sh
 
 	# 1. Пустой образ 64 МБ
 	dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
@@ -165,7 +195,7 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	# 4. Создаём временную папку с контентом
 	mkdir -p fat32_content
 	# 4.1 Текстовые файлы
-	cp test/elf/test_elf.elf fat32_content/E
+	# cp test/elf/test_elf.elf fat32_content/E
 	echo "Hello, FAT32 World!" > fat32_content/hello.txt
 	echo "This is a test file for FAT32 parser." > fat32_content/info.txt
 	echo "Line 1" > fat32_content/multiline.txt

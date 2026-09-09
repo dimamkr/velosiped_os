@@ -125,7 +125,7 @@ void dynamic_array_pop_back(dynamic_array_t *array)
     array->end = (array->end - 1) & (array->size - 1);
     array->elements_count--;
 
-    if (array->size > 1 && array->elements_count * 4 <= array->size)
+    if (array->size > 1 && array->elements_count * 4 < array->size)
         array_shrink_(array);
 }
 
@@ -137,7 +137,7 @@ void dynamic_array_pop_front(dynamic_array_t *array)
     array->start = (array->start + 1) & (array->size - 1);
     array->elements_count--;
 
-    if (array->size > 1 && array->elements_count * 4 <= array->size)
+    if (array->size > 1 && array->elements_count * 4 < array->size)
         array_shrink_(array);
 }
 

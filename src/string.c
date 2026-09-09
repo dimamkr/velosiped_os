@@ -27,6 +27,22 @@ __attribute__((optimize("O3,unroll-loops"))) int strcmp(const char *a, const cha
     }
 }
 
+__attribute__((optimize("O3,unroll-loops"))) int strncmp(const char *a, const char *b, uint32_t n)
+{
+    for (int i = 0;i < n; ++i)
+    {
+        if (a[i] == b[i])
+        {
+            if (a[i] == '\0')
+                return 0;
+        }
+        else
+        {
+            return a[i] > b[i] ? 1 : -1;
+        }
+    }
+}
+
 char *strdup(const char *src)
 {
     uint32_t len = strlen(src);
@@ -37,14 +53,63 @@ char *strdup(const char *src)
     return result;
 }
 
-void strcat(char *a, const char *b)
+void strcat(char *dst, const char *src)
 {
-    uint32_t len_a = strlen(a);
-    uint32_t len_b = strlen(b);
+    uint32_t len_dst = strlen(dst);
+    uint32_t len_src = strlen(src);
 
-    memcpy(a + len_a, b, len_b);
-    a[len_a + len_b] = '\0';
+    memcpy(dst + len_dst, src, len_src);
+    dst[len_dst + len_src] = '\0';
 }
+
+char *strncat(char *dst, const char *src, uint32_t n)
+{
+    uint32_t len_dst = strlen(dst);
+    uint32_t len_src = strlen(src);
+    uint32_t cnt = min(len_src, n);
+
+    memcpy(dst + len_dst, src, cnt);
+    dst[len_dst + cnt] = '\0';
+    
+    return dst;
+}
+
+
+int toupper (int c) // для совместимости с std
+{
+    return UPPER((char)c);
+}
+
+int tolower (int c) // для совместимости с std
+{
+    return LOWER((char)c);
+}
+
+int isxdigit(int c) // для совместимости с std
+{
+    return '0' <= c && c <= '9' || 'a' <= LOWER(c) && LOWER(c) <= 'f';
+}
+
+int isdigit(int c) // для совместимости с std
+{
+    return '0' <= c && c <= '9';
+}
+
+int isspace(int c) // для совместимости с std
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+}
+
+int isprint(int c) // для совместимости с std
+{
+    return (c >= 0x20 && c <= 0x7E);
+}
+
+int isalpha(int c) // для совместимости с std
+{
+    return ('a' <= LOWER(c) && LOWER(c) <= 'z');
+}
+
 
 __attribute__((optimize("O3,unroll-loops"))) void string_to_lower(char *s)
 {
@@ -59,7 +124,7 @@ __attribute__((optimize("O3,unroll-loops"))) void string_to_upper(char *s)
 }
 
 __attribute__((optimize("O3,unroll-loops")))
-uint32_t strstr(const char *haystack, const char *needle)
+char *strstr(const char *needle, const char *haystack)
 {
     // КМП с z-функцией
 
@@ -98,15 +163,37 @@ uint32_t strstr(const char *haystack, const char *needle)
             free(united);
             free(z_func);
 
-            return i - len_needle;
+            return (char*)haystack + i - len_needle;
         }
     }
 
     free(united);
     free(z_func);
 
-    return -1;
+    return NULL;
 }
+
+__attribute__((optimize("O3,unroll-loops")))
+char *strcpy(char *dst, const char *src)
+{
+    memcpy(dst, src, strlen(src) + 1);
+
+    return dst;
+}
+
+__attribute__((optimize("O3,unroll-loops")))
+char *strncpy(char *dst, const char *src, uint32_t n)
+{
+    uint32_t length = strlen(src);
+
+    memcpy(dst, src, min(length + 1, n));
+
+    if (length + 1 < n)
+        memset(dst, '\0', n - (length + 1));
+
+    return dst;
+}
+
 
 __attribute__((optimize("O3,unroll-loops")))
 uint32_t strchr(const char *str, char chr)
@@ -261,24 +348,27 @@ void uint32_to_string(uint32_t number, char *result, uint8_t base)
         result[--len] = DIGIT_BY_INDEX(number % base);
 }
 
-uint32_t string_to_uint32(char *str, uint8_t base)
+uint32_t strtoul(const char *str, const char **endsym, uint8_t base)
 {
     uint32_t result = 0;
-    uint32_t str_length = strlen(str);
-    uint32_t mul = 1;
 
-    if (str_length == 0)
-        return -1;
+    if (endsym)
+        *endsym = str;
 
-    for (uint32_t i = str_length - 1; i != -1; i--)
+    for (uint32_t i = 0; str[i] != '\0'; i++)
     {
+        if (isspace(str[i]))
+            continue;
+
         uint32_t index = INDEX_BY_DIGIT(str[i]);
 
         if (index >= base)
-            return -1;
+            break;
 
-        result += index * mul;
-        mul *= base;
+        result = result * base + index;
+
+        if (endsym)
+            (*endsym)++;
     }
 
     return result;

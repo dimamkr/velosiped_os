@@ -149,7 +149,7 @@ bool_t fat32_get_bootable_partition_info_sync(fat32_info_t *info);
 uint32_t fat32_fat_at_sync(fat32_info_t *info, uint32_t fat_index);
 bool_t fat32_fat_write_sync(fat32_info_t *info, uint32_t fat_index, uint32_t value);
 bool_t fat32_read_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *buffer);
-bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, const void *buffer);
+bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *buffer);
 void fat32_next_cluster_sync(fat32_info_t *info, fat32_position_t *position);
 dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info);
 bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);

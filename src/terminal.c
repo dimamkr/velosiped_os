@@ -14,6 +14,8 @@
 #include "hash_table.h"
 #include "elf.h"
 
+#include <acpica/include/acpi.h>
+
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
 static bool_t terminal_EOI_flag;
@@ -424,7 +426,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
         }
         else
         {
-            choice = string_to_uint32(choice_str, 10);
+            choice = strtoul(choice_str, NULL, 10);
 
             if (choice != -1 && choice < files->elements_count)
                 memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
@@ -464,9 +466,9 @@ bool_t terminal_view(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value, 10);
+            start_pos = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "bytes") == 0)
-            bytes_count = string_to_uint32(arg->value, 10);
+            bytes_count = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -625,7 +627,7 @@ bool_t terminal_write(argparse_command_t *command)
         if (arg->value == NULL)
             pattern = arg->name;
         else if (strcmp(arg->name, "start") == 0)
-            start_pos = string_to_uint32(arg->value, 10);
+            start_pos = strtoul(arg->value, NULL, 10);
         else if (strcmp(arg->name, "format") == 0)
         {
             if (strcmp(arg->value, "hex") == 0)
@@ -714,7 +716,7 @@ bool_t terminal_write(argparse_command_t *command)
             unsigned char write_byte[3];
             uint8_t cursor = 0;
 
-            for (unsigned char *cur = input_line;; cur++)
+            for (const unsigned char *cur = input_line;;cur++)
             {
                 if (*cur == ' ' || *cur == '\0')
                 {
@@ -728,7 +730,7 @@ bool_t terminal_write(argparse_command_t *command)
                         realloc(buffer, buffer_size);
                     }
 
-                    uint32_t byte_num = string_to_uint32(write_byte, 16);
+                    uint32_t byte_num = strtoul(write_byte, NULL, 16);
 
                     if (byte_num != -1)
                     {
@@ -1003,12 +1005,61 @@ bool_t terminal_exec(argparse_command_t *command)
     if (!task_create_process_from_elf(buff, process_arg, 10 * STACK_SIZE_LARGE))
     {
         konsole_println("Error: it isn't elf file");
+        free(file);
+        free(process_arg);
+        free(buff);
+        return false;
     }
     task_yield();
 
     free(file);
     free(process_arg);
     free(buff);
+
+    return true;
+}
+
+// TODO: сделать gracefully-poweroff с очисткой кэша диска и тд
+bool_t terminal_poweroff(argparse_command_t *command)
+{
+    konsole_println("The system will power-off now.");
+
+    if (ACPI_FAILURE(AcpiEnterSleepStatePrep(ACPI_STATE_S5)))
+    {
+        konsole_println("Error: ACPI error");
+        return false;
+    }
+
+    interrupt_disable();
+
+    if (ACPI_FAILURE(AcpiEnterSleepState(ACPI_STATE_S5)))
+    {
+        konsole_println("Error: ACPI error");
+        interrupt_enable();
+        return false;
+    }
+
+    return true;
+}
+
+// TODO: сделать gracefully-reboot с очисткой кэша диска и тд
+bool_t terminal_reboot(argparse_command_t *command)
+{
+    konsole_println("The system will reboot now.");
+
+    interrupt_disable();
+
+    if (ACPI_FAILURE(AcpiReset()))
+    {
+        konsole_set_warning_color();
+        konsole_println("Warning: ACPI can't reset, using legacy");
+
+        outb(0x64, 0xFE); // почему контроллер клавиатуры отвечает за reset процессора
+
+        interrupt_enable();
+        PANIC("BAD RESET");
+        return false;
+    }
 
     return true;
 }
@@ -1057,7 +1108,8 @@ void terminal_init()
     terminal_register_command_handler("newdir", terminal_newdir);
     terminal_register_command_handler("rm", terminal_remove);
     terminal_register_command_handler("exec", terminal_exec);
-}
+    terminal_register_command_handler("poweroff", terminal_poweroff);
+    terminal_register_command_handler("reboot", terminal_reboot);
 
 void terminal_main_loop()
 {

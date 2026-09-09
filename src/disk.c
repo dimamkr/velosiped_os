@@ -122,7 +122,7 @@ bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_c
     return true;
 }
 
-bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, const void *buffer)
+bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer)
 {
     disk_cache_record_t *record = disk_get_covering(disk_id, start_sector, sectors_count);
 

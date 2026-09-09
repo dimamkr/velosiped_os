@@ -13,6 +13,8 @@
 #include "vmm.h"
 #include "pmm.h"
 
+#include <acpica/include/acpi.h>
+
 void kernel_main_task(void *);
 
 #define PRINT_INIT(x)                   \
@@ -101,6 +103,44 @@ void kernel_main_task(void *_)
         konsole_set_warning_color();
         konsole_println("AHCI not found, using legacy mode");
     }
+
+    ACPI_STATUS result;
+
+    PRINT_INIT("ACPI");
+    konsole_println("");
+
+    if (ACPI_FAILURE(result = AcpiInitializeSubsystem()))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeSubsystem returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiInitializeTables(NULL, 16, false)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeTables returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiLoadTables()))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiLoadTables returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiEnableSubsystem returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeObjects returned %x\n", result);
+    }
+    else
+        PRINT_OK;
 
     task_unlock();
 

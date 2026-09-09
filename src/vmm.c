@@ -3,9 +3,22 @@
 #include "paging.h"
 #include "ram.h"
 #include "task.h"
+#include "konsole.h"
 
 page_dict_t *kernel_page_dict;
 extern task_t *current_task;
+
+// обработчик page fault
+static void page_fault_handler(isr_data_t registers)
+{
+    konsole_set_bad_result_color();
+
+    uint32_t cr2;
+    asm volatile("mov %%cr2, %0" :"=r"(cr2) ::);
+
+    konsole_printf("Page fault (caused by address 0x%08x from 0x%02x:0x%08x)\n", cr2, registers.cs, registers.eip);
+    PANIC("PAGE FAULT");
+}
 
 // инициализация нормального paging для ядра
 void vmm_init(void)
@@ -25,6 +38,10 @@ void vmm_init(void)
     // куча
     page_dict_map_interval_to_phys(kernel_page_dict, KHEAP_START,
                                    (KHEAP_START - RAM_VIRTUAL_START), (KHEAP_END - KHEAP_START), PAGE_KERNEL_FLAGS);
+
+    // обработчик page fault
+
+    interrupt_register(0x0E, page_fault_handler, NULL);
 
     page_dict_switch(kernel_page_dict);
 }
