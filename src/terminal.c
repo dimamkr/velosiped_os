@@ -13,8 +13,7 @@
 #include "argparse.h"
 #include "hash_table.h"
 #include "elf.h"
-
-#include <acpica/include/acpi.h>
+#include "power.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -26,7 +25,7 @@ int command_history_index;
 
 fat32_info_t info;
 fat32_basic_file_info_t root;
-dynamic_array_t *path;
+dynamic_array_t *path = NULL;
 
 hash_table_t *cmd_handlers;
 
@@ -291,6 +290,9 @@ bool_t terminal_print_disks(argparse_command_t *command)
 
 bool_t terminal_print_path(argparse_command_t *command)
 {
+    if (!path)
+        return false;
+
     for (uint8_t i = 0; i < path->elements_count; i++)
     {
         fat32_basic_file_info_t *dir = dynamic_array_get_by_index(path, i);
@@ -303,6 +305,12 @@ bool_t terminal_print_path(argparse_command_t *command)
 
 bool_t terminal_print_listdir(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     dynamic_array_t *listdir;
     char *pattern = NULL;
     bool_t ignore_case = false;
@@ -387,6 +395,12 @@ bool_t terminal_print_listdir(argparse_command_t *command)
 
 fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     fat32_basic_file_info_t *result = malloc(sizeof(fat32_basic_file_info_t));
     uint32_t choice = 0;
 
@@ -454,6 +468,12 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
 
 bool_t terminal_view(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     uint32_t start_pos = 0;
     uint32_t bytes_count = 0;
     char *pattern = NULL;
@@ -541,6 +561,12 @@ bool_t terminal_view(argparse_command_t *command)
 
 bool_t terminal_change_dir(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     char *pattern = NULL;
     bool_t ignore_case = false;
 
@@ -613,6 +639,12 @@ bool_t terminal_change_dir(argparse_command_t *command)
 
 bool_t terminal_write(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     uint32_t start_pos = 0;
     char *pattern = NULL;
     bool_t hex = false;
@@ -807,6 +839,12 @@ bool_t terminal_write(argparse_command_t *command)
 
 bool_t terminal_newfile(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     const char *filename = NULL;
     uint8_t attributes = 0;
 
@@ -853,6 +891,12 @@ bool_t terminal_newfile(argparse_command_t *command)
 
 bool_t terminal_newdir(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     const char *dirname = NULL;
     uint8_t attributes = 0;
 
@@ -895,6 +939,12 @@ bool_t terminal_newdir(argparse_command_t *command)
 
 bool_t terminal_remove(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     char *pattern = NULL;
     bool_t ignore_case = false;
 
@@ -952,6 +1002,12 @@ void foo(void *arg)
 // TODO почему если кучу раз подряд запустить то прерывание 14
 bool_t terminal_exec(argparse_command_t *command)
 {
+    if (!path)
+    {
+        konsole_println("Error: path is empty (no disks mounted)");
+        return false;
+    }
+
     char *file_name = NULL;
     char *process_arg = malloc(3);
     memcpy(process_arg, ";(", 3);
@@ -1019,49 +1075,18 @@ bool_t terminal_exec(argparse_command_t *command)
     return true;
 }
 
-// TODO: сделать gracefully-poweroff с очисткой кэша диска и тд
 bool_t terminal_poweroff(argparse_command_t *command)
 {
     konsole_println("The system will power-off now.");
 
-    if (ACPI_FAILURE(AcpiEnterSleepStatePrep(ACPI_STATE_S5)))
-    {
-        konsole_println("Error: ACPI error");
-        return false;
-    }
-
-    interrupt_disable();
-
-    if (ACPI_FAILURE(AcpiEnterSleepState(ACPI_STATE_S5)))
-    {
-        konsole_println("Error: ACPI error");
-        interrupt_enable();
-        return false;
-    }
-
-    return true;
+    return power_gracefully_shutdown();
 }
 
-// TODO: сделать gracefully-reboot с очисткой кэша диска и тд
 bool_t terminal_reboot(argparse_command_t *command)
 {
     konsole_println("The system will reboot now.");
 
-    interrupt_disable();
-
-    if (ACPI_FAILURE(AcpiReset()))
-    {
-        konsole_set_warning_color();
-        konsole_println("Warning: ACPI can't reset, using legacy");
-
-        outb(0x64, 0xFE); // контроллер клавиатуры отвечает за reset процессора
-
-        interrupt_enable();
-        PANIC("BAD RESET");
-        return false;
-    }
-
-    return true;
+    return power_gracefully_reboot();
 }
 
 // --------- Хэндлер ---------
@@ -1083,11 +1108,19 @@ void terminal_handle_command(const char *buffer)
 
 void terminal_init()
 {
-    fat32_get_bootable_partition_info_sync(&info);
-    path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
-    fat32_basic_file_info_t root;
-    fat32_mount(&info, "ROOT", &root);
-    dynamic_array_push_back(path, &root);
+    if (fat32_get_bootable_partition_info_sync(&info))
+    {
+        path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
+        fat32_basic_file_info_t root;
+        fat32_mount(&info, "ROOT", &root);
+        dynamic_array_push_back(path, &root);
+    }
+    else
+    {
+        konsole_set_warning_color();
+        konsole_println("\nWarning: booted-from disk not found");
+        konsole_set_base_color();
+    }
 
     cmd_handlers = hash_table_create();
 

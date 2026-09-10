@@ -2,6 +2,7 @@
 #include "system.h"
 #include "konsole.h"
 #include "datetime.h"
+#include "power.h"
 
 void outb(uint16_t port, byte_t value)
 {
@@ -161,13 +162,13 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_set_base_color();
 
     konsole_printf("\n=== REGISTER DUMP ===\n");
-    konsole_printf("EAX: %x  EBX: %x\n", eax, ebx);
-    konsole_printf("ECX: %x  EDX: %x\n", ecx, edx);
-    konsole_printf("ESI: %x  EDI: %x\n", esi, edi);
-    konsole_printf("EBP: %x  ESP: %x\n", ebp, esp);
-    konsole_printf("EIP: %x  EFLAGS: %x\n", eip, eflags);
-    konsole_printf("CS: %x  DS: %x  ES: %x\n", cs, ds, es);
-    konsole_printf("FS: %x  GS: %x  SS: %x\n", fs, gs, ss);
+    konsole_printf("EAX: 0x%08x  EBX: 0x%08x\n", eax, ebx);
+    konsole_printf("ECX: 0x%08x  EDX: 0x%08x\n", ecx, edx);
+    konsole_printf("ESI: 0x%08x  EDI: 0x%08x\n", esi, edi);
+    konsole_printf("EBP: 0x%08x  ESP: 0x%08x\n", ebp, esp);
+    konsole_printf("EIP: 0x%08x  EFLAGS: 0x%08x\n", eip, eflags); 
+    konsole_printf("CS: 0x%02x  DS: 0x%02x  ES: 0x%02x\n", cs, ds, es);
+    konsole_printf("FS: 0x%02x  GS: 0x%02x  SS: 0x%02x\n", fs, gs, ss);
 
     konsole_print("\nSystem will reboot at 10s.\n");
 
@@ -187,7 +188,7 @@ void panic(char *msg, char *file, uint32_t line)
             asm ("pause");
     }
 
-    outb(0x64, 0xFE); // перезагружаем
+    power_reboot();
 
     halt();
 }
