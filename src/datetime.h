@@ -20,5 +20,6 @@ typedef struct {
 void datetime_get(datetime_t *result);
 void datetime_fat_from_datetime(const datetime_t *datetime, datetime_fat_t *fat_datetime);
 void datetime_datetime_from_fat(const datetime_fat_t *fat_datetime, datetime_t *datetime);
+uint32_t datetime_timestamp_from_datetime(datetime_t *datetime);
 
 #endif

@@ -1054,7 +1054,7 @@ bool_t terminal_reboot(argparse_command_t *command)
         konsole_set_warning_color();
         konsole_println("Warning: ACPI can't reset, using legacy");
 
-        outb(0x64, 0xFE); // почему контроллер клавиатуры отвечает за reset процессора
+        outb(0x64, 0xFE); // контроллер клавиатуры отвечает за reset процессора
 
         interrupt_enable();
         PANIC("BAD RESET");

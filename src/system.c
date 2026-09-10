@@ -1,6 +1,8 @@
 #include "types.h"
 #include "system.h"
 #include "konsole.h"
+#include "datetime.h"
+#include <acpica/include/acpi.h>
 
 void outb(uint16_t port, byte_t value)
 {
@@ -168,7 +170,26 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_printf("CS: %x  DS: %x  ES: %x\n", cs, ds, es);
     konsole_printf("FS: %x  GS: %x  SS: %x\n", fs, gs, ss);
 
-    konsole_print("\nSystem halted.\n");
+    konsole_print("\nSystem will reboot at 10s.\n");
+
+    datetime_t time;
+    datetime_t time0;
+    datetime_get(&time0);
+    uint32_t seconds = datetime_timestamp_from_datetime(&time0);
+
+    for (datetime_get(&time);;datetime_get(&time))
+    {
+        uint32_t new_seconds = datetime_timestamp_from_datetime(&time);
+
+        if (new_seconds - seconds > 10)
+            break;
+
+        for (uint32_t _ = 1000;_--;)
+            asm ("pause");
+    }
+
+    outb(0x64, 0xFE);
+
     halt();
 }
 

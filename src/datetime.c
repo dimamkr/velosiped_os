@@ -2,6 +2,9 @@
 #include "system.h"
 #include "datetime.h"
 
+// префиксная сумма дней в месяцах (не считая високосный год)
+uint16_t pref_months [12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+
 // Чтение одного байта из CMOS
 static uint8_t cmos_read(uint8_t reg)
 {
@@ -74,4 +77,27 @@ void datetime_datetime_from_fat(const datetime_fat_t *fat_datetime, datetime_t *
     datetime->hour = (fat_datetime->time >> 11) & 0x1F;
     datetime->minute = (fat_datetime->time >> 5) & 0x3F;
     datetime->second = (fat_datetime->time & 0x1F) * 2;
+}
+
+uint32_t datetime_timestamp_from_datetime(datetime_t *datetime)
+{
+    uint32_t result = 0;
+
+    result += datetime->second;
+    result += (uint32_t)(datetime->minute) * 60;
+    result += (uint32_t)(datetime->hour) * 3600;
+    result += (uint32_t)(datetime->day) * 86400;
+    result += (uint32_t)(pref_months[datetime->month - 1]) * 86400;
+
+    uint16_t year = datetime->year - 1980;
+    bool_t is_leap = (year & 3) == 0;
+
+    if (is_leap && (datetime->month > 2))
+        result += 86400;
+
+    result += (uint32_t)(year) * 365 * 86400;
+    result += (year / 4 + !is_leap) * 86400; // учитываем високосные года
+    // по идее, надо еще учитывать високосные года каждые 100, 400 лет, но я не думаю, что cmos это делает
+
+    return result;
 }
