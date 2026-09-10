@@ -2,7 +2,6 @@
 #include "system.h"
 #include "konsole.h"
 #include "datetime.h"
-#include <acpica/include/acpi.h>
 
 void outb(uint16_t port, byte_t value)
 {
@@ -188,7 +187,7 @@ void panic(char *msg, char *file, uint32_t line)
             asm ("pause");
     }
 
-    outb(0x64, 0xFE);
+    outb(0x64, 0xFE); // перезагружаем
 
     halt();
 }
