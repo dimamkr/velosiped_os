@@ -9,7 +9,7 @@ if ! command -v $CC &> /dev/null; then
 fi
 
 $CC -m32 -ffreestanding -nostdlib -nostartfiles -nodefaultlibs -static -no-pie \
-    -W -O0 -o test_elf.elf test_elf.c
+    -W -O0 -o test/elf/test_elf.elf test/elf/test_elf.c
 
 # Проверка успешности
 if [ $? -eq 0 ]; then
