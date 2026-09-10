@@ -94,6 +94,15 @@ void konsole_pos_shift(int delta_x)
 
 void konsole_clear()
 {
+    TASK_LOCKED_FUNCTION;
+
+    konsole_output_history_start_index = 0;
+
+    while (konsole_output_history->elements_count > KONSOLE_W * KONSOLE_H)
+    {
+        dynamic_array_pop_front(konsole_output_history);
+    }
+
     for (int y = 0; y < KONSOLE_H; y++)
     {
         for (int x = 0; x < KONSOLE_W; x++)
@@ -220,7 +229,6 @@ void konsole_println(const char *text)
 
 typedef __builtin_va_list konsole_va_list;
 
-
 /*
  * ============================================================
  * 32-bit unsigned integer
@@ -266,8 +274,7 @@ static void konsole_put_uint32(
             buffer[len++] = digits[digit];
 
             value /= base;
-        }
-        while (value != 0);
+        } while (value != 0);
     }
 
     /*
@@ -384,7 +391,6 @@ static void konsole_put_uint32(
     }
 }
 
-
 /*
  * ============================================================
  * 32-bit signed integer
@@ -434,10 +440,8 @@ static void konsole_put_int32(
         left,
         zero_pad,
         false,
-        sign
-    );
+        sign);
 }
-
 
 /*
  * ============================================================
@@ -479,7 +483,6 @@ static void konsole_put_string(
             konsole_putch(' ');
     }
 }
-
 
 /*
  * ============================================================
@@ -584,8 +587,7 @@ static void konsole_put_hex64(
     {
         konsole_putch('0');
         konsole_putch(
-            uppercase ? 'X' : 'x'
-        );
+            uppercase ? 'X' : 'x');
     }
 
     /*
@@ -606,7 +608,6 @@ static void konsole_put_hex64(
             konsole_putch(' ');
     }
 }
-
 
 /*
  * ============================================================
@@ -660,37 +661,37 @@ void konsole_vprintf(
         {
             switch (*format)
             {
-                case '-':
-                    left = true;
-                    format++;
-                    continue;
+            case '-':
+                left = true;
+                format++;
+                continue;
 
-                case '+':
-                    plus = true;
-                    format++;
-                    continue;
+            case '+':
+                plus = true;
+                format++;
+                continue;
 
-                case ' ':
-                    space = true;
-                    format++;
-                    continue;
+            case ' ':
+                space = true;
+                format++;
+                continue;
 
-                case '0':
-                    zero = true;
-                    format++;
-                    continue;
+            case '0':
+                zero = true;
+                format++;
+                continue;
 
-                case '#':
-                    alternate = true;
-                    format++;
-                    continue;
+            case '#':
+                alternate = true;
+                format++;
+                continue;
 
-                default:
-                    goto flags_done;
+            default:
+                goto flags_done;
             }
         }
 
-flags_done:
+    flags_done:
 
         /*
          * ====================================================
@@ -845,69 +846,62 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'd':
-            case 'i':
+        case 'd':
+        case 'i':
+        {
+            /*
+             * 64-bit signed decimal специально
+             * НЕ поддерживается.
+             */
+            if (length == LENGTH_LL)
             {
                 /*
-                 * 64-bit signed decimal специально
-                 * НЕ поддерживается.
+                 * Аргумент всё равно надо забрать,
+                 * чтобы va_list не сломался.
+                 *
+                 * Мы НЕ выполняем с ним арифметику.
                  */
-                if (length == LENGTH_LL)
-                {
-                    /*
-                     * Аргумент всё равно надо забрать,
-                     * чтобы va_list не сломался.
-                     *
-                     * Мы НЕ выполняем с ним арифметику.
-                     */
-                    __builtin_va_arg(
-                        args,
-                        long long
-                    );
+                __builtin_va_arg(
+                    args,
+                    long long);
 
-                    konsole_put_string(
-                        "[%lld unsupported]",
-                        0,
-                        -1,
-                        false
-                    );
-
-                    break;
-                }
-
-                int32_t value;
-
-                if (length == LENGTH_L)
-                {
-                    value =
-                        (int32_t)
-                        __builtin_va_arg(
-                            args,
-                            long
-                        );
-                }
-                else
-                {
-                    value =
-                        (int32_t)
-                        __builtin_va_arg(
-                            args,
-                            int
-                        );
-                }
-
-                konsole_put_int32(
-                    value,
-                    width,
-                    precision,
-                    left,
-                    zero,
-                    plus,
-                    space
-                );
+                konsole_put_string(
+                    "[%lld unsupported]",
+                    0,
+                    -1,
+                    false);
 
                 break;
             }
+
+            int32_t value;
+
+            if (length == LENGTH_L)
+            {
+                value =
+                    (int32_t)__builtin_va_arg(
+                        args,
+                        long);
+            }
+            else
+            {
+                value =
+                    (int32_t)__builtin_va_arg(
+                        args,
+                        int);
+            }
+
+            konsole_put_int32(
+                value,
+                width,
+                precision,
+                left,
+                zero,
+                plus,
+                space);
+
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -915,63 +909,56 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'u':
+        case 'u':
+        {
+            /*
+             * 64-bit decimal не реализуем.
+             */
+            if (length == LENGTH_LL)
             {
-                /*
-                 * 64-bit decimal не реализуем.
-                 */
-                if (length == LENGTH_LL)
-                {
-                    __builtin_va_arg(
-                        args,
-                        unsigned long long
-                    );
+                __builtin_va_arg(
+                    args,
+                    unsigned long long);
 
-                    konsole_put_string(
-                        "[%llu unsupported]",
-                        0,
-                        -1,
-                        false
-                    );
-
-                    break;
-                }
-
-                uint32_t value;
-
-                if (length == LENGTH_L)
-                {
-                    value =
-                        (uint32_t)
-                        __builtin_va_arg(
-                            args,
-                            unsigned long
-                        );
-                }
-                else
-                {
-                    value =
-                        (uint32_t)
-                        __builtin_va_arg(
-                            args,
-                            unsigned int
-                        );
-                }
-
-                konsole_put_uint32(
-                    value,
-                    10,
-                    false,
-                    width,
-                    precision,
-                    left,
-                    zero,
-                    false,
-                    0
-                );
+                konsole_put_string(
+                    "[%llu unsupported]",
+                    0,
+                    -1,
+                    false);
 
                 break;
             }
+
+            uint32_t value;
+
+            if (length == LENGTH_L)
+            {
+                value =
+                    (uint32_t)__builtin_va_arg(
+                        args,
+                        unsigned long);
+            }
+            else
+            {
+                value =
+                    (uint32_t)__builtin_va_arg(
+                        args,
+                        unsigned int);
+            }
+
+            konsole_put_uint32(
+                value,
+                10,
+                false,
+                width,
+                precision,
+                left,
+                zero,
+                false,
+                0);
+
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -979,87 +966,78 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'x':
-            case 'X':
+        case 'x':
+        case 'X':
+        {
+            bool_t uppercase =
+                (*format == 'X');
+
+            /*
+             * %llx / %llX
+             *
+             * 64-bit arithmetic НЕ используется.
+             */
+            if (length == LENGTH_LL)
             {
-                bool_t uppercase =
-                    (*format == 'X');
+                unsigned long long value =
+                    __builtin_va_arg(
+                        args,
+                        unsigned long long);
 
                 /*
-                 * %llx / %llX
+                 * Разбиваем 64-bit value на
+                 * два 32-bit слова.
                  *
-                 * 64-bit arithmetic НЕ используется.
+                 * GCC понимает это как extract halves.
                  */
-                if (length == LENGTH_LL)
-                {
-                    unsigned long long value =
-                        __builtin_va_arg(
-                            args,
-                            unsigned long long
-                        );
+                uint32_t low =
+                    (uint32_t)value;
 
-                    /*
-                     * Разбиваем 64-bit value на
-                     * два 32-bit слова.
-                     *
-                     * GCC понимает это как extract halves.
-                     */
-                    uint32_t low =
-                        (uint32_t)value;
+                uint32_t high =
+                    (uint32_t)(value >> 32);
 
-                    uint32_t high =
-                        (uint32_t)(
-                            value >> 32
-                        );
-
-                    konsole_put_hex64(
-                        high,
-                        low,
-                        uppercase,
-                        width,
-                        precision,
-                        left,
-                        alternate
-                    );
-
-                    break;
-                }
-
-                uint32_t value;
-
-                if (length == LENGTH_L)
-                {
-                    value =
-                        (uint32_t)
-                        __builtin_va_arg(
-                            args,
-                            unsigned long
-                        );
-                }
-                else
-                {
-                    value =
-                        (uint32_t)
-                        __builtin_va_arg(
-                            args,
-                            unsigned int
-                        );
-                }
-
-                konsole_put_uint32(
-                    value,
-                    16,
+                konsole_put_hex64(
+                    high,
+                    low,
                     uppercase,
                     width,
                     precision,
                     left,
-                    zero,
-                    alternate,
-                    0
-                );
+                    alternate);
 
                 break;
             }
+
+            uint32_t value;
+
+            if (length == LENGTH_L)
+            {
+                value =
+                    (uint32_t)__builtin_va_arg(
+                        args,
+                        unsigned long);
+            }
+            else
+            {
+                value =
+                    (uint32_t)__builtin_va_arg(
+                        args,
+                        unsigned int);
+            }
+
+            konsole_put_uint32(
+                value,
+                16,
+                uppercase,
+                width,
+                precision,
+                left,
+                zero,
+                alternate,
+                0);
+
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -1067,32 +1045,29 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'o':
-            {
-                /*
-                 * Только 32-bit.
-                 */
-                uint32_t value =
-                    (uint32_t)
-                    __builtin_va_arg(
-                        args,
-                        unsigned int
-                    );
+        case 'o':
+        {
+            /*
+             * Только 32-bit.
+             */
+            uint32_t value =
+                (uint32_t)__builtin_va_arg(
+                    args,
+                    unsigned int);
 
-                konsole_put_uint32(
-                    value,
-                    8,
-                    false,
-                    width,
-                    precision,
-                    left,
-                    zero,
-                    alternate,
-                    0
-                );
+            konsole_put_uint32(
+                value,
+                8,
+                false,
+                width,
+                precision,
+                left,
+                zero,
+                alternate,
+                0);
 
-                break;
-            }
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -1100,30 +1075,29 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'c':
+        case 'c':
+        {
+            int value =
+                __builtin_va_arg(
+                    args,
+                    int);
+
+            if (!left)
             {
-                int value =
-                    __builtin_va_arg(
-                        args,
-                        int
-                    );
-
-                if (!left)
-                {
-                    for (int i = 1; i < width; i++)
-                        konsole_putch(' ');
-                }
-
-                konsole_putch((char)value);
-
-                if (left)
-                {
-                    for (int i = 1; i < width; i++)
-                        konsole_putch(' ');
-                }
-
-                break;
+                for (int i = 1; i < width; i++)
+                    konsole_putch(' ');
             }
+
+            konsole_putch((char)value);
+
+            if (left)
+            {
+                for (int i = 1; i < width; i++)
+                    konsole_putch(' ');
+            }
+
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -1131,23 +1105,21 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 's':
-            {
-                const char *str =
-                    __builtin_va_arg(
-                        args,
-                        const char *
-                    );
+        case 's':
+        {
+            const char *str =
+                __builtin_va_arg(
+                    args,
+                    const char *);
 
-                konsole_put_string(
-                    str,
-                    width,
-                    precision,
-                    left
-                );
+            konsole_put_string(
+                str,
+                width,
+                precision,
+                left);
 
-                break;
-            }
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -1155,37 +1127,34 @@ flags_done:
              * ------------------------------------------------
              */
 
-            case 'p':
-            {
-                uint32_t value =
-                    (uint32_t)
-                    __builtin_va_arg(
-                        args,
-                        void *
-                    );
+        case 'p':
+        {
+            uint32_t value =
+                (uint32_t)__builtin_va_arg(
+                    args,
+                    void *);
 
-                /*
-                 * 32-bit kernel:
-                 *
-                 * 0xXXXXXXXX
-                 */
-                konsole_putch('0');
-                konsole_putch('x');
+            /*
+             * 32-bit kernel:
+             *
+             * 0xXXXXXXXX
+             */
+            konsole_putch('0');
+            konsole_putch('x');
 
-                konsole_put_uint32(
-                    value,
-                    16,
-                    false,
-                    8,
-                    8,
-                    false,
-                    true,
-                    false,
-                    0
-                );
+            konsole_put_uint32(
+                value,
+                16,
+                false,
+                8,
+                8,
+                false,
+                true,
+                false,
+                0);
 
-                break;
-            }
+            break;
+        }
 
             /*
              * ------------------------------------------------
@@ -1193,22 +1162,21 @@ flags_done:
              * ------------------------------------------------
              */
 
-            default:
-            {
-                konsole_putch('%');
+        default:
+        {
+            konsole_putch('%');
 
-                if (*format)
-                    konsole_putch(*format);
+            if (*format)
+                konsole_putch(*format);
 
-                break;
-            }
+            break;
+        }
         }
 
         if (*format)
             format++;
     }
 }
-
 
 /*
  * ============================================================
@@ -1226,8 +1194,7 @@ void konsole_printf(
 
     konsole_vprintf(
         format,
-        args
-    );
+        args);
 
     __builtin_va_end(args);
 }
@@ -1242,7 +1209,7 @@ void konsole_printf(const char *format, ...)
     va_start(args, format);
 
     konsole_vprintf(format, args);
-    
+
     va_end(args);
 }*/
 
