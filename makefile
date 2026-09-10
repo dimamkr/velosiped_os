@@ -181,7 +181,7 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	@echo "Creating disk image with MBR and FAT32..."
 
 	# создание тестового elf файла
-	# bash test/elf/build_test.sh
+	@bash test/elf/build_test.sh
 
 	# 1. Пустой образ 64 МБ
 	dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
@@ -195,7 +195,7 @@ $(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR
 	# 4. Создаём временную папку с контентом
 	mkdir -p fat32_content
 	# 4.1 Текстовые файлы
-	# cp test/elf/test_elf.elf fat32_content/E
+	cp test/elf/test_elf.elf fat32_content/echo
 	echo "Hello, FAT32 World!" > fat32_content/hello.txt
 	echo "This is a test file for FAT32 parser." > fat32_content/info.txt
 	echo "Line 1" > fat32_content/multiline.txt

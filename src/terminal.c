@@ -748,7 +748,7 @@ bool_t terminal_write(argparse_command_t *command)
             unsigned char write_byte[3];
             uint8_t cursor = 0;
 
-            for (const unsigned char *cur = input_line;;cur++)
+            for (const unsigned char *cur = input_line;; cur++)
             {
                 if (*cur == ' ' || *cur == '\0')
                 {
@@ -999,7 +999,6 @@ void foo(void *arg)
     konsole_println(arg);
 }
 
-// TODO почему если кучу раз подряд запустить то прерывание 14
 bool_t terminal_exec(argparse_command_t *command)
 {
     if (!path)
@@ -1011,6 +1010,7 @@ bool_t terminal_exec(argparse_command_t *command)
     char *file_name = NULL;
     char *process_arg = malloc(3);
     memcpy(process_arg, ";(", 3);
+    uint32_t stack_size = STACK_SIZE_SMALL;
 
     for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
@@ -1018,11 +1018,15 @@ bool_t terminal_exec(argparse_command_t *command)
 
         if (arg->value == NULL && i == 0)
             file_name = arg->name;
-        if (arg->value == NULL && i == 1)
+        else if (arg->value == NULL && i == 1)
         {
             free(process_arg);
             process_arg = malloc(strlen(arg->name) + 1);
             memcpy(process_arg, arg->name, strlen(arg->name) + 1);
+        }
+        else if (strcmp(arg->name, "s") == 0)
+        {
+            stack_size = strtoul(arg->value, NULL, 10);
         }
     }
 
@@ -1058,7 +1062,7 @@ bool_t terminal_exec(argparse_command_t *command)
 
     fat32_read_file(&info, file, 0, buff, file->size);
 
-    if (!task_create_process_from_elf(buff, process_arg, 10 * STACK_SIZE_LARGE))
+    if (!task_create_process_from_elf(buff, process_arg, stack_size))
     {
         konsole_println("Error: it isn't elf file");
         free(file);
