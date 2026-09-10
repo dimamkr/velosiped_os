@@ -6,10 +6,14 @@
 #include "linked_list.h"
 #include "vmm.h"
 #include "elf.h"
+#include "bitmap.h"
 
 task_t tasks[MAX_TASKS];
-static linked_list_node_t *current_task_node;
+bitmap_t *tasks_used_bitmap;
+uint32_t tasks_last_used_id;
 static uint32_t task_count;
+
+static linked_list_node_t *current_task_node; // хранит task_t*
 static bool skipped_scheduler_tick = false;
 static uint32_t locked = 0;
 
@@ -42,14 +46,36 @@ void scheduler_start()
     goto_current_task();
 }
 
+static inline uint32_t tasks_get_free_id()
+{
+    tasks_last_used_id = bitmap_alloc_interval(tasks_used_bitmap, tasks_last_used_id, 1);
+    if (likely(tasks_last_used_id != tasks_used_bitmap->bits_count))
+    {
+        return tasks_last_used_id;
+    }
+
+    tasks_last_used_id = bitmap_alloc_interval(0, tasks_last_used_id, 1);
+    ASSERT(tasks_last_used_id != tasks_used_bitmap->bits_count);
+    return tasks_last_used_id;
+}
+
+static inline uint32_t tasks_erase(uint32_t pid)
+{
+    bitmap_clear_bit(tasks_used_bitmap, pid);
+}
+
 // ВАЖНО РАЗМЕР СТЕКА ВЫРОВНЕН ПО STACK_ALIGN
 static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     ASSERT(task_count < MAX_TASKS);
 
-    task_t *task = &tasks[task_count];
-    task->pid = task_count;
+    uint32_t pid = tasks_get_free_id();
+    task_t *task = &tasks[pid];
+    task->pid = pid;
     task->state = TASK_READY;
+
+    konsole_printf("task_count %d\n", task_count);
+
     ++task_count;
 
     // стек должен быть выровнен
@@ -100,13 +126,16 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
 // Инициализация планировщика и передача управления ему
 void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
+    tasks_used_bitmap = bitmap_create(MAX_TASKS);
+
+    // ВНИМАНИЕ ЛЕНИВАЯ ЗАДАЧА ИМЕЕТ НОМЕР СТРОГО 0
     task_t *lazy = task_init_default(lazy_task, NULL, STACK_SIZE_LARGE);
     lazy->page_dict = kernel_page_dict;
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
     task_set_current(lazy);
 
     task_create(k_entry, arg, stack_size);
-    kernel_task = &tasks[1];
+    kernel_task = &tasks[1]; // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
     kernel_task->page_dict = kernel_page_dict;
     task_set_current(&tasks[1]); // задача ядра
 }
@@ -235,6 +264,9 @@ void task_destroy_from_accumulator()
 
     vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
 
+    tasks_erase(to_destroy_accumulator->pid);
+    task_count--;
+
     linked_list_erase(&current_task_node, to_destroy_accumulator->node);
     free(to_destroy_accumulator->stack_start);
     to_destroy_accumulator = NULL;
@@ -246,9 +278,10 @@ void task_exit()
     // другого способа защитить критические структуры нет
     asm volatile("cli");
 
-    if (current_task->pid == 0)
+    if (current_task != NULL)
     {
-        PANIC("KERNEL TASK QUIT ATTEMPT!!!");
+        ASSERT(current_task->pid != 0); // освободить ленивую задачу
+        ASSERT(current_task->pid != 1); // освободить задачу ядра
     }
 
     to_destroy_accumulator = current_task;
