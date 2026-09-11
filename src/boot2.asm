@@ -231,7 +231,14 @@ start:
     jmp .kernel_reading
 
 .load_ok:
-    ; Успешно загрузили ядро. Теперь переходим в защищённый режим.
+    ; Успешно загрузили ядро.
+    ; настройка VBE
+
+    call setup_vbe
+
+    ; jmp hang    
+    
+    ;Теперь переходим в защищённый режим.
     cli
     lgdt [gdt_descriptor]    ; Загружаем таблицу GDT
 
@@ -258,6 +265,105 @@ start:
     mov si, msg_no_kernel
     call print_string_16
     jmp $
+
+
+; ------------------------------------------------------------
+; Настройка VBE (должна быть в реальном режиме!)
+; ------------------------------------------------------------
+VBE_INFO_ADDR   equ 0x5000
+VBE_MODE_ADDR   equ 0x5200
+
+setup_vbe:
+    push ds
+    push es
+    push fs
+
+    ; Работаем в физическом пространстве (DS=ES=FS=0)
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+
+    ; --- Сигнатура "VBE2" ---
+    mov dword [VBE_INFO_ADDR], 'VBE2'
+
+    ; --- 1. Проверить поддержку VBE ---
+    mov ax, 0x4F00
+    mov di, VBE_INFO_ADDR
+    int 0x10
+    cmp ax, 0x004F
+    jne .no_vbe
+
+    ; Проверим сигнатуру "VESA" (0x41534556 в LE)
+    cmp dword [VBE_INFO_ADDR], 0x41534556
+    jne .no_vbe
+
+    ; --- 2. Обойти список режимов ---
+    mov ax, [VBE_INFO_ADDR + 0x10]     ; сегмент списка
+    mov fs, ax
+    mov si, [VBE_INFO_ADDR + 0x0E]     ; смещение списка
+
+.find_mode:
+    mov cx, [fs:si]                    ; номер режима
+    cmp cx, 0xFFFF
+    je .no_vbe
+    add si, 2
+
+    push si
+    push fs
+    push cx                            ; <-- BIOS может клоббить CX в 4F01
+
+    mov ax, 0x4F01
+    mov di, VBE_MODE_ADDR
+    int 0x10
+
+    pop cx
+    pop fs
+    pop si
+
+    cmp ax, 0x004F
+    jne .find_mode
+
+    ; Атрибуты
+    mov ax, [VBE_MODE_ADDR + 0x00]
+    test ax, 0x0001                    ; supported
+    jz .find_mode
+    test ax, 0x0080                    ; LFB available
+    jz .find_mode
+
+    ; MemoryModel == 6 (Direct Color)
+    cmp byte [VBE_MODE_ADDR + 0x1B], 6
+    jne .find_mode
+
+    ; Разрешение и bpp
+    cmp word [VBE_MODE_ADDR + 0x12], 1024
+    jne .find_mode
+    cmp word [VBE_MODE_ADDR + 0x14], 768
+    jne .find_mode
+    cmp byte [VBE_MODE_ADDR + 0x19], 32
+    jne .find_mode
+
+    ; --- 3. Установить режим с LFB ---
+    mov ax, 0x4F02
+    mov bx, cx
+    or bx, 0x4000
+    int 0x10
+    cmp ax, 0x004F
+    jne .no_vbe
+
+    mov byte [vbe_enabled], 1
+    jmp .done
+
+.no_vbe:
+    mov byte [vbe_enabled], 0
+    mov si, msg_no_vge
+    call print_string_16
+
+.done:
+    pop fs
+    pop es
+    pop ds
+    ret
 
 ; ------------------------------------------------------------
 ; 16-битные подпрограммы
@@ -406,6 +512,8 @@ sectors_per_cluster dw 0
 fat_offset dd 0
 data_offset dd 0
 
+vbe_enabled db 0
+
 kernel_dos_fullname db "KERNEL  BIN"
 
 msg_loading db "Stage 2 loaded", 0x0D, 0x0A, 0
@@ -413,6 +521,7 @@ msg_disk_error db "E: Disk transfer error", 0x0D, 0x0A, 0
 msg_no_boot_partition db "E: No boot partition", 0x0D, 0x0A, 0
 msg_no_kernel db "E: Kernel not found", 0x0D, 0x0A, 0
 msg_dbg db "!DEBUG!", 0x0D, 0x0A, 0
+msg_no_vge db "E: VBE not found", 0x0D, 0x0A, 0
 
 ; ------------------------------------------------------------
 ; Структура LBA-пакета для Int 0x13 AH=0x42

@@ -2,6 +2,8 @@
 #include "konsole.h"
 #include "task.h"
 
+#include "renderer.h"
+
 // иначе компилятор может заменить call и ret на jump + leave, и это сломает стек, поскольку он управляется полностью вручную на ассемблере
 #pragma GCC optimize("no-optimize-sibling-calls")
 
@@ -11,6 +13,11 @@ void timer_top_callback(isr_data_t data)
 {
     timer_ticks_count++;
     scheduler_tick(timer_get_time());
+}
+
+void timer_bottom_callback(isr_data_t data)
+{
+    renderer_flush();
 }
 
 static uint32_t timer_frequency;
@@ -36,7 +43,7 @@ void timer_init(uint32_t frequency)
     outb(TIMER0_DATA, period);
     outb(TIMER0_DATA, period >> 8);
 
-    interrupt_register(IRQ0, timer_top_callback, NULL);
+    interrupt_register(IRQ0, timer_top_callback, timer_bottom_callback);
 }
 
 // в милисекундах

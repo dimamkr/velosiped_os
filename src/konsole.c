@@ -2,30 +2,74 @@
 #include "dynamic_array.h"
 #include "task.h"
 #include "ram.h"
+#include "renderer.h"
+#include "font.h"
+#include "colors.h"
 
-// адрес начала видеопамяти
-konsole_symbol_t *konsole_start = (konsole_symbol_t *)VIDEO_MEMORY_START;
+extern bool_t framebuffer_is_ready;
+
+uint8_t *konsole_curr_font;
 
 int konsole_curr_x;
 int konsole_curr_y;
-byte_t konsole_current_color;
+uint32_t konsole_curr_fg_color;
+uint32_t konsole_curr_bg_color;
+
 dynamic_array_t *konsole_output_history;
 // индекс верхнего левого символа
 uint32_t konsole_output_history_start_index;
 
+static konsole_symbol_t _empty_symbol = {0};
+
+static inline void konsole_draw_symbol(uint32_t x, uint32_t y, konsole_symbol_t value)
+{
+    uint32_t screen_x = x * FONT_WIDTH;
+    uint32_t screen_y = y * FONT_HEIGHT;
+
+    if (!framebuffer_is_ready)
+        return;
+
+    renderer_draw_char(konsole_curr_font, value.symbol, screen_x, screen_y, value.fg_color, value.bg_color);
+}
+
+// функция установки символа на экран и сохранения истории
+static inline void konsole_set_value(uint32_t x, uint32_t y, konsole_symbol_t value)
+{
+    konsole_draw_symbol(x, y, value);
+
+    uint32_t index = y * KONSOLE_W + x;
+    dynamic_array_set_by_index(konsole_output_history, konsole_output_history_start_index + index, &value);
+}
+
 void konsole_init()
 {
+    konsole_curr_font = font8x16_vga;
+
     konsole_curr_x = 0;
     konsole_curr_y = 0;
-    konsole_set_base_color();
 
     konsole_output_history = dynamic_array_create(sizeof(konsole_symbol_t));
     for (uint32_t i = 0; i < KONSOLE_W * KONSOLE_H; ++i)
     {
-        dynamic_array_push_back(konsole_output_history, konsole_start + i);
+        dynamic_array_push_back(konsole_output_history, &_empty_symbol);
     }
 
     konsole_output_history_start_index = 0;
+
+    colors_init();
+    konsole_set_base_color();
+}
+
+void konsole_redraw_from_history()
+{
+    for (int y = 0; y < KONSOLE_H; y++)
+    {
+        for (int x = 0; x < KONSOLE_W; x++)
+        {
+            uint32_t index = konsole_output_history_start_index + y * KONSOLE_W + x;
+            konsole_draw_symbol(x, y, *(konsole_symbol_t *)dynamic_array_get_by_index(konsole_output_history, index));
+        }
+    }
 }
 
 // возвращает получилось ли проскроллить чтобы не выйти за границы массива
@@ -34,8 +78,7 @@ bool konsole_view_scroll_up()
     if (konsole_output_history_start_index >= KONSOLE_W)
     {
         konsole_output_history_start_index -= KONSOLE_W;
-        memcpy(konsole_start, dynamic_array_get_by_index(konsole_output_history, konsole_output_history_start_index),
-               sizeof(konsole_symbol_t) * KONSOLE_W * KONSOLE_H);
+        konsole_redraw_from_history();
         return true;
     }
     return false;
@@ -46,34 +89,21 @@ bool konsole_view_scroll_down()
     if (konsole_output_history_start_index + KONSOLE_H * KONSOLE_W + KONSOLE_W <= konsole_output_history->elements_count)
     {
         konsole_output_history_start_index += KONSOLE_W;
-        memcpy(konsole_start, dynamic_array_get_by_index(konsole_output_history, konsole_output_history_start_index),
-               sizeof(konsole_symbol_t) * KONSOLE_W * KONSOLE_H);
+        konsole_redraw_from_history();
         return true;
     }
     return false;
 }
 
-// static inline konsole_symbol_t *konsole_pos_get()
-// {
-//     return konsole_start + (konsole_curr_y * KONSOLE_W) + konsole_curr_x;
-// }
-
-static inline void konsole_set_value(uint32_t x, uint32_t y, konsole_symbol_t value)
-{
-    uint32_t index = (y * KONSOLE_W) + x;
-    konsole_start[index] = value;
-    dynamic_array_set_by_index(konsole_output_history, konsole_output_history_start_index + index, &value);
-}
-
 void konsole_cursor_set_position(uint16_t position)
 {
-    // Установить младший байт (регистр 0x0F)
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, (uint8_t)(position & 0xFF));
+    // // Установить младший байт (регистр 0x0F)
+    // outb(0x3D4, 0x0F);
+    // outb(0x3D5, (uint8_t)(position & 0xFF));
 
-    // Установить старший байт (регистр 0x0E)
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, (uint8_t)((position >> 8) & 0xFF));
+    // // Установить старший байт (регистр 0x0E)
+    // outb(0x3D4, 0x0E);
+    // outb(0x3D5, (uint8_t)((position >> 8) & 0xFF));
 }
 
 // сдвижка позиции
@@ -107,13 +137,10 @@ void konsole_clear()
     {
         for (int x = 0; x < KONSOLE_W; x++)
         {
-            int offset = (y * KONSOLE_W) + x;
-            konsole_start[offset].symbol = ' ';
-            konsole_start[offset].colors = konsole_current_color;
-
-            konsole_set_value(x, y, (konsole_symbol_t){.symbol = ' ', .colors = konsole_current_color});
+            konsole_set_value(x, y, (konsole_symbol_t){.symbol = ' ', .fg_color = konsole_curr_fg_color, .bg_color = konsole_curr_bg_color});
         }
     }
+
     konsole_curr_x = 0;
     konsole_curr_y = 0;
 }
@@ -141,12 +168,12 @@ void konsole_putch(char ch)
         if (konsole_curr_x > 0)
         {
             konsole_pos_shift(-1);
-            konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = 0, .colors = 0});
+            konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = 0, .fg_color = konsole_curr_fg_color, .bg_color = konsole_curr_bg_color});
         }
         break;
 
     default:
-        konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = ch, .colors = konsole_current_color});
+        konsole_set_value(konsole_curr_x, konsole_curr_y, (konsole_symbol_t){.symbol = ch, .fg_color = konsole_curr_fg_color, .bg_color = konsole_curr_bg_color});
         konsole_pos_shift(1);
     }
 }
@@ -1216,18 +1243,14 @@ void konsole_printf(const char *format, ...)
 // TODO блокировка прерываний тут
 void konsole_scroll_down()
 {
-    memcpy(konsole_start, konsole_start + KONSOLE_W, ((KONSOLE_H - 1) * KONSOLE_W) * sizeof(konsole_symbol_t));
+    for (uint32_t x = 0; x < KONSOLE_W; ++x)
+    {
+        dynamic_array_push_back(konsole_output_history, &_empty_symbol);
+    }
 
     konsole_output_history_start_index += KONSOLE_W;
 
-    // Очищаем последнюю строку
-    for (int x = 0; x < KONSOLE_W; x++)
-    {
-        konsole_symbol_t value = (konsole_symbol_t){.symbol = ' ', .colors = konsole_current_color};
-
-        dynamic_array_push_back(konsole_output_history, &value);
-        konsole_set_value(x, KONSOLE_H - 1, value);
-    }
+    konsole_redraw_from_history();
 
     konsole_curr_y = KONSOLE_H - 1;
 }
@@ -1235,35 +1258,41 @@ void konsole_scroll_down()
 // COLORS
 void konsole_set_color(uint32_t fg, uint32_t bg)
 {
-    konsole_current_color = (bg << 4) | (fg & 0x0F);
+    konsole_curr_bg_color = bg;
+    konsole_curr_fg_color = fg;
 }
 
 void konsole_set_preambula_color()
 {
-    konsole_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
+    konsole_set_color(color_light_gray, color_black);
 }
 
 void konsole_set_good_result_color()
 {
-    konsole_set_color(COLOR_LIGHT_GREEN, COLOR_BLACK);
+    konsole_set_color(color_light_green, color_black);
 }
 
 void konsole_set_warning_color()
 {
-    konsole_set_color(COLOR_YELLOW, COLOR_BLACK);
+    konsole_set_color(color_yellow, color_black);
 }
 
 void konsole_set_bad_result_color()
 {
-    konsole_set_color(COLOR_RED, COLOR_BLACK);
+    konsole_set_color(color_red, color_black);
 }
 
 void konsole_set_panic_color()
 {
-    konsole_set_color(COLOR_LIGHT_RED, COLOR_BLACK);
+    konsole_set_color(color_light_red, color_black);
 }
 
 void konsole_set_base_color()
 {
-    konsole_set_color(COLOR_WHITE, COLOR_BLACK);
+    konsole_set_color(color_white, color_black);
+}
+
+void konsole_set_info_color()
+{
+    konsole_set_color(color_light_blue, color_black);
 }

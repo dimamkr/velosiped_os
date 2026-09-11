@@ -12,6 +12,8 @@
 #include "fat32.h"
 #include "vmm.h"
 #include "pmm.h"
+#include "framebuffer.h"
+#include "colors.h"
 
 #include <acpica/include/acpi.h>
 
@@ -40,34 +42,24 @@ void kernel_main_task(void *);
 
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
+    interrupt_disable();
     memcpy(_boot_disk_signature, param, 6); // сохраняем сигнатуру диска для поиска
 
-    interrupt_disable();
+    framebuffer_read_boot_info();
 
     heap_init();
 
-    konsole_init();
-    konsole_set_good_result_color();
-
-    konsole_print("\n\n");
-    konsole_println("HEAP INITED");
-    konsole_println("KONSOLE INITED");
-
-    PRINT_INIT("GDT");
     gdt_init();
-    PRINT_OK;
 
-    PRINT_INIT("IDT");
     idt_init();
-    PRINT_OK;
 
-    PRINT_INIT("PMM");
     pmm_init();
-    PRINT_OK;
 
-    PRINT_INIT("VMM");
     vmm_init();
-    PRINT_OK;
+
+    framebuffer_init();
+
+    konsole_init();
 
     PRINT_INIT("timer");
     timer_init(100);
@@ -152,12 +144,12 @@ void kernel_main_task(void *_)
     // TODO история команд и того, что было на экране
     // TODO дамп памяти
 
-    // TODO отдельная задача с большим стеком для тяжелых не супер требовательных
-    // к скорости bottom обработчиков прерываний
+    // TODO отдельная задача для нижних обработчиков прерываний
+    // TODO сделать нормальный по распределению приоритетов планировщик
 
     // TODO пользовательские процессы из 3 кольца и безопасность
 
-    // TODO счетчик только активных задач и нормальное выделение в первое свободное место через битсет
+    // TODO framebuffer_flush раз в заданное время. также написать удобную функцию для обновления чего либо раз в фиксированное время
 
     // for (int i = 1; i < 8; ++i)
     // {
@@ -167,7 +159,7 @@ void kernel_main_task(void *_)
     // }
     // konsole_println("")
 
-    konsole_set_color(COLOR_LIGHT_BLUE, COLOR_BLACK);
+    konsole_set_info_color();
     konsole_println("========");
     konsole_println("             .__               .__                  .___  ________    _________\n"
                     "___  __ ____ |  |   ____  _____|__|_____   ____   __| _/  \\_____  \\  /   _____/\n"

@@ -18,6 +18,7 @@ bool_t uint32_less(void *a, void *b);
 void panic(char *msg, char *file, uint32_t line);
 void panic_assert(char *msg, char *file, uint32_t line);
 void halt();
+void hang_forever(void);
 void outb(uint16_t port, byte_t value);
 byte_t inb(uint16_t port);
 void outw(uint16_t port, uint16_t value);
