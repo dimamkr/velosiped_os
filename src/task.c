@@ -74,8 +74,6 @@ static task_t *task_init_default(void (*entry)(void *), void *arg, uint32_t stac
     task->pid = pid;
     task->state = TASK_READY;
 
-    konsole_printf("task_count %d\n", task_count);
-
     ++task_count;
 
     // стек должен быть выровнен
