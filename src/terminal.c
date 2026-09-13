@@ -238,13 +238,13 @@ bool_t terminal_print_ticks(argparse_command_t *command)
 
 bool_t terminal_print_disks(argparse_command_t *command)
 {
-    dynamic_array_t *disks_info = ahci_enumerate_ports();
+    dynamic_array_t *disks_info = disk_enumerate_disks();
 
     if (disks_info->elements_count)
     {
         for (uint8_t i = 0; i < disks_info->elements_count; i++)
         {
-            ahci_basic_identify_data_t *entry = dynamic_array_get_by_index(disks_info, i);
+            ata_basic_identify_data_t *entry = dynamic_array_get_by_index(disks_info, i);
 
             konsole_printf("========\nPort: %d\nDevice type: ", entry->port_num);
 

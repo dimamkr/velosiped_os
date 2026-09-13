@@ -12,6 +12,7 @@
 #include "fat32.h"
 #include "vmm.h"
 #include "pmm.h"
+#include "pio.h"
 
 #include <acpica/include/acpi.h>
 
@@ -103,6 +104,10 @@ void kernel_main_task(void *_)
         konsole_set_warning_color();
         konsole_println("AHCI not found, using legacy mode");
     }
+
+    PRINT_INIT("PIO");
+    pio_init();
+    PRINT_OK;
 
     ACPI_STATUS result;
 

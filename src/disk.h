@@ -2,6 +2,7 @@
 #define DISK
 
 #include "ahci.h"
+#include "pio.h"
 #include "types.h"
 #include "heap.h"
 #include "linked_list.h"
@@ -26,6 +27,7 @@ typedef struct {
     linked_list_node_t *cache; // TODO: написать быструю структуру для кэширования
 } disk_cache_t;
 
+dynamic_array_t *disk_enumerate_disks();
 bool_t disk_hardware_transfer_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer, bool_t write);
 disk_cache_record_t *disk_get_covering(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count);
 disk_cache_record_t *disk_add_cache_record_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, const void *data);

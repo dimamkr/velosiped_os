@@ -8,16 +8,22 @@ static disk_cache_t caches [32] = {0};
 byte_t _boot_disk_signature [6] = {0};
 
 
+dynamic_array_t *disk_enumerate_disks()
+{
+    if (_ahci_supported)
+        return ahci_enumerate_ports();
+    else
+        return pio_enumerate_ports();
+}
+
 bool_t disk_hardware_transfer_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer, bool_t write)
 {
-    if (__builtin_expect(_ahci_supported, true))
-    {
-        ahci_lba_t lba = {.lba32=start_sector, .lba4=0, .lba5=0};
+    ata_lba_t lba = {.lba32=start_sector, .lba4=0, .lba5=0};
 
+    if (_ahci_supported)
         return ahci_transfer_sync(disk_id, lba, sectors_count, buffer, write);
-    }
-    
-    return false; // TODO: поддержка legacy-записи ATA
+    else
+        return pio_transfer_sync(disk_id, lba, sectors_count, buffer, write);
 }
 
 // TODO: написать нормальное покрытие кэшами
@@ -143,25 +149,22 @@ uint8_t disk_get_boot_disk_id()
 {
     uint8_t buffer [512];
 
-    if (__builtin_expect(_ahci_supported, true))
+    dynamic_array_t *ports = disk_enumerate_disks();
+
+    for (int i = 0;i < ports->elements_count;i++)
     {
-        dynamic_array_t *ports = ahci_enumerate_ports();
+        ata_basic_identify_data_t *identify_data = dynamic_array_get_by_index(ports, i);
 
-        for (int i = 0;i < ports->elements_count;i++)
+        disk_read_sync(identify_data->port_num, 0, 1, buffer);
+
+        if (memcmp(buffer + 440, _boot_disk_signature, 6))
         {
-            ahci_basic_identify_data_t *identify_data = dynamic_array_get_by_index(ports, i);
-
-            disk_read_sync(identify_data->port_num, 0, 1, buffer);
-
-            if (memcmp(buffer + 440, _boot_disk_signature, 6))
-            {
-                dynamic_array_destroy(ports);
-                return identify_data->port_num;
-            }
+            dynamic_array_destroy(ports);
+            return identify_data->port_num;
         }
-
-        dynamic_array_destroy(ports);
     }
+
+    dynamic_array_destroy(ports);
 
     return -1;
 }

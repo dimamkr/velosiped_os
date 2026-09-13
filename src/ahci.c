@@ -127,7 +127,7 @@ uint8_t find_free_command_slot(byte_t port_num)
     }
 }
 
-bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
+bool_t ahci_identify_sync(byte_t port_num, ata_basic_identify_data_t *result)
 {
     const uint32_t cmd_answer_buffer_size = 512; // размер ответа на команду IDENTIFY
     ahci_hba_port_t *port = &(hba->ports[port_num]);
@@ -157,10 +157,10 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     port->ci |= (1 << cmd_num); // отправляем нашу команду
 
-    while (port->ci & (1 << cmd_num) && !(port->is & ATA_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
+    while (port->ci & (1 << cmd_num) && !(port->is & AHCI_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
         task_yield();
 
-    if (port->is & ATA_ERROR_ANY)
+    if (port->is & AHCI_ERROR_ANY)
     {
         ahci_restart_port(port);
         free(cmd_answer_buffer);
@@ -169,40 +169,7 @@ bool_t ahci_identify_sync(byte_t port_num, ahci_basic_identify_data_t *result)
 
     // далее - парсинг ответа команды
 
-    memset(result, 0, sizeof(ahci_basic_identify_data_t));
-
-    // полученный буффер, согласно спецификации, интерпретируется как массив из 256 2-байтовых слов
-    uint16_t *answer_words = (uint16_t *)cmd_answer_buffer;
-
-    // парсим строку serial
-    for (int i = 0; i < 10; i++)
-    {
-        result->serial[i * 2] = (answer_words[10 + i] >> 8) & 0xFF;
-        result->serial[i * 2 + 1] = answer_words[10 + i] & 0xFF;
-    }
-
-    // парсим строку model
-    for (int i = 0; i < 20; i++)
-    {
-        result->model[i * 2] = (answer_words[27 + i] >> 8) & 0xFF;
-        result->model[i * 2 + 1] = answer_words[27 + i] & 0xFF;
-    }
-
-    // парсим количество секторов
-
-    // для LBA48
-    result->sectors = (uint64_t)answer_words[100] |
-                      ((uint64_t)answer_words[101] << 16) |
-                      ((uint64_t)answer_words[102] << 32) |
-                      ((uint64_t)answer_words[103] << 48);
-
-    // для LBA28
-    if (result->sectors == 0)
-        result->sectors = (uint64_t)answer_words[60] | ((uint64_t)answer_words[61] << 16);
-
-    result->lba48_supported = (answer_words[83] & (1 << 10));
-    result->ncq_supported = (answer_words[76] & (1 << 8));
-    result->dma_supported = (answer_words[49] & (1 << 8));
+    ata_parse_identify_answer(cmd_answer_buffer, result);
 
     result->port_num = port_num;
     result->port_sig = port->sig; // чтобы знать
@@ -231,10 +198,10 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
 
     command_header->cfl = sizeof(ahci_fis_h2d_t) / 4;
 
-    while (port->ci & (1 << cmd_num) && !(port->is & ATA_ERROR_ANY))
+    while (port->ci & (1 << cmd_num) && !(port->is & AHCI_ERROR_ANY))
         task_yield();
 
-    if (port->is & ATA_ERROR_ANY)
+    if (port->is & AHCI_ERROR_ANY)
     {
         ahci_restart_port(port);
         return false;
@@ -243,7 +210,7 @@ bool_t ahci_flush_cache_sync(byte_t port_num)
     return true;
 }
 
-bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write)
+bool_t ahci_transfer_sync(byte_t port_num, ata_lba_t lba, uint32_t sectors_count, void *buffer, bool_t write)
 {
     buffer = ram_kernel_to_phys(buffer);
     
@@ -256,7 +223,7 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
 
     for (uint32_t i = 0; i < sectors_count;)
     {
-        if (port->is & ATA_ERROR_ANY) // проверяем наличие ошибок для ожидаемых команд
+        if (port->is & AHCI_ERROR_ANY) // проверяем наличие ошибок для ожидаемых команд
         {
             ahci_restart_port(port);
             return false;
@@ -304,10 +271,10 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
         commands_waiting |= (1 << cmd_num); // добавляем для ожидания
     }
 
-    while (port->ci & commands_waiting && !(port->is & ATA_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
+    while (port->ci & commands_waiting && !(port->is & AHCI_ERROR_ANY)) // ждем завершения всех команд (или ошибки)
         task_yield();
 
-    if (port->is & ATA_ERROR_ANY)
+    if (port->is & AHCI_ERROR_ANY)
     {
         ahci_restart_port(port);
         return false;
@@ -318,8 +285,8 @@ bool_t ahci_transfer_sync(byte_t port_num, ahci_lba_t lba, uint32_t sectors_coun
 
 dynamic_array_t *ahci_enumerate_ports()
 {
-    dynamic_array_t *result = dynamic_array_create(sizeof(ahci_basic_identify_data_t));
-    ahci_basic_identify_data_t *identify_data = malloc(sizeof(ahci_basic_identify_data_t));
+    dynamic_array_t *result = dynamic_array_create(sizeof(ata_basic_identify_data_t));
+    ata_basic_identify_data_t *identify_data = malloc(sizeof(ata_basic_identify_data_t));
 
     for (byte_t i = 0; i < 32; i++)
     {
