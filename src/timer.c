@@ -17,7 +17,6 @@ void timer_top_callback(isr_data_t data)
 
 void timer_bottom_callback(isr_data_t data)
 {
-    renderer_flush();
 }
 
 static uint32_t timer_frequency;

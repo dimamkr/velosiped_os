@@ -5,9 +5,11 @@
 #include "renderer.h"
 #include "font.h"
 #include "colors.h"
+#include "composer.h"
 
 extern bool_t framebuffer_is_ready;
 
+layer_t *konsole_layer;
 uint8_t *konsole_curr_font;
 
 int konsole_curr_x;
@@ -21,6 +23,7 @@ uint32_t konsole_output_history_start_index;
 
 static konsole_symbol_t _empty_symbol = {0};
 
+// единственная функция рисования
 static inline void konsole_draw_symbol(uint32_t x, uint32_t y, konsole_symbol_t value)
 {
     uint32_t screen_x = x * FONT_WIDTH;
@@ -29,7 +32,7 @@ static inline void konsole_draw_symbol(uint32_t x, uint32_t y, konsole_symbol_t 
     if (!framebuffer_is_ready)
         return;
 
-    renderer_draw_char(konsole_curr_font, value.symbol, screen_x, screen_y, value.fg_color, value.bg_color);
+    renderer_draw_char(konsole_layer, konsole_curr_font, value.symbol, screen_x, screen_y, value.fg_color, value.bg_color);
 }
 
 // функция установки символа на экран и сохранения истории
@@ -58,6 +61,7 @@ void konsole_init()
 
     colors_init();
     konsole_set_base_color();
+    konsole_layer = composer_create_layer(0, 0, fullscreen_x, fullscreen_y, 10);
 }
 
 void konsole_redraw_from_history()

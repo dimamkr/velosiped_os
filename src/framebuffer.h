@@ -84,6 +84,10 @@ typedef struct
 extern framebuffer_t framebuffer;
 
 extern bool_t framebuffer_is_ready;
+extern bool_t framebuffer_is_busy;
+
+extern uint32_t fullscreen_x;
+extern uint32_t fullscreen_y;
 
 void framebuffer_read_boot_info(void);
 void framebuffer_init(void);

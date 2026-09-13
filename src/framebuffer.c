@@ -9,7 +9,11 @@
 
 framebuffer_t fb = {0};
 
-bool_t framebuffer_is_ready = false;
+bool_t framebuffer_is_ready = false; // готов к использованию
+bool_t framebuffer_is_busy = false;  // что-то сейчас меняет буффер
+
+uint32_t fullscreen_x;
+uint32_t fullscreen_y;
 
 // считывание информации о видеорежиме полученной при загрузке
 void framebuffer_read_boot_info(void)
@@ -63,6 +67,9 @@ void framebuffer_init(void)
     fb.back_buffer = (uint32_t *)malloc(fb.size_bytes);
     memset(fb.back_buffer, 0, fb.size_bytes);
 
+    fullscreen_x = fb.width;
+    fullscreen_y = fb.height;
+
     framebuffer_is_ready = true;
 }
 
@@ -76,6 +83,9 @@ void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color)
 
 void framebuffer_flush()
 {
+    if (framebuffer_is_busy) // иначе будут артефакты
+        return;
+
     uint32_t *lfb = (uint32_t *)fb.lfb_virt;
 
     if (fb.pitch == fb.width * 4)

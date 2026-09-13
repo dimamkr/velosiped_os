@@ -14,6 +14,7 @@
 #include "pmm.h"
 #include "framebuffer.h"
 #include "colors.h"
+#include "composer.h"
 
 #include <acpica/include/acpi.h>
 
@@ -59,27 +60,74 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 
     framebuffer_init();
 
-    konsole_init();
-
-    PRINT_INIT("timer");
     timer_init(100);
-    PRINT_OK;
 
-    PRINT_INIT("keyboard");
     keyboard_init();
-    PRINT_OK;
 
-    PRINT_INIT("SCHEDULER");
     scheduler_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
     scheduler_start();
 }
 
+#include "renderer.h"
+extern byte_t font8x16_vga[];
+// --- Тест композитора ---
+void composer_test(void)
+{
+    // Слой 1: красный квадрат, z=1 (нижний)
+    layer_t *red = composer_create_layer(
+        100, 100, 300, 300, 11);
+    renderer_draw_rect(red, 0, 0, 300, 300, color_red);
+
+    // Слой 2: зелёный квадрат, z=2, перекрывает красный
+    layer_t *green = composer_create_layer(
+        250, 200, 300, 300, 20);
+    renderer_draw_rect(green, 0, 0, 300, 300, color_light_green);
+
+    // Слой 3: жёлтый квадрат, z=3, перекрывает оба
+    layer_t *yellow = composer_create_layer(
+        400, 300, 300, 300, 30);
+    renderer_draw_rect(yellow, 0, 0, 300, 300, color_yellow);
+
+    // Слой 4: текст поверх всего, z=100
+    layer_t *text_layer = composer_create_layer(
+        150, 50, 400, 100, 100);
+
+    // Фон текстового слоя — чёрный
+    renderer_draw_rect(text_layer, 0, 0, 400, 100, color_black);
+
+    // Текст: 5 строк по 16 пикселей
+    const char *lines[] = {
+        "Composer test",
+        "red z=1",
+        "green z=2",
+        "yellow z=3",
+        "text z=100",
+    };
+
+    for (int i = 0; i < 5; i++)
+    {
+        const char *s = lines[i];
+        int x = 10;
+        while (*s)
+        {
+            renderer_draw_char(text_layer, font8x16_vga,
+                               *s, x, 5 + i * 16,
+                               color_white, color_black);
+            x += 8;
+            s++;
+        }
+    }
+}
+
+// к этому моменту должны быть настроены все прерывания
+// они автоматически разрешены из-за начального стека задачи
 void kernel_main_task(void *_)
 {
     task_lock();
-    PRINT_OK;
 
-    interrupt_enable();
+    composer_init();
+
+    konsole_init();
 
     PRINT_INIT("AHCI");
     if (ahci_init())
@@ -139,6 +187,8 @@ void kernel_main_task(void *_)
     PRINT_INIT("Terminal");
     terminal_init();
     PRINT_OK;
+
+    composer_test();
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране

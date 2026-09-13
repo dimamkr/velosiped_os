@@ -5,6 +5,8 @@
 
 #define fb framebuffer
 
+#define SIZEOF_PIXEL sizeof(uint32_t)
+
 static inline uint32_t color_to_pixel(uint8_t r, uint8_t g, uint8_t b)
 {
     uint32_t color = 0;
@@ -24,6 +26,8 @@ extern uint32_t color_red;
 extern uint32_t color_light_red;
 extern uint32_t color_white;
 extern uint32_t color_light_blue;
+extern uint32_t color_green;
+extern uint32_t color_blue;
 
 void colors_init(void);
 
