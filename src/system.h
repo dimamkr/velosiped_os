@@ -27,7 +27,7 @@ void outl(uint16_t port, uint32_t value);
 uint32_t inl(uint16_t port);
 
 #define PANIC(msg) panic(msg, __FILE__, __LINE__)
-#define ASSERT(b) ((b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))
+#define ASSERT(b) (likely(b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))
 
 __attribute__((always_inline, artificial)) inline uint8_t _uint8_max(uint8_t a, uint8_t b)
 {
