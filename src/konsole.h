@@ -4,9 +4,6 @@
 #include "types.h"
 #include <stdarg.h>
 
-#define KONSOLE_W 80
-#define KONSOLE_H 25
-
 void konsole_init();
 void konsole_clear();
 void konsole_putch(char ch);
