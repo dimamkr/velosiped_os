@@ -15,7 +15,8 @@ bool_t framebuffer_is_busy = false;  // что-то сейчас меняет б
 uint32_t fullscreen_x;
 uint32_t fullscreen_y;
 
-// считывание информации о видеорежиме полученной при загрузке
+// TODO сверить с ос дев вики
+//  считывание информации о видеорежиме полученной при загрузке
 void framebuffer_read_boot_info(void)
 {
     vbe_mode_info_t *mode = (vbe_mode_info_t *)VBE_MODE_ADDR;
@@ -54,6 +55,18 @@ void framebuffer_read_boot_info(void)
 
     fb.size_bytes = fb.pitch * fb.height;
 
+    // BIOS мог не заполнить rsvd-поля.
+    // Для 32 bpp стандарт — ARGB8888, alpha в старшем байте.
+    if (fb.alpha_size == 0 && fb.bpp == 32)
+    {
+        fb.alpha_size = 8;
+        fb.alpha_pos = 24;
+    }
+    else
+    {
+        hang_forever();
+    }
+
     if (fb.width == 0 || fb.height == 0 || fb.lfb_phys == 0)
         hang_forever();
 }
@@ -61,7 +74,7 @@ void framebuffer_read_boot_info(void)
 void framebuffer_init(void)
 {
     // 1. Отображаем LFB (обычно выше 3 ГБ, MMIO)
-    fb.lfb_virt = (uint32_t)vmm_map_mmio(fb.lfb_phys, fb.size_bytes);
+    fb.lfb_virt = (uint32_t)vmm_map_framebuffer(fb.lfb_phys, fb.size_bytes); // в 20 раз быстрее чем c vmm_map_mmio
 
     // 2. Back buffer в обычной RAM (кэшируемая)
     fb.back_buffer = (uint32_t *)malloc(fb.size_bytes);
@@ -73,12 +86,14 @@ void framebuffer_init(void)
     framebuffer_is_ready = true;
 }
 
-void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color)
+void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color_rgba)
 {
     ASSERT(x < fb.width && y < fb.height);
 
-    // back_buffer — массив uint32_t, пишем по индексу (не по pitch/4!)
-    fb.back_buffer[y * fb.width + x] = color;
+    uint32_t idx = y * fb.width + x;
+    uint32_t n_color = color_blend_pixels(color_rgba, fb.back_buffer[idx]);
+
+    fb.back_buffer[idx] = n_color;
 }
 
 void framebuffer_flush()
@@ -103,4 +118,6 @@ void framebuffer_flush()
                    fb.width * 4);
         }
     }
+
+    asm volatile("sfence");
 }

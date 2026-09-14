@@ -77,6 +77,8 @@ typedef struct
     uint8_t green_size;    // размер (в битах) зеленого канала в 32 битном пикселе
     uint8_t blue_pos;      // смещение (в битах) синего канала в 32 битном пикселе
     uint8_t blue_size;     // размер (в битах) синего канала в 32 битном пикселе
+    uint8_t alpha_pos;     // размер (в битах) альфа канала в 32 битном пикселе
+    uint8_t alpha_size;    // размер (в битах) альфа канала в 32 битном пикселе
     uint32_t size_bytes;   // размер всей видеопамяти
     uint32_t *back_buffer; // буффер видеопамяти (сначала пишем сюда потом сбрасываем на видеокарту)
 } framebuffer_t;
@@ -92,7 +94,7 @@ extern uint32_t fullscreen_y;
 void framebuffer_read_boot_info(void);
 void framebuffer_init(void);
 
-void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color);
+void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color_rgba);
 
 void framebuffer_flush(void); // сброс буффера на видеокарту
 
