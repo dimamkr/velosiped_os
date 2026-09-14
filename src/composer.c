@@ -41,6 +41,16 @@ void layer_init(layer_t *this, uint32_t x_left, uint32_t y_up, uint32_t x_len, u
     this->z_index = z_index;
 
     this->flags = LAYER_PRESENT | LAYER_OPAQUE;
+
+    layer_clean(this);
+}
+
+void layer_clean(layer_t *this)
+{
+    for (uint32_t id = 0; id < this->x_len * this->y_len; ++id)
+    {
+        this->buff[id] = color_black;
+    }
 }
 
 void layer_destroy(layer_t *this)
@@ -49,12 +59,12 @@ void layer_destroy(layer_t *this)
     free(this);
 }
 
-void layer_put_pixel(layer_t *this, uint32_t x_local, uint32_t y_local, uint32_t color)
+void layer_put_pixel(layer_t *this, uint32_t x_local, uint32_t y_local, uint32_t color_rgba)
 {
     if (x_local >= this->x_len || y_local >= this->y_len)
         return;
 
-    this->buff[BUFF_IDX(this, y_local, x_local)] = color;
+    this->buff[BUFF_IDX(this, y_local, x_local)] = color_rgba;
 }
 
 // сразу делает все что нужно со слоем

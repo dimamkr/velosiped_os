@@ -3,6 +3,7 @@
 #include "font.h"
 #include "random.h"
 #include "composer.h"
+#include "colors.h"
 
 #define fb framebuffer
 

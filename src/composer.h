@@ -33,6 +33,7 @@ typedef struct
 layer_t *layer_create(void);
 void layer_init(layer_t *this, uint32_t x_left, uint32_t y_up, uint32_t x_len, uint32_t y_len, uint32_t z_index);
 void layer_destroy(layer_t *this);
+void layer_clean(layer_t *this);
 void layer_put_pixel(layer_t *this, uint32_t x_local, uint32_t y_local, uint32_t color);
 
 layer_t *composer_create_layer(uint32_t x_left, uint32_t y_up, uint32_t x_len, uint32_t y_len, uint32_t z_index);
