@@ -273,6 +273,7 @@ start:
 VBE_INFO_ADDR   equ 0x5000
 VBE_MODE_ADDR   equ 0x5200
 
+; TODO сверить с осдев вики
 setup_vbe:
     push ds
     push es
