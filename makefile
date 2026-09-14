@@ -101,7 +101,7 @@ run: all
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
 	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -display sdl -vga std -m 256
+	    -display sdl -vga std -m 256 -enable-kvm
 
 # Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug
