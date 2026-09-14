@@ -15,6 +15,7 @@
 #include "framebuffer.h"
 #include "colors.h"
 #include "composer.h"
+#include "pat.h"
 
 #include <acpica/include/acpi.h>
 
@@ -56,7 +57,11 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 
     pmm_init();
 
+    pat_init();
+
     vmm_init();
+
+    colors_init();
 
     framebuffer_init();
 
@@ -68,55 +73,96 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
     scheduler_start();
 }
 
+// composer_test.c — добавлять вызов в kernel_main_task после konsole_init
+#include "composer.h"
 #include "renderer.h"
-extern byte_t font8x16_vga[];
-// --- Тест композитора ---
-void composer_test(void)
+#include "colors.h"
+#include "font.h"
+
+extern uint8_t *konsole_curr_font;
+extern layer_t *konsole_layer;
+
+void composer_test_alpha(void)
 {
-    // Слой 1: красный квадрат, z=1 (нижний)
-    layer_t *red = composer_create_layer(
-        100, 100, 300, 300, 11);
-    renderer_draw_rect(red, 0, 0, 300, 300, color_red);
+    // ============================================================
+    // Слой 1: непрозрачный белый фон (z=1)
+    // ============================================================
+    layer_t *bg = composer_create_layer(50, 50, 500, 400, 1);
+    renderer_draw_rect(bg, 0, 0, 500, 400, RGB(255, 255, 255));
+    // bg имеет флаг LAYER_OPAQUE (по умолчанию в layer_init)
 
-    // Слой 2: зелёный квадрат, z=2, перекрывает красный
-    layer_t *green = composer_create_layer(
-        250, 200, 300, 300, 20);
-    renderer_draw_rect(green, 0, 0, 300, 300, color_light_green);
+    // ============================================================
+    // Слой 2: красный квадрат с alpha=255 (непрозрачный) (z=2)
+    // ============================================================
+    layer_t *red_opaque = composer_create_layer(80, 80, 150, 150, 2);
+    renderer_draw_rect(red_opaque, 0, 0, 150, 150, RGBA(255, 0, 0, 255));
+    red_opaque->flags &= ~LAYER_OPAQUE; // включаем blend
 
-    // Слой 3: жёлтый квадрат, z=3, перекрывает оба
-    layer_t *yellow = composer_create_layer(
-        400, 300, 300, 300, 30);
-    renderer_draw_rect(yellow, 0, 0, 300, 300, color_yellow);
+    // ============================================================
+    // Слой 3: зелёный квадрат с alpha=128 (полупрозрачный) (z=3)
+    // Перекрывает часть красного и часть белого фона.
+    // Ожидаем:
+    //   - на белом фоне:   (255, 128, 128) — светло-зелёный
+    //   - на красном фоне: (128, 128, 0)   — оливковый
+    // ============================================================
+    layer_t *green_half = composer_create_layer(180, 180, 150, 150, 30);
+    renderer_draw_rect(green_half, 0, 0, 150, 150, RGBA(0, 255, 0, 128));
+    green_half->flags &= ~LAYER_OPAQUE;
 
-    // Слой 4: текст поверх всего, z=100
-    layer_t *text_layer = composer_create_layer(
-        150, 50, 400, 100, 100);
+    // ============================================================
+    // Слой 4: синий квадрат с alpha=64 (почти прозрачный) (z=4)
+    // Ожидаем: лёгкий голубой оттенок поверх того, что под ним.
+    // ============================================================
+    layer_t *blue_light = composer_create_layer(280, 280, 150, 150, 4);
+    renderer_draw_rect(blue_light, 0, 0, 150, 150, RGBA(0, 0, 255, 64));
+    blue_light->flags &= ~LAYER_OPAQUE;
 
-    // Фон текстового слоя — чёрный
-    renderer_draw_rect(text_layer, 0, 0, 400, 100, color_black);
-
-    // Текст: 5 строк по 16 пикселей
-    const char *lines[] = {
-        "Composer test",
-        "red z=1",
-        "green z=2",
-        "yellow z=3",
-        "text z=100",
-    };
-
-    for (int i = 0; i < 5; i++)
+    // ============================================================
+    // Слой 5: "курсор" с per-pixel alpha (z=100)
+    // Квадрат 32×32, где углы полностью прозрачные, центр — непрозрачный.
+    // Проверяет, что в одном слое могут быть пиксели с разной alpha.
+    // ============================================================
+    layer_t *cursor = composer_create_layer(600, 400, 32, 32, 100);
+    for (int y = 0; y < 32; y++)
     {
-        const char *s = lines[i];
-        int x = 10;
-        while (*s)
+        for (int x = 0; x < 32; x++)
         {
-            renderer_draw_char(text_layer, font8x16_vga,
-                               *s, x, 5 + i * 16,
-                               color_white, color_black);
-            x += 8;
-            s++;
+            // Круг в центре: если расстояние от центра < 12 — непрозрачный,
+            // если между 12 и 15 — полупрозрачный, иначе — прозрачный.
+            int dx = x - 16;
+            int dy = y - 16;
+            int d2 = dx * dx + dy * dy;
+
+            uint32_t color;
+            if (d2 < 12 * 12)
+                color = RGBA(255, 255, 255, 255); // центр — белый
+            else if (d2 < 15 * 15)
+                color = RGBA(255, 255, 255, 128); // край — полупрозрачный
+            else
+                color = RGBA(0, 0, 0, 0); // вне круга — прозрачный
+
+            layer_put_pixel(cursor, x, y, color);
         }
     }
+    cursor->flags &= ~LAYER_OPAQUE;
+
+    // ============================================================
+    // Слой 6: текст поверх всего (z=200)
+    // Проверяет, что текст с непрозрачным фоном корректно перекрывает
+    // полупрозрачные слои снизу.
+    // ============================================================
+    layer_t *text = composer_create_layer(80, 20, 400, 25, 200);
+    renderer_draw_rect(text, 0, 0, 400, 25, RGB(0, 0, 0));
+
+    const char *msg = "alpha test: 255 / 128 / 64 / per-pixel";
+    int tx = 5;
+    for (const char *s = msg; *s; s++)
+    {
+        renderer_draw_char(text, konsole_curr_font, *s,
+                           tx, 5, RGB(255, 255, 255), RGB(0, 0, 0));
+        tx += 8;
+    }
+    text->flags &= ~LAYER_OPAQUE;
 }
 
 // к этому моменту должны быть настроены все прерывания
@@ -188,7 +234,7 @@ void kernel_main_task(void *_)
     terminal_init();
     PRINT_OK;
 
-    composer_test();
+    // composer_test_alpha();
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
     // TODO история команд и того, что было на экране
