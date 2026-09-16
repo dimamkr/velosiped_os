@@ -9,6 +9,7 @@
 #define min(a, b) (_Generic((a), uint8_t: _uint8_min, uint16_t: _uint16_min, uint32_t: _uint32_min))((a), (b))
 
 void memcpy(void *dst, const void *src, uint32_t size);
+void memcpy_xl(void *dst, const void *src, uint32_t size);
 void memset(void *ptr, byte_t value, uint32_t size);
 bool_t memcmp(void *ptr_a, void *ptr_b, uint32_t size);
 void memswap(void *buff_1, void *buff_2, uint32_t size);
