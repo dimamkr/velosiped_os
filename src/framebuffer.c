@@ -3,14 +3,16 @@
 #include "heap.h"
 #include "system.h"
 #include "colors.h"
+#include "task.h"
 
 #define VBE_MODE_ADDR 0x5200
 #define fb framebuffer
 
+#define IN_SCREEN_RECT(y, x) (x >= 0 && x < fb.width && y >= 0 && y < fb.height)
+
 framebuffer_t fb = {0};
 
 bool_t framebuffer_is_ready = false; // готов к использованию
-bool_t framebuffer_is_busy = false;  // что-то сейчас меняет буффер
 
 uint32_t fullscreen_x;
 uint32_t fullscreen_y;
@@ -86,9 +88,37 @@ void framebuffer_init(void)
     framebuffer_is_ready = true;
 }
 
-void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color_rgba)
+// TODO убрать ассерты и сделать рисовку лишь частей на экране
+void framebuffer_put_xline(uint32_t *source, int32_t x, int32_t y, uint32_t pix_count)
 {
-    ASSERT(x < fb.width && y < fb.height);
+    if (y < 0 || y >= (int32_t)fb.height || pix_count <= 0)
+        return;
+
+    if (x < 0)
+    {
+        // сдвиг в 0 (на -x)
+        source -= x;
+        pix_count += x;
+        x = 0;
+    }
+
+    if (x >= (int32_t)fb.width)
+        return;
+    if (x + pix_count > (int32_t)fb.width)
+        pix_count = fb.width - x;
+
+    if (pix_count <= 0)
+        return;
+
+    memcpy_xl(fb.back_buffer + y * fb.width + x,
+              source,
+              pix_count * SIZEOF_PIXEL);
+}
+
+void framebuffer_put_pixel(int32_t x, int32_t y, uint32_t color_rgba)
+{
+    if (!IN_SCREEN_RECT(y, x))
+        return;
 
     uint32_t idx = y * fb.width + x;
     uint32_t n_color = color_blend_pixels(color_rgba, fb.back_buffer[idx]);
@@ -98,8 +128,7 @@ void framebuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color_rgba)
 
 void framebuffer_flush()
 {
-    if (framebuffer_is_busy) // иначе будут артефакты
-        return;
+    TASK_LOCKED_FUNCTION;
 
     uint32_t *lfb = (uint32_t *)fb.lfb_virt;
 
@@ -119,5 +148,6 @@ void framebuffer_flush()
         }
     }
 
+    // отправка всего что еще не отправилось из буффера для wc
     asm volatile("sfence");
 }

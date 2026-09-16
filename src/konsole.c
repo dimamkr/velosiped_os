@@ -72,7 +72,7 @@ void konsole_init()
 
     colors_init();
     konsole_set_base_color();
-    konsole_layer = composer_create_layer(0, 0, fullscreen_x, fullscreen_y, 10);
+    konsole_layer = composer_create_layer(0, 0, fullscreen_x, fullscreen_y, 10, LAYER_OPAQUE | LAYER_VISIBLE);
 }
 
 void konsole_redraw_from_history()

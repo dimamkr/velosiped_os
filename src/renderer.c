@@ -5,10 +5,10 @@
 #include "composer.h"
 #include "colors.h"
 
-#define fb framebuffer
-
 void renderer_draw_char(layer_t *layer, uint8_t *font8x16, char symbol, uint32_t x_left, uint32_t y_up, uint32_t fg_color, uint32_t bg_color)
 {
+    LAYER_EDIT_FUNCTION(layer);
+
     const uint8_t *glyph = font8x16 + (uint8_t)symbol * FONT_GLYPH_SIZE;
 
     for (uint32_t y = 0; y < FONT_HEIGHT; ++y)
@@ -23,6 +23,8 @@ void renderer_draw_char(layer_t *layer, uint8_t *font8x16, char symbol, uint32_t
 
 void renderer_draw_rect(layer_t *layer, uint32_t x_left, uint32_t y_up, uint32_t x_len, uint32_t y_len, uint32_t color)
 {
+    LAYER_EDIT_FUNCTION(layer);
+
     for (uint32_t y = 0; y < y_len; ++y)
     {
         for (uint32_t x = 0; x < x_len; ++x)
