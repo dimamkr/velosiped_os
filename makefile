@@ -41,7 +41,7 @@ ACPICA_OBJECTS = $(patsubst \
 
 # Флаги для релизной сборки
 CFLAGS_RELEASE = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -O0 -I$(SRC_DIR) -Werror
+                 -fno-pic -mgeneral-regs-only -O2 -I$(SRC_DIR) -Werror
 
 # Флаги для отладочной сборки
 CFLAGS_DEBUG   = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
@@ -101,7 +101,7 @@ run: all
 	@echo "Starting QEMU (without debug)..."
 	@echo "========================================="
 	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -display sdl -vga std -m 256
+	    -display sdl -vga std -m 256 -enable-kvm
 
 # Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug

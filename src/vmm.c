@@ -14,7 +14,7 @@ static void page_fault_handler(isr_data_t registers)
     konsole_set_bad_result_color();
 
     uint32_t cr2;
-    asm volatile("mov %%cr2, %0" :"=r"(cr2) ::);
+    asm volatile("mov %%cr2, %0" : "=r"(cr2)::);
 
     konsole_printf("Page fault (caused by address 0x%08x from 0x%02x:0x%08x)\n", cr2, registers.cs, registers.eip);
     PANIC("PAGE FAULT");
@@ -44,6 +44,16 @@ void vmm_init(void)
     interrupt_register(0x0E, page_fault_handler, NULL);
 
     page_dict_switch(kernel_page_dict);
+
+    // отключаем PSE (этот же бит используется для pat)
+    uint32_t cr4;
+    asm volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 &= ~(1 << 4); // PSE = 0
+    asm volatile("mov %0, %%cr4" ::"r"(cr4));
+
+    // глобальный сброс tlb
+    asm volatile("mov %%cr3, %%eax\n"
+                 "mov %%eax, %%cr3" ::: "eax", "memory");
 }
 
 uint32_t vmm_vaddr_to_phys(void *virt_addr)
@@ -52,10 +62,8 @@ uint32_t vmm_vaddr_to_phys(void *virt_addr)
 }
 
 static uint32_t mmio_next_virt = MMIO_VIRT_BASE;
-// вирт аллокация целого числа страниц начиная с физ адреса
-// возвращает виртуальный адрес данного физического
-// (если страница уже была выделена под mmio то все будет в порядке, если выровненный физ адрес тот же)
-void *vmm_map_mmio(uint32_t phys, uint32_t size)
+
+static inline void *vmm_map_special(uint32_t phys, uint32_t size, uint32_t flags)
 {
     uint32_t phys_aligned = page_alligned_left(phys);
     uint32_t offset = phys - phys_aligned;
@@ -68,10 +76,23 @@ void *vmm_map_mmio(uint32_t phys, uint32_t size)
     mmio_next_virt += page_count * PAGE_SIZE;
 
     page_dict_map_interval_to_phys(kernel_page_dict, virt_aligned, phys_aligned, page_count * PAGE_SIZE,
-                                   PAGE_PRESENT | PAGE_RW | PAGE_CACHE_DISABLE | PAGE_WRITETHROUGH);
+                                   flags);
 
     // возвращаем указатель, который соответствует данному физическому
     return (void *)(virt_aligned + offset);
+}
+
+// вирт аллокация целого числа страниц начиная с физ адреса
+// возвращает виртуальный адрес данного физического
+// (если страница уже была выделена под mmio то все будет в порядке, если выровненный физ адрес тот же)
+void *vmm_map_mmio(uint32_t phys, uint32_t size)
+{
+    return vmm_map_special(phys, size, PAGE_PRESENT | PAGE_RW | PAGE_CACHE_DISABLE | PAGE_WRITETHROUGH);
+}
+
+void *vmm_map_framebuffer(uint32_t phys, uint32_t size)
+{
+    return vmm_map_special(phys, size, PAGE_PRESENT | PAGE_RW | PAGE_WRITE_COMBINE);
 }
 
 void vmm_unmap_page(void *virt_addr)

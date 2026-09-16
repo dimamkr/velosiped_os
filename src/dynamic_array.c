@@ -153,52 +153,45 @@ void dynamic_array_clear(dynamic_array_t *array)
     array->buffer = realloc(array->buffer, array->size_of_element);
 }
 
-void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t r_index, dynamic_array_less_cb less)
+// сортировка Хоара [l_index,r_index]
+void dynamic_array_quicksort(dynamic_array_t *array, int32_t l_index, int32_t r_index, dynamic_array_less_cb less)
 {
-    if (l_index == r_index || r_index == -1)
+    if (l_index >= r_index)
         return;
 
-    uint32_t l = l_index;
-    uint32_t r = r_index;
-    void *l_value = dynamic_array_get_by_index(array, l);
-    void *r_value = dynamic_array_get_by_index(array, r);
-    void *mid_value = malloc(array->size_of_element);
+    int32_t l = l_index;
+    int32_t r = r_index;
 
+    void *mid_value = malloc(array->size_of_element);
     memcpy(mid_value,
            dynamic_array_get_by_index(array, l_index + (rand() % (r_index - l_index + 1))),
            array->size_of_element);
 
     while (l <= r)
     {
-        bool_t cmp_l_mid = less(l_value, mid_value);
-        bool_t cmp_r_mid = less(mid_value, r_value);
+        // Ищем слева элемент >= pivot
+        while (less(dynamic_array_get_by_index(array, l), mid_value))
+            l++;
 
-        if (cmp_l_mid)
+        // Ищем справа элемент <= pivot
+        while (less(mid_value, dynamic_array_get_by_index(array, r)))
+            r--;
+
+        if (l <= r)
         {
+            if (l < r)
+                memswap(dynamic_array_get_by_index(array, l),
+                        dynamic_array_get_by_index(array, r),
+                        array->size_of_element);
             l++;
-            l_value = dynamic_array_get_by_index(array, l);
-        }
-        else if (cmp_r_mid)
-        {
-            if (r > 0)
-                r--;
-            r_value = dynamic_array_get_by_index(array, r);
-        }
-        else if (!cmp_l_mid && !cmp_r_mid)
-        {
-            memswap(l_value, r_value, array->size_of_element);
-            l++;
-            if (r > 0)
-                r--;
-            l_value = dynamic_array_get_by_index(array, l);
-            r_value = dynamic_array_get_by_index(array, r);
+            r--;
         }
     }
 
-    if (l != l_index)
-        dynamic_array_quicksort(array, l_index, l - 1, less);
-    if (l < r_index)
-        dynamic_array_quicksort(array, l, r_index, less);
+    free(mid_value);
+
+    dynamic_array_quicksort(array, l_index, r, less);
+    dynamic_array_quicksort(array, l, r_index, less);
 }
 
 void dynamic_array_copy(dynamic_array_t *dst, dynamic_array_t *src)
@@ -213,4 +206,15 @@ void dynamic_array_copy(dynamic_array_t *dst, dynamic_array_t *src)
     dst->size_of_element = src->size_of_element;
     dst->start = src->start;
     dst->end = src->end;
+}
+
+uint32_t dynamic_array_find_first_eq(dynamic_array_t *array, void *value)
+{
+    for (uint32_t id = 0; id < array->elements_count; ++id)
+    {
+        if (memcmp(value, dynamic_array_get_by_index(array, id), array->size_of_element))
+            return id;
+    }
+
+    return array->elements_count;
 }

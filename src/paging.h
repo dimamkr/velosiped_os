@@ -9,12 +9,13 @@
 
 // Флаги страниц
 #define PAGE_PRESENT 0x1
-#define PAGE_RW 0x2
+#define PAGE_RW 0x2   // read_write
 #define PAGE_USER 0x4 // пользователь имеет доступ
 #define PAGE_WRITETHROUGH 0x8
 #define PAGE_CACHE_DISABLE 0x10
 #define PAGE_ACCESSED 0x20
 #define PAGE_DIRTY 0x40
+#define PAGE_WRITE_COMBINE 0x80 // бит 7 pat
 
 #define PAGE_KERNEL_FLAGS (PAGE_PRESENT | PAGE_RW)           // страница ядра для ядра
 #define PAGE_USER_FLAGS (PAGE_PRESENT | PAGE_USER | PAGE_RW) // страницы выделяемые для пользователя

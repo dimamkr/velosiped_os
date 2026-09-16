@@ -25,14 +25,15 @@ void dynamic_array_push_front(dynamic_array_t *array, void *element);
 void dynamic_array_pop_back(dynamic_array_t *array);
 void dynamic_array_pop_front(dynamic_array_t *array);
 void dynamic_array_clear(dynamic_array_t *array);
-void dynamic_array_quicksort(dynamic_array_t *array, uint32_t l_index, uint32_t r_index, dynamic_array_less_cb less);
+void dynamic_array_quicksort(dynamic_array_t *array, int32_t l_index, int32_t r_index, dynamic_array_less_cb less);
 void dynamic_array_copy(dynamic_array_t *dst, dynamic_array_t *src);
+uint32_t dynamic_array_find_first_eq(dynamic_array_t *array, void *value);
 
 #define dynamic_array_get_by_index(array, index) ({ASSERT(index >= 0); ASSERT(index < array->elements_count);\
     (void *)((array)->buffer + (((array)->start + (index) + 1) & ((array)->size - 1)) * (array)->size_of_element); })
 #define dynamic_array_set_by_index(array, index, value) (memcpy(dynamic_array_get_by_index(array, index), value, (array)->size_of_element))
 #define dynamic_array_get_bottom(array) dynamic_array_get_by_index(array, 0)
-#define dynamic_array_get_top(array) ((void *)((array)->buffer + (((array)->end - 1) & ((array)->size - 1)) * (array)->size_of_element))
+#define dynamic_array_get_top(array) ({ASSERT(array->elements_count > 0); (void *)((array)->buffer + (((array)->end - 1) & ((array)->size - 1)) * (array)->size_of_element); })
 
 AUTOCLEANUP_DEFINE_FUNC(dynamic_array)
 

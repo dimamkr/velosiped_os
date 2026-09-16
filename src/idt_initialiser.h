@@ -77,8 +77,8 @@ extern void isr48(void); // смена контекста задач
 extern void isr128(void); // syscall
 
 // IRQ handlers (ISR 32-47)
-extern void irq0(void);
-extern void irq1(void);
+extern void irq0(void); // таймер
+extern void irq1(void); // клавиатура и мышь
 extern void irq2(void);
 extern void irq3(void);
 extern void irq4(void);

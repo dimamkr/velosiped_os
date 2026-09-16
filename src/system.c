@@ -45,6 +45,14 @@ void halt()
     asm volatile("hlt");
 }
 
+void hang_forever()
+{
+    while (true)
+    {
+        halt();
+    }
+}
+
 // размер в байтах
 __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *src, uint32_t size)
 {
@@ -63,6 +71,22 @@ __attribute__((optimize("O3,unroll-loops"))) void memcpy(void *dst, const void *
     }
 }
 
+// быстрое копирование большого объема данных
+// быстрее на ~25% чем memcpy
+void memcpy_xl(void *dst, const void *src, uint32_t size)
+{
+    uint32_t dwords = size >> 2;
+    uint32_t bytes = size & 3;
+    asm volatile(
+        "cld\n\t"       // флаг копирования вперед
+        "rep movsd\n\t" // 4 за раз
+        "movl %[bytes], %%ecx\n\t"
+        "rep movsb"                          // 1 за раз
+        : "+S"(src), "+D"(dst), "+c"(dwords) // esi edi ecx
+        : [bytes] "r"(bytes)
+        : "memory");
+}
+
 // TODO оптимизировать
 //  размер в байтах
 void memset(void *ptr, byte_t value, uint32_t size)
@@ -73,9 +97,10 @@ void memset(void *ptr, byte_t value, uint32_t size)
     }
 }
 
-// TODO
-// оптимизировать
-// размер в байтах; возвращает равны ли
+// TODO не соответствует стандартному поведению с возвращаемым значением
+//  TODO
+//  оптимизировать
+//  размер в байтах; возвращает равны ли
 __attribute__((optimize("O3,unroll-loops")))
 bool_t
 memcmp(void *ptr_a, void *ptr_b, uint32_t size)
@@ -166,7 +191,7 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_printf("ECX: 0x%08x  EDX: 0x%08x\n", ecx, edx);
     konsole_printf("ESI: 0x%08x  EDI: 0x%08x\n", esi, edi);
     konsole_printf("EBP: 0x%08x  ESP: 0x%08x\n", ebp, esp);
-    konsole_printf("EIP: 0x%08x  EFLAGS: 0x%08x\n", eip, eflags); 
+    konsole_printf("EIP: 0x%08x  EFLAGS: 0x%08x\n", eip, eflags);
     konsole_printf("CS: 0x%02x  DS: 0x%02x  ES: 0x%02x\n", cs, ds, es);
     konsole_printf("FS: 0x%02x  GS: 0x%02x  SS: 0x%02x\n", fs, gs, ss);
 
@@ -177,15 +202,15 @@ void panic(char *msg, char *file, uint32_t line)
     datetime_get(&time0);
     uint32_t seconds = datetime_timestamp_from_datetime(&time0);
 
-    for (datetime_get(&time);;datetime_get(&time))
+    for (datetime_get(&time);; datetime_get(&time))
     {
         uint32_t new_seconds = datetime_timestamp_from_datetime(&time);
 
         if (new_seconds - seconds > 10)
             break;
 
-        for (uint32_t _ = 1000;_--;)
-            asm ("pause");
+        for (uint32_t _ = 1000; _--;)
+            asm("pause");
     }
 
     power_reboot();

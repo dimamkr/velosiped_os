@@ -10,6 +10,8 @@ void vmm_init(void);
 uint32_t vmm_vaddr_to_phys(void *virt_addr);
 
 void *vmm_map_mmio(uint32_t phys, uint32_t size);
+void *vmm_map_framebuffer(uint32_t phys, uint32_t size);
+
 page_dict_t *vmm_create_user(uint32_t size);
 page_dict_t *vmm_create_process_kernel_page_dict();
 // void vmm_create_process_memory_paging(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t align);
