@@ -3,6 +3,7 @@
 #include "konsole.h"
 #include "types.h"
 #include "system.h"
+#include "int_worker.h"
 
 // Number of spurious interrupts received
 uint64_t spurious_interrupts;
@@ -46,7 +47,7 @@ static void invoke_top_handler(isr_data_t registers)
         top_handler(registers);
     }
     else
-    {   
+    {
         konsole_printf("Unhandled interrupt #%d\n", registers.int_no);
         PANIC("UNHANDLED INTERRUPT");
     }
@@ -65,12 +66,11 @@ static void invoke_top_handler(isr_data_t registers)
     // }
 }
 
-void invoke_bottom_handler(isr_data_t registers)
+void invoke_deffered_bottom_handler(isr_data_t registers)
 {
     if (interruption_bottom_handlers[registers.int_no] != NULL)
     {
-        isr_t bottom_handler = interruption_bottom_handlers[registers.int_no];
-        bottom_handler(registers);
+        int_worker_add(registers);
     }
 }
 

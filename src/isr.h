@@ -34,4 +34,6 @@ void interrupt_register(uint8_t n, isr_t top_handler, isr_t bottom_handler);
 void interrupt_enable();
 void interrupt_disable();
 
+extern isr_t interruption_bottom_handlers[];
+
 #endif

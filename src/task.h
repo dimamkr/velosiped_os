@@ -13,6 +13,10 @@
 #define STACK_SIZE_LARGE MB
 #define STACK_SIZE_ENORMOUS 4 * MB
 
+#define LAZY_TASK_PID 0
+#define KERNEL_TASK_PID 1
+#define INT_WORKER_TASK_PID 2
+
 typedef enum
 {
     TASK_RUNNING,
@@ -60,6 +64,7 @@ void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, 
 
 bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_size);
 
+extern task_t tasks[];
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
 

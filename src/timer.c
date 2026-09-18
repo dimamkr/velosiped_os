@@ -15,10 +15,6 @@ void timer_top_callback(isr_data_t data)
     scheduler_tick(timer_get_time());
 }
 
-void timer_bottom_callback(isr_data_t data)
-{
-}
-
 static uint32_t timer_frequency;
 static const uint32_t timer_qartz_frequency = 1193180;
 
@@ -42,7 +38,7 @@ void timer_init(uint32_t frequency)
     outb(TIMER0_DATA, period);
     outb(TIMER0_DATA, period >> 8);
 
-    interrupt_register(IRQ0, timer_top_callback, timer_bottom_callback);
+    interrupt_register(IRQ0, timer_top_callback, NULL);
 }
 
 // в милисекундах

@@ -7,6 +7,7 @@
 #include "vmm.h"
 #include "elf.h"
 #include "bitmap.h"
+#include "int_worker.h"
 
 task_t tasks[MAX_TASKS];
 bitmap_t *tasks_used_bitmap;
@@ -136,6 +137,9 @@ void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
     kernel_task = &tasks[1]; // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
     kernel_task->page_dict = kernel_page_dict;
     task_set_current(&tasks[1]); // задача ядра
+
+    // ВНИМАНИЕ ЗАДАЧА int_worker ИМЕЕТ НОМЕР СТРОГО 2
+    int_worker_init();
 }
 
 static inline void _task_create_node(task_t *task)
@@ -196,6 +200,9 @@ static inline void process_task_state(task_t *task, uint32_t time_milisec)
         {
             task->state = TASK_READY;
         }
+        break;
+    case TASK_TERMINATED:
+        tasks_erase(task->pid);
         break;
 
     default:

@@ -1,7 +1,7 @@
 ; Defined in isr.c
 [EXTERN isr_handler]
 [EXTERN irq_handler]
-[EXTERN invoke_bottom_handler]
+[EXTERN invoke_deffered_bottom_handler]
 
 [EXTERN task_switch_from_isr]
 [EXTERN need_reschedule]
@@ -25,8 +25,7 @@ isr_common:
 
 	;верхний и нижний обработчик
 	call isr_handler
-	sti 
-	call invoke_bottom_handler
+	call invoke_deffered_bottom_handler
 
 	pop eax              ; reload the original data segment descriptor
 	mov ds, ax
@@ -53,8 +52,7 @@ irq_common:
 
 	;верхний и нижний обработчик
     call irq_handler
-	sti 
-	call invoke_bottom_handler
+	call invoke_deffered_bottom_handler
 	
 	cmp byte [need_reschedule], 0
     jne .switch
