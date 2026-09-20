@@ -104,6 +104,8 @@ void kernel_main_task(void *_)
     pio_init();
     PRINT_OK;
 
+    disk_init();
+
     ACPI_STATUS result;
 
     PRINT_INIT("ACPI");

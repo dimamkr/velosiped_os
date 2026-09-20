@@ -7,8 +7,8 @@
 
 #define SIZEOF_PIXEL sizeof(uint32_t)
 
-// x от 1 до 65536
-#define DIV255(x) ((x + 1 + (x >> 8)) >> 8)
+// x от 1 до 65279
+#define DIV255(x) (((x) + 1 + ((x) >> 8)) >> 8)
 
 static inline uint32_t color_to_pixel(uint8_t a, uint8_t r, uint8_t g, uint8_t b)
 {

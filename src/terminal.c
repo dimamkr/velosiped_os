@@ -307,7 +307,7 @@ bool_t terminal_print_listdir(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -397,7 +397,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -470,7 +470,7 @@ bool_t terminal_view(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -563,7 +563,7 @@ bool_t terminal_change_dir(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -641,7 +641,7 @@ bool_t terminal_write(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -841,7 +841,7 @@ bool_t terminal_newfile(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -893,7 +893,7 @@ bool_t terminal_newdir(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -941,7 +941,7 @@ bool_t terminal_remove(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -1003,7 +1003,7 @@ bool_t terminal_exec(argparse_command_t *command)
 {
     if (!path)
     {
-        konsole_println("Error: path is empty (no disks mounted)");
+        konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
@@ -1121,8 +1121,8 @@ void terminal_init()
     }
     else
     {
-        konsole_set_warning_color();
-        konsole_println("\nWarning: booted-from disk not found");
+        konsole_set_bad_result_color();
+        konsole_println("\nError: can't mount root");
         konsole_set_base_color();
     }
 

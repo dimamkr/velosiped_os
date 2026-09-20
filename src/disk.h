@@ -36,6 +36,7 @@ bool_t disk_prefetch_sync(uint8_t disk_id, uint32_t start_sector, uint32_t secto
 bool_t disk_read_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer);
 bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_count, void *buffer);
 uint8_t disk_get_boot_disk_id();
+void disk_init();
 
 extern byte_t _boot_disk_signature [6];
 
