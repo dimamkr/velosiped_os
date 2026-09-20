@@ -17,6 +17,7 @@
 #include "colors.h"
 #include "composer.h"
 #include "pat.h"
+#include "mouse.h"
 
 #include <acpica/include/acpi.h>
 
@@ -142,6 +143,10 @@ void kernel_main_task(void *_)
         PRINT_OK;
 
     task_unlock();
+
+    PRINT_INIT("mouse");
+    mouse_init();
+    PRINT_OK;
 
     PRINT_INIT("Terminal");
     terminal_init();
