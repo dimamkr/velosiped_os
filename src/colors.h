@@ -25,10 +25,14 @@ static inline uint32_t color_to_pixel(uint8_t a, uint8_t r, uint8_t g, uint8_t b
 
 static inline uint32_t color_rgb_add_a(uint32_t color, uint8_t a)
 {
+    // сброс старого alpha
+    color &= ~(((uint32_t)(255 >> (8 - fb.alpha_size))) << fb.alpha_pos);
     color |= ((uint32_t)(a >> (8 - fb.alpha_size))) << fb.alpha_pos;
+
+    return color;
 }
 
-#define RGB(r, g, b) color_to_pixel(((1u << framebuffer.alpha_size) - 1), (r), (g), (b))
+#define RGB(r, g, b) color_to_pixel(255, (r), (g), (b)) // полностью непрозрачный
 #define RGBA(r, g, b, a) color_to_pixel((a), (r), (g), (b))
 #define RGB_TO_RGBA(color_rgb, a) color_rgb_add_a((color_rgb), (a))
 
