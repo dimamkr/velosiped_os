@@ -2,7 +2,7 @@
 #include "task.h"
 #include "ring.h"
 
-#define RING_SIZE 64
+#define RING_SIZE 4096
 
 volatile bool_t int_worker_pending;
 // TODO пока не готов dynamic_array с отключением расширения и возможностью резервировать место заранее может упасть
@@ -34,6 +34,7 @@ static inline void _call_curr_handler(isr_data_t data)
     interruption_bottom_handlers[data.int_no](data);
 }
 
+#include "konsole.h"
 void int_worker_task(void *_)
 {
     (void)_;
@@ -49,6 +50,8 @@ void int_worker_task(void *_)
             task_yield();
         }
         interrupt_enable();
+
+        ASSERT(!ring_full(int_worker_queue)); // точно нет переполнения
 
         int_worker_pending = false;
         while (!ring_empty(int_worker_queue))
