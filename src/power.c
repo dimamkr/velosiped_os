@@ -91,7 +91,6 @@ bool_t power_gracefully_reboot()
 
 static UINT32 _power_button_handler(void *ctx)
 {
-    konsole_println("xep");
     power_gracefully_shutdown();
 }
 
