@@ -7,6 +7,9 @@
 #include "timer.h"
 #include "pci.h"
 #include "konsole.h"
+#include "isr.h"
+#include "int_worker.h"
+#include "linked_list.h"
 
 #define ACPI_USE_CUSTOM_CACHE
 
@@ -308,14 +311,55 @@ ACPI_STATUS AcpiOsReleaseObject (ACPI_CACHE_T *Cache, void *Object)
  * Interrupt handlers
  */
 
+struct AcpiIntRoutine {
+    ACPI_OSD_HANDLER routine;
+    void *Context;
+};
+
+linked_list_node_t *AcpiIntHandlers [48] = {0};
+
+void AcpiInterruptTopHandler(isr_data_t data)
+{
+    int_worker_add(data);
+}
+
+void AcpiInterruptLowHandler(isr_data_t data)
+{
+    for (linked_list_node_t *i = AcpiIntHandlers[data.int_no];i;i = i->right)
+    {
+        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine*)i->value;
+
+        routine_data->routine(routine_data->Context);
+    }
+}
+
 ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 InterruptNumber, ACPI_OSD_HANDLER ServiceRoutine, void *Context)
 {
-    return AE_OK; // NOT IMPLEMENTED
+    if (AcpiIntHandlers[InterruptNumber + 32] == NULL)
+        interrupt_register((uint8_t)(InterruptNumber + 32), AcpiInterruptTopHandler, AcpiInterruptLowHandler);
+
+    struct AcpiIntRoutine routine = {ServiceRoutine, Context};
+
+    linked_list_add_begin(&(AcpiIntHandlers[InterruptNumber + 32]), &routine, sizeof(struct AcpiIntRoutine));
+
+    return AE_OK;
 }
 
 ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 InterruptNumber, ACPI_OSD_HANDLER ServiceRoutine)
 {
-    return AE_OK; // NOT IMPLEMENTED
+    linked_list_node_t *right = NULL;
+
+    for (linked_list_node_t *i = AcpiIntHandlers[InterruptNumber + 32];i;i = right)
+    {
+        right = i->right;
+
+        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine*)i->value;
+
+        if (routine_data->routine == ServiceRoutine)
+            linked_list_erase(&(AcpiIntHandlers[InterruptNumber + 32]), i);
+    }
+
+    return AE_OK;
 }
 
 /*

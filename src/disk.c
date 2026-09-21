@@ -1,5 +1,6 @@
 #include "disk.h"
 #include "konsole.h"
+#include "power.h"
 
 #pragma GCC optimize("O0")
 
@@ -178,6 +179,20 @@ uint8_t disk_get_boot_disk_id()
     return boot_disk_id;
 }
 
+void disk_flush_all_caches()
+{
+    dynamic_array_t *disks = disk_enumerate_disks();
+
+    for (uint32_t i = 0;i < disks->elements_count;i++)
+    {
+        ata_basic_identify_data_t *disk = dynamic_array_get_by_index(disks, i);
+
+        disk_flush_cache_sync(disk->port_num);
+    }
+
+    dynamic_array_destroy(disks);
+}
+
 void disk_init()
 {
     if (_ahci_supported)
@@ -205,5 +220,9 @@ void disk_init()
     fail:
         konsole_set_bad_result_color();
         konsole_println("Error: couldn't find booted-from disk.");
+
+        return;
     }
+
+    power_register_shutdown_routine(disk_flush_all_caches);
 }

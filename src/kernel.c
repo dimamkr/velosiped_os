@@ -18,31 +18,10 @@
 #include "composer.h"
 #include "pat.h"
 #include "mouse.h"
-
-#include <acpica/include/acpi.h>
+#include "power.h"
 
 void kernel_main_task(void *);
 
-#define PRINT_INIT(x)                   \
-    do                                  \
-    {                                   \
-        konsole_set_preambula_color();  \
-        konsole_print("Initializing "); \
-        konsole_print(x);               \
-        konsole_print("...");           \
-    } while (0)
-#define PRINT_OK                         \
-    do                                   \
-    {                                    \
-        konsole_set_good_result_color(); \
-        konsole_println("OK");           \
-    } while (0)
-#define PRINT_FAIL                      \
-    do                                  \
-    {                                   \
-        konsole_set_bad_result_color(); \
-        konsole_println("Fail");        \
-    } while (0)
 
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
@@ -106,43 +85,7 @@ void kernel_main_task(void *_)
 
     disk_init();
 
-    ACPI_STATUS result;
-
-    PRINT_INIT("ACPI");
-    konsole_println("");
-
-    if (ACPI_FAILURE(result = AcpiInitializeSubsystem()))
-    {
-        PRINT_FAIL;
-        konsole_set_warning_color();
-        konsole_printf("AcpiInitializeSubsystem returned %x\n", result);
-    }
-    else if (ACPI_FAILURE(result = AcpiInitializeTables(NULL, 16, false)))
-    {
-        PRINT_FAIL;
-        konsole_set_warning_color();
-        konsole_printf("AcpiInitializeTables returned %x\n", result);
-    }
-    else if (ACPI_FAILURE(result = AcpiLoadTables()))
-    {
-        PRINT_FAIL;
-        konsole_set_warning_color();
-        konsole_printf("AcpiLoadTables returned %x\n", result);
-    }
-    else if (ACPI_FAILURE(result = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION)))
-    {
-        PRINT_FAIL;
-        konsole_set_warning_color();
-        konsole_printf("AcpiEnableSubsystem returned %x\n", result);
-    }
-    else if (ACPI_FAILURE(result = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION)))
-    {
-        PRINT_FAIL;
-        konsole_set_warning_color();
-        konsole_printf("AcpiInitializeObjects returned %x\n", result);
-    }
-    else
-        PRINT_OK;
+    power_init();
 
     task_unlock();
 
