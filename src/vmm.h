@@ -18,6 +18,8 @@ page_dict_t *vmm_create_process_kernel_page_dict();
 // uint32_t vmm_create_process_stack_paging(page_dict_t *pd, uint32_t size, uint32_t align);
 void vmm_unmap_page(void *virt_addr);
 
+uint32_t vmm_user_stack_create(page_dict_t *page_dict, uint32_t user_stack_size);
+
 static inline void vmm_page_dict_switch(page_dict_t *prev, page_dict_t *next)
 {
     if (prev != next)

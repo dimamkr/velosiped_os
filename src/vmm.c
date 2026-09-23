@@ -9,14 +9,19 @@ page_dict_t *kernel_page_dict;
 extern task_t *current_task;
 
 // обработчик page fault
-static void page_fault_handler(isr_data_t registers)
+void page_fault_top_handler(isr_data_t registers)
 {
-    konsole_set_bad_result_color();
-
     uint32_t cr2;
-    asm volatile("mov %%cr2, %0" : "=r"(cr2)::);
+    asm volatile("mov %%cr2, %0" : "=r"(cr2));
 
-    konsole_printf("Page fault (caused by address 0x%08x from 0x%02x:0x%08x)\n", cr2, registers.cs, registers.eip);
+    konsole_set_bad_result_color();
+    konsole_printf("Page fault at 0x%08x from 0x%02x:0x%08x err=0x%x\n",
+                   cr2, registers.cs, registers.eip, registers.err_code);
+    konsole_printf("  P=%d (0=not present, 1=protection)\n", registers.err_code & 1);
+    konsole_printf("  W=%d (0=read,        1=write)\n", (registers.err_code >> 1) & 1);
+    konsole_printf("  U=%d (0=kernel,      1=user)\n", (registers.err_code >> 2) & 1);
+    konsole_printf("  RSVD=%d\n", (registers.err_code >> 3) & 1);
+    konsole_printf("  I=%d (1=instruction fetch)\n", (registers.err_code >> 4) & 1);
     PANIC("PAGE FAULT");
 }
 
@@ -41,7 +46,7 @@ void vmm_init(void)
 
     // обработчик page fault
 
-    interrupt_register(0x0E, page_fault_handler, NULL);
+    interrupt_register(0x0E, page_fault_top_handler, NULL);
 
     page_dict_switch(kernel_page_dict);
 
@@ -102,6 +107,7 @@ void vmm_unmap_page(void *virt_addr)
 
 // для создания процессов
 //-------------------------------------------------------------------
+
 static inline void copy_linked_kernel_page_dict(page_dict_t *pd)
 {
     // TODO пока copy_linked нельзя
@@ -116,4 +122,13 @@ page_dict_t *vmm_create_process_kernel_page_dict()
     copy_linked_kernel_page_dict(pd);
 
     return pd;
+}
+
+// возвращает верхушку
+uint32_t vmm_user_stack_create(page_dict_t *page_dict, uint32_t user_stack_size)
+{
+    uint32_t user_stack_start = USER_STACK_TOP - user_stack_size;
+    page_dict_map_interval(page_dict, user_stack_start, user_stack_size, PAGE_USER_FLAGS);
+
+    return USER_STACK_TOP;
 }

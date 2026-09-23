@@ -95,6 +95,6 @@ typedef struct
 bool_t elf_check(void *file_buff);
 void elf_print_info(void *file_buff);
 
-bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container);
+bool_t elf_user_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container);
 
 #endif
