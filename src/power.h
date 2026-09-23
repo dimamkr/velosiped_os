@@ -18,5 +18,6 @@ bool_t power_shutdown();
 bool_t power_gracefully_shutdown();
 bool_t power_reboot();
 bool_t power_gracefully_reboot();
+void power_init();
 
 #endif

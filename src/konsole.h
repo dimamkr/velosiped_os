@@ -25,6 +25,27 @@ void konsole_set_panic_color();
 void konsole_set_base_color();
 void konsole_set_info_color();
 
+#define PRINT_INIT(x)                   \
+    do                                  \
+    {                                   \
+        konsole_set_preambula_color();  \
+        konsole_print("Initializing "); \
+        konsole_print(x);               \
+        konsole_print("...");           \
+    } while (0)
+#define PRINT_OK                         \
+    do                                   \
+    {                                    \
+        konsole_set_good_result_color(); \
+        konsole_println("OK");           \
+    } while (0)
+#define PRINT_FAIL                      \
+    do                                  \
+    {                                   \
+        konsole_set_bad_result_color(); \
+        konsole_println("Fail");        \
+    } while (0)
+
 typedef struct
 {
     byte_t symbol;

@@ -1,16 +1,19 @@
 #include "disk.h"
 #include "konsole.h"
+#include "power.h"
 
 #pragma GCC optimize("O0")
 
 
 static disk_cache_t caches [32] = {0};
 byte_t _boot_disk_signature [6] = {0};
+static bool_t use_ahci = false;
+static uint8_t boot_disk_id = 0xFF;
 
 
 dynamic_array_t *disk_enumerate_disks()
 {
-    if (_ahci_supported)
+    if (use_ahci)
         return ahci_enumerate_ports();
     else
         return pio_enumerate_ports();
@@ -20,7 +23,7 @@ bool_t disk_hardware_transfer_sync(uint8_t disk_id, uint32_t start_sector, uint3
 {
     ata_lba_t lba = {.lba32=start_sector, .lba4=0, .lba5=0};
 
-    if (_ahci_supported)
+    if (use_ahci)
         return ahci_transfer_sync(disk_id, lba, sectors_count, buffer, write);
     else
         return pio_transfer_sync(disk_id, lba, sectors_count, buffer, write);
@@ -145,7 +148,7 @@ bool_t disk_write_sync(uint8_t disk_id, uint32_t start_sector, uint32_t sectors_
     return true;
 }
 
-uint8_t disk_get_boot_disk_id()
+static void disk_search_boot_disk()
 {
     uint8_t buffer [512];
 
@@ -160,11 +163,66 @@ uint8_t disk_get_boot_disk_id()
         if (memcmp(buffer + 440, _boot_disk_signature, 6))
         {
             dynamic_array_destroy(ports);
-            return identify_data->port_num;
+            boot_disk_id = identify_data->port_num;
+
+            return;
         }
     }
 
     dynamic_array_destroy(ports);
 
-    return -1;
+    boot_disk_id = -1;
+}
+
+uint8_t disk_get_boot_disk_id()
+{
+    return boot_disk_id;
+}
+
+void disk_flush_all_caches()
+{
+    dynamic_array_t *disks = disk_enumerate_disks();
+
+    for (uint32_t i = 0;i < disks->elements_count;i++)
+    {
+        ata_basic_identify_data_t *disk = dynamic_array_get_by_index(disks, i);
+
+        disk_flush_cache_sync(disk->port_num);
+    }
+
+    dynamic_array_destroy(disks);
+}
+
+void disk_init()
+{
+    if (_ahci_supported)
+        use_ahci = true;
+
+    disk_search_boot_disk();
+
+    if (boot_disk_id == 0xFF)
+    {
+        if (use_ahci)
+        {
+            konsole_set_warning_color();
+            konsole_println("Warning: couldn't find booted-from disk via AHCI. Switching to PIO mode.");
+
+            use_ahci = false;
+
+            disk_search_boot_disk();
+
+            if (boot_disk_id == 0xFF)
+                goto fail;
+
+            return;
+        }
+
+    fail:
+        konsole_set_bad_result_color();
+        konsole_println("Error: couldn't find booted-from disk.");
+
+        return;
+    }
+
+    power_register_shutdown_routine(disk_flush_all_caches);
 }

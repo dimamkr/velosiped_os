@@ -2,6 +2,8 @@
 #include "dynamic_array.h"
 #include "task.h"
 #include "system.h"
+#include "konsole.h"
+
 #include <acpica/include/acpi.h>
 
 
@@ -15,9 +17,9 @@ void power_invoke_all_shutdown_routines()
     if (shutdown_routines)
         for (uint32_t i = 0;i < shutdown_routines->elements_count;i++)
         {
-            power_shutdown_routine_cb routine = dynamic_array_get_by_index(shutdown_routines, i);
+            power_shutdown_routine_cb *routine = dynamic_array_get_by_index(shutdown_routines, i);
 
-            routine();
+            (*routine)();
         }
 }
 
@@ -85,4 +87,60 @@ bool_t power_gracefully_reboot()
     power_invoke_all_shutdown_routines();
 
     power_reboot();
+}
+
+static UINT32 _power_button_handler(void *ctx)
+{
+    power_gracefully_shutdown();
+}
+
+void power_init()
+{
+    TASK_LOCKED_FUNCTION;
+
+    ACPI_STATUS result;
+
+    PRINT_INIT("ACPI");
+    konsole_println("");
+
+    if (ACPI_FAILURE(result = AcpiInitializeSubsystem()))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeSubsystem returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiInitializeTables(NULL, 16, false)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeTables returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiLoadTables()))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiLoadTables returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiEnableSubsystem returned %x\n", result);
+    }
+    else if (ACPI_FAILURE(result = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION)))
+    {
+        PRINT_FAIL;
+        konsole_set_warning_color();
+        konsole_printf("AcpiInitializeObjects returned %x\n", result);
+    }
+    else
+        PRINT_OK;
+
+    AcpiClearEvent(ACPI_EVENT_POWER_BUTTON);
+
+    if (ACPI_FAILURE(AcpiInstallFixedEventHandler(ACPI_EVENT_POWER_BUTTON, _power_button_handler, NULL)))
+    {
+        konsole_set_warning_color();
+        konsole_println("Warning: can't install power button handler");
+    }
 }
