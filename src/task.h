@@ -34,7 +34,7 @@ typedef struct
     uint32_t ebp;
     uint32_t eip; // точка входа
 
-    uint32_t *stack_start; // выделенный стек
+    uint32_t *stack_start; // выделенный стек ядра
     uint32_t stack_size;
 
     page_dict_t *page_dict;
@@ -62,7 +62,7 @@ void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
 void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict);
 
-bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_size);
+bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t kernel_stack_size, uint32_t user_stack_size);
 
 extern task_t tasks[];
 extern task_t *current_task;

@@ -18,7 +18,7 @@ typedef int (*syscall_fn)(uint32_t, uint32_t, uint32_t);
 int sys_write(uint32_t file_descriptor, const char *buff, uint32_t size);
 // int sys_open(const char *path, uint32_t flags);
 // int sys_close(uint32_t fd);
-// void sys_exit(int status);
+int sys_exit(uint32_t status, uint32_t _, uint32_t __);
 // int sys_brk(void *addr);
 
 static syscall_fn syscall_table[] = {
@@ -26,7 +26,7 @@ static syscall_fn syscall_table[] = {
     [SYS_WRITE] = (syscall_fn)sys_write,
     // [SYS_OPEN] = (syscall_fn)sys_open,
     // [SYS_CLOSE] = (syscall_fn)sys_close,
-    // [SYS_EXIT] = (syscall_fn)sys_exit,
+    [SYS_EXIT] = (syscall_fn)sys_exit,
     // [SYS_BRK] = (syscall_fn)sys_brk,
 };
 
@@ -53,4 +53,9 @@ int sys_write(uint32_t file_descriptor, const char *buff, uint32_t size)
 {
     konsole_print(buff);
     return size;
+}
+
+int sys_exit(uint32_t status, uint32_t _, uint32_t __)
+{
+    task_exit();
 }

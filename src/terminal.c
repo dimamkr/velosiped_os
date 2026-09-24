@@ -1064,7 +1064,9 @@ bool_t terminal_exec(argparse_command_t *command)
 
     fat32_read_file(&info, file, 0, buff, file->size);
 
-    if (!task_create_process_from_elf(buff, process_arg, stack_size))
+    // elf_print_info(buff);
+
+    if (!task_create_user_process_from_elf(buff, process_arg, STACK_SIZE_SMALL, stack_size))
     {
         konsole_println("Error: it isn't elf file");
         free(file);

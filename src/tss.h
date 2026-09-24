@@ -33,3 +33,5 @@ typedef struct
 } __attribute__((packed)) tss_t; // task state segment
 
 void tss_init(uint32_t gdt_date_curr);
+
+extern tss_t tss_entry;

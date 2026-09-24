@@ -142,7 +142,7 @@ extern task_t *current_task;
 // TODO сделать нормальный код для загрузки больших последовательных кусков с флагами в словарь
 
 // Создаёт задачу из ELF-образа (ядро, без пользовательского режима)
-bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container)
+static inline bool_t _elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container, uint32_t page_flags)
 {
     TASK_LOCKED_FUNCTION;
 
@@ -173,7 +173,7 @@ bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_di
         uint32_t filesz = phdr[i].p_filesz;
         uint32_t offset = phdr[i].p_offset;
 
-        page_dict_map_interval(*page_dict_container, vaddr, memsz, PAGE_KERNEL_FLAGS);
+        page_dict_map_interval(*page_dict_container, vaddr, memsz, page_flags);
 
         // Копируем данные из файла в виртуальную память
         memcpy((void *)vaddr, elf_data + offset, filesz);
@@ -191,4 +191,9 @@ bool_t elf_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_di
     page_dict_switch(old_page_dict);
 
     return 1;
+}
+
+bool_t elf_user_load(void *elf_data, uint32_t *entry_container, page_dict_t **page_dict_container)
+{
+    return _elf_load(elf_data, entry_container, page_dict_container, PAGE_USER_FLAGS);
 }

@@ -1,239 +1,312 @@
 # ============================================================
-# Makefile для 32-битного ядра
-# Исходники в папке src/, сборка в build/
-# Цели:
-#   all         - полная сборка (релиз) с очисткой
-#   run         - собрать и запустить QEMU без отладки
-#   build-debug - сборка с отладочной информацией (-g -O0)
-#   run-debug   - собрать с отладкой и запустить QEMU в режиме ожидания GDB
-#   clean       - удалить папку build
+#  Makefile — 32-битное ядро
+# ============================================================
+#
+#  Цели:
+#    all          релизная сборка + образ
+#    run          собрать и запустить QEMU
+#    build-debug  сборка с отладочной информацией
+#    run-debug    QEMU с GDB-сервером
+#    clean        удалить build/
+#
+#  Дерево исходников:
+#    src/            ядро
+#    src/boot/       загрузчики (boot1, boot2)
+#    userspace/bin/  пользовательские программы (1 .c = 1 программа)
+#    userspace/include/ общие заголовки
+#    test/files/     файлы для /test на образе
+#
+#  Дерево сборки:
+#    build/boot/
+#    build/kernel/   и build/kernel/acpica/
+#    build/user/bin/
 # ============================================================
 
-# Компиляторы
+# ------- Инструменты -------
 CC      = gcc
 NASM    = nasm
 LD      = ld
 OBJCOPY = objcopy
 RM      = rm -rf
 
-# Каталоги
-SRC_DIR   = src
-BUILD_DIR = build
-
-# ACPICA
-ACPICA_DIR = $(SRC_DIR)/acpica
+# ------- Каталоги исходников -------
+SRC_DIR        = src
+BOOT_SRC_DIR   = $(SRC_DIR)/boot
+ACPICA_DIR     = $(SRC_DIR)/acpica
 ACPICA_INCLUDE = $(ACPICA_DIR)/include
 
-ALL_ACPICA_SOURCES = $(wildcard $(ACPICA_DIR)/components/*/*.c)
+USER_DIR       = userspace
+USER_BIN_DIR   = $(USER_DIR)/bin
+USER_INC_DIR   = $(USER_DIR)/include
 
-# Runtime ACPICA для ядра:
-# debugger и disassembler не нужны.
+TEST_FILES_DIR = test/files
+
+# ------- Каталоги сборки -------
+BUILD_DIR        = build
+BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
+BUILD_KERNEL_DIR = $(BUILD_DIR)/kernel
+BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/acpica
+BUILD_USER_BIN   = $(BUILD_DIR)/user/bin
+
+# ============================================================
+#  Флаги
+# ============================================================
+
+# ---- Ядро ----
+# -MMD -MP  →  gcc генерирует .d-файлы с зависимостями от заголовков,
+#             которые затем подключаются через -include в конце.
+KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
+                       -fno-stack-protector -fno-pic -mgeneral-regs-only \
+                       -I$(SRC_DIR) -Werror -MMD -MP
+KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
+KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
+
+KERNEL_NASM_RELEASE = -f elf32
+KERNEL_NASM_DEBUG   = -f elf32 -g
+
+KERNEL_LDFLAGS = -m elf_i386 -T $(SRC_DIR)/link.ld -nostdlib
+
+# ---- ACPICA ----
+ACPICA_CFLAGS  = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
+ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
+ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
+
+# ---- Пользовательские программы ----
+USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -nostartfiles \
+                     -nodefaultlibs -static -no-pie -fno-pic -fno-builtin \
+                     -fno-stack-protector -I$(USER_INC_DIR) \
+                     -Wall -Wextra -Werror -MMD -MP
+USER_CFLAGS_RELEASE = $(USER_CFLAGS_COMMON) -O2
+USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
+
+USER_LDFLAGS = -m elf_i386 -T $(USER_DIR)/link.ld -nostdlib
+
+# ---- Значения по умолчанию (release) ----
+KERNEL_CFLAGS = $(KERNEL_CFLAGS_RELEASE)
+KERNEL_NASM   = $(KERNEL_NASM_RELEASE)
+USER_CFLAGS   = $(USER_CFLAGS_RELEASE)
+
+# ============================================================
+#  Списки исходников и целей
+# ============================================================
+
+# ---- Ядро ----
+KERNEL_C_SOURCES   = $(wildcard $(SRC_DIR)/*.c)
+KERNEL_ASM_SOURCES = $(wildcard $(SRC_DIR)/*.asm)
+
+KERNEL_C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c,   $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_C_SOURCES))
+KERNEL_ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_ASM_SOURCES))
+
+# ---- ACPICA ----
+ALL_ACPICA_SOURCES = $(wildcard $(ACPICA_DIR)/components/*/*.c)
 ACPICA_SOURCES = $(filter-out \
     $(ACPICA_DIR)/components/debugger/%.c \
     $(ACPICA_DIR)/components/disassembler/%.c \
     $(ACPICA_DIR)/components/resources/rsdump.c, \
     $(ALL_ACPICA_SOURCES))
-
 ACPICA_OBJECTS = $(patsubst \
     $(ACPICA_DIR)/%.c, \
-    $(BUILD_DIR)/acpica/%.o, \
+    $(BUILD_ACPI_DIR)/%.o, \
     $(ACPICA_SOURCES))
 
-# Флаги для релизной сборки
-CFLAGS_RELEASE = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -O2 -I$(SRC_DIR) -Werror
+KERNEL_OBJECTS = $(KERNEL_C_OBJECTS) $(KERNEL_ASM_OBJECTS) $(ACPICA_OBJECTS)
 
-# Флаги для отладочной сборки
-CFLAGS_DEBUG   = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
-                 -fno-pic -mgeneral-regs-only -g -O0 -fno-omit-frame-pointer -I$(SRC_DIR) -Werror
+# ---- Загрузчики ----
+BOOT1_SRC = $(BOOT_SRC_DIR)/boot1.asm
+BOOT2_SRC = $(BOOT_SRC_DIR)/boot2.asm
+BOOT1_BIN = $(BUILD_BOOT_DIR)/boot1.bin
+BOOT2_BIN = $(BUILD_BOOT_DIR)/boot2.bin
 
-# Флаги для ACPICA (отключаем варнинги, которые мешают сборке)
-# ACPICA
-ACPICA_CFLAGS = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
-ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
-ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
+# ---- Пользовательские программы ----
+USER_C_SOURCES = $(wildcard $(USER_BIN_DIR)/*.c)
+USER_OBJECTS   = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.o,   $(USER_C_SOURCES))
+USER_BINARIES  = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.elf, $(USER_C_SOURCES))
 
-# Флаги для NASM (релиз и отладка)
-NASMFLAGS_RELEASE = -f elf32
-NASMFLAGS_DEBUG   = -f elf32 -g
+# ---- Файлы автозависимостей (.d), генерируются -MMD ----
+KERNEL_DEPS = $(KERNEL_C_OBJECTS:.o=.d) $(ACPICA_OBJECTS:.o=.d)
+USER_DEPS   = $(USER_OBJECTS:.o=.d)
 
-# По умолчанию используем релизные флаги
-CFLAGS    = $(CFLAGS_RELEASE)
-NASMFLAGS = $(NASMFLAGS_RELEASE)
-
-# Флаги для линковки
-LDFLAGS = -m elf_i386 -T $(SRC_DIR)/link.ld -nostdlib
-
-# Список C-файлов
-C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
-
-# Список ассемблерных файлов (исключаем boot.asm, они собираются отдельно)
-ALL_ASM = $(wildcard $(SRC_DIR)/*.asm)
-ASM_SOURCES = $(filter-out $(SRC_DIR)/boot1.asm $(SRC_DIR)/boot2.asm, $(ALL_ASM))
-
-# Объектные файлы
-C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
-ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
-OBJECTS = $(C_OBJECTS) $(ASM_OBJECTS) $(ACPICA_OBJECTS)
+# ---- Образ ----
+IMAGE = $(BUILD_DIR)/myos.img
 
 # ============================================================
-# Основные цели
+#  Основные цели
 # ============================================================
 
-# Сборка (релиз) – очистка + сборка образа
-all: $(BUILD_DIR)/myos.img
-	@echo "✅ Build completed (release)."
+.PHONY: all run build-debug run-debug clean
 
-# Сборка с отладочной информацией
+all: $(IMAGE)
+	@echo "✅ Build complete: $<"
+
+# Отладочная сборка — отдельный build-каталог, чтобы не смешивать с release
 build-debug:
 	@echo "Building with debug info..."
-	$(MAKE) debug-internal
+	$(MAKE) \
+	    BUILD_DIR=build/debug \
+	    KERNEL_CFLAGS='$(KERNEL_CFLAGS_DEBUG)' \
+	    KERNEL_NASM='$(KERNEL_NASM_DEBUG)' \
+	    USER_CFLAGS='$(USER_CFLAGS_DEBUG)' \
+	    all
 
-# Внутренняя цель для отладочной сборки (переопределяем флаги)
-debug-internal: CFLAGS = $(CFLAGS_DEBUG)
-debug-internal: NASMFLAGS = $(NASMFLAGS_DEBUG)
-debug-internal: $(BUILD_DIR)/myos.img
-	@echo "✅ Debug build completed."
-
-# Запуск QEMU без отладки
 run: all
-	@echo "========================================="
-	@echo "Starting QEMU (without debug)..."
-	@echo "========================================="
-	qemu-system-i386 -monitor stdio -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
+	@echo "Starting QEMU..."
+	qemu-system-i386 -monitor stdio \
+	    -device ahci,id=ahci \
+	    -device ide-hd,drive=disk,bus=ahci.0 \
+	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
 	    -display sdl -vga std -m 256 -enable-kvm
 
-# Запуск QEMU с отладкой (для VS Code)
 run-debug: build-debug
-	@echo "========================================="
-	@echo "Starting QEMU with GDB server (for VS Code)..."
-	@echo "========================================="
-	@(nohup qemu-system-i386 -d int -D build/interrupts.log -monitor unix:/tmp/qemu-monitor.sock,server,nowait -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
+	@echo "Starting QEMU with GDB server (port 1234)..."
+	@(nohup qemu-system-i386 -d int -D build/debug/interrupts.log \
+	    -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
+	    -device ahci,id=ahci \
+	    -device ide-hd,drive=disk,bus=ahci.0 \
+	    -drive format=raw,file=build/debug/myos.img,if=none,id=disk \
 	    -display sdl -vga std -s -S -m 256 \
-	    > $(BUILD_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
-	@echo "Waiting for QEMU to open port 1234..."
+	    > build/debug/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@timeout=0; \
 	while ! nc -z localhost 1234 2>/dev/null; do \
 	    sleep 0.1; \
 	    timeout=$$((timeout + 1)); \
-	    if [ $$timeout -gt 30 ]; then \
-	        echo "❌ Timeout: QEMU did not open port 1234."; \
-	        echo "Last lines of qemu.log:"; \
-	        tail -n 10 $(BUILD_DIR)/qemu.log; \
+	    if [ $$timeout -gt 300 ]; then \
+	        echo "❌ Timeout waiting for QEMU"; \
+	        tail -n 10 build/debug/qemu.log; \
 	        kill $$(cat /tmp/qemu.pid) 2>/dev/null || true; \
 	        exit 1; \
 	    fi; \
 	done
-	@echo "✅ QEMU started and port 1234 is open. You can now attach GDB."
+	@echo "✅ QEMU up, attach GDB to :1234"
 
-# Очистка
 clean:
-	@echo "🧹 Cleaning build directory..."
-	$(RM) $(BUILD_DIR)
+	@echo "🧹 Cleaning..."
+	$(RM) $(BUILD_DIR) build/debug
 
 # ============================================================
-# Правила сборки
+#  Каталоги
 # ============================================================
 
-# Создание каталога build
-$(BUILD_DIR):
-	mkdir -p $@
+$(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN):
+	@mkdir -p $@
 
-# Компиляция C-файлов
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	@echo "1. Compiling $<..."
-	$(CC) $(CFLAGS) -c -o $@ $<
+# ============================================================
+#  Загрузчики
+# ============================================================
 
-# Сборка загрузчика stage 1 (boot1.asm) – бинарный файл (без отладки)
-$(BUILD_DIR)/boot1.bin: $(SRC_DIR)/boot1.asm | $(BUILD_DIR)
-	@echo "1.1 Building bootloader (stage 1)..."
+$(BUILD_BOOT_DIR)/%.bin: $(BOOT_SRC_DIR)/%.asm | $(BUILD_BOOT_DIR)
+	@echo "  [BOOT]  $<"
 	$(NASM) -f bin -o $@ $<
 
-# Сборка загрузчика stage 2 (boot2.asm)
-$(BUILD_DIR)/boot2.bin: $(SRC_DIR)/boot2.asm | $(BUILD_DIR)
-	@echo "1.2 Building bootloader (stage 2)..."
-	$(NASM) -f bin -o $@ $<
+# ============================================================
+#  Ядро
+# ============================================================
 
-# Компиляция ассемблерных файлов (кроме boot.asm) в объектные
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_DIR)
-	@echo "1.3 Assembling $<..."
-	$(NASM) $(NASMFLAGS) -o $@ $<
+$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_KERNEL_DIR)
+	@echo "  [CC]    $<"
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-# Линковка ядра в ELF
-$(BUILD_DIR)/kernel.elf: $(OBJECTS) $(SRC_DIR)/link.ld | $(BUILD_DIR)
-	@echo "2. Linking kernel..."
-	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
+$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_KERNEL_DIR)
+	@echo "  [ASM]   $<"
+	$(NASM) $(KERNEL_NASM) -o $@ $<
 
-# Получение плоского бинарника из ELF (убираем отладочную информацию)
-$(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/kernel.elf | $(BUILD_DIR)
-	@echo "3. Creating binary..."
-	$(OBJCOPY) -O binary -S $< $@
-	@echo "Kernel data: "
-	readelf -l $<
-	@echo "kernel.bin file size: $$(wc -c < $@) bytes"
-
-# Сборка ACPICA
-$(BUILD_DIR)/acpica/%.o: $(ACPICA_DIR)/%.c
+$(BUILD_ACPI_DIR)/%.o: $(ACPICA_DIR)/%.c | $(BUILD_ACPI_DIR)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(ACPICA_CFLAGS) -c $< -o $@
+	@echo "  [ACPI]  $<"
+	$(CC) $(KERNEL_CFLAGS) $(ACPICA_CFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/myos.img: $(BUILD_DIR)/boot1.bin $(BUILD_DIR)/boot2.bin $(BUILD_DIR)/kernel.bin | $(BUILD_DIR)
-	@echo "Creating disk image with MBR and FAT32..."
+$(BUILD_KERNEL_DIR)/kernel.elf: $(KERNEL_OBJECTS) $(SRC_DIR)/link.ld | $(BUILD_KERNEL_DIR)
+	@echo "  [LD]    kernel.elf"
+	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
-	# создание тестового elf файла
-	@bash test/elf/build_test.sh
+$(BUILD_KERNEL_DIR)/kernel.bin: $(BUILD_KERNEL_DIR)/kernel.elf
+	@echo "  [BIN]   kernel.bin"
+	$(OBJCOPY) -O binary -S $< $@
+	@echo "          size: $$(wc -c < $@) bytes"
 
-	# 1. Пустой образ 64 МБ
-	dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
-	# 2. MBR и FAT32-раздел (LBA)
-	parted -s $@ mklabel msdos
-	parted -s $@ mkpart primary fat32 1MiB 100%
-	parted -s $@ set 1 boot on
-	# 3. Создаём FAT32-раздел (129024 сектора ≈ 63 МБ)
-	dd if=/dev/zero of=part.tmp bs=512 count=129024 2>/dev/null
-	mkfs.vfat -F 32 -s 8 -R 32 -n "MYOS" part.tmp
-	# 4. Создаём временную папку с контентом
-	mkdir -p fat32_content
-	# 4.1 Текстовые файлы
-	cp test/elf/test_elf.elf fat32_content/echo
-	echo "Hello, FAT32 World!" > fat32_content/hello.txt
-	echo "This is a test file for FAT32 parser." > fat32_content/info.txt
-	echo "Line 1" > fat32_content/multiline.txt
-	echo "Line 2" >> fat32_content/multiline.txt
-	echo "Line 3" >> fat32_content/multiline.txt
-	# 4.2 Вложенные папки и файлы
-	mkdir -p fat32_content/docs
-	echo "Document 1 content" > fat32_content/docs/doc1.txt
-	echo "Document 2 content" > fat32_content/docs/doc2.txt
-	echo "Nested file" > fat32_content/docs/nested.txt
-	mkdir -p fat32_content/data
-	echo "Data content" > fat32_content/data/data1.bin
-	dd if=/dev/urandom of=fat32_content/data/random.bin bs=512 count=1 2>/dev/null
-	mkdir -p fat32_content/scripts
-	echo "#!/bin/bash" > fat32_content/scripts/hello.sh
-	echo "echo 'Hello from script!'" >> fat32_content/scripts/hello.sh
-	echo "echo 'Another line'" >> fat32_content/scripts/hello.sh
-	mkdir -p fat32_content/empty_folder
-	# 4.3 Пустые файлы
-	touch fat32_content/empty.txt
-	touch fat32_content/docs/empty.doc
-	# 4.4 Файл с пробелами в имени
-	echo "File with spaces content" > "fat32_content/file with spaces.txt"
-	# 4.5 Файл с длинным именем (проверка LFN)
-	echo "This is a file with a very long filename that definitely exceeds the old 8.3 DOS naming convention limit" > "fat32_content/This_is_a_very_long_filename_that_exceeds_8_3_limit.txt"
-	# 5. Копируем всё во временный FAT32-образ
-	mcopy -s -i part.tmp fat32_content/* ::/
-	# 6. Копируем ядро в корень FAT32
-	mcopy -i part.tmp $(BUILD_DIR)/kernel.bin ::kernel.bin
-	# 7. Вшиваем FAT32 в образ (смещение 1MiB)
-	dd if=part.tmp of=$@ bs=1M seek=1 conv=notrunc 2>/dev/null
-	rm -f part.tmp
-	rm -rf fat32_content
-	# 8. Пишем boot1 в MBR (первые 446 байт)
-	dd if=$(BUILD_DIR)/boot1.bin of=$@ conv=notrunc bs=446 count=1 2>/dev/null
-	# 9. Пишем boot2 в сектор 1 (сразу после MBR)
-	dd if=$(BUILD_DIR)/boot2.bin of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
-	@echo "Image created: $@"
+# ============================================================
+#  Пользовательские программы
+# ============================================================
 
-# Фантомные цели
-.PHONY: all run build-debug run-debug clean debug-internal
+$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.c | $(BUILD_USER_BIN)
+	@echo "  [UCC]   $<"
+	$(CC) $(USER_CFLAGS) -c -o $@ $<
+
+$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_DIR)/link.ld
+	@echo "  [ULD]   $@"
+	$(LD) $(USER_LDFLAGS) -o $@ $<
+
+# ============================================================
+#  Диск
+# ============================================================
+
+IMAGE_FAT_SECTORS = 129024
+FAT_TMP           = $(BUILD_DIR)/part.tmp
+FAT_STAGE         = $(BUILD_DIR)/fat.stage
+
+$(IMAGE): $(BOOT1_BIN) $(BOOT2_BIN) \
+          $(BUILD_KERNEL_DIR)/kernel.bin \
+          $(USER_BINARIES) | $(BUILD_DIR)
+	@echo "========================================="
+	@echo " Building disk image"
+	@echo "========================================="
+
+	@echo "  [1/6] Empty image (64 MiB)"
+	@dd if=/dev/zero of=$@ bs=1M count=64 2>/dev/null
+
+	@echo "  [2/6] MBR + bootable FAT32 partition"
+	@parted -s $@ mklabel msdos
+	@parted -s $@ mkpart primary fat32 1MiB 100%
+	@parted -s $@ set 1 boot on
+
+	@echo "  [3/6] mkfs.vfat"
+	@dd if=/dev/zero of=$(FAT_TMP) bs=512 count=$(IMAGE_FAT_SECTORS) 2>/dev/null
+	@mkfs.vfat -F 32 -s 8 -R 32 -n "MYOS" $(FAT_TMP) > /dev/null
+
+	@echo "  [4/6] Staging FAT contents"
+	@rm -rf $(FAT_STAGE)
+	@mkdir -p $(FAT_STAGE)/bin $(FAT_STAGE)/test
+	@cp $(BUILD_KERNEL_DIR)/kernel.bin $(FAT_STAGE)/kernel.bin
+	@for elf in $(USER_BINARIES); do \
+	    name=$$(basename $$elf .elf); \
+	    cp $$elf $(FAT_STAGE)/bin/$$name; \
+	    echo "          /bin/$$name"; \
+	done
+	@if [ -d $(TEST_FILES_DIR) ]; then \
+	    cp -r $(TEST_FILES_DIR)/. $(FAT_STAGE)/test/; \
+	fi
+
+	@echo "  [5/6] mcopy into FAT32"
+	@mcopy -s -i $(FAT_TMP) $(FAT_STAGE)/kernel.bin ::/
+	@mcopy -s -i $(FAT_TMP) $(FAT_STAGE)/bin        ::/
+	@if [ -d $(FAT_STAGE)/test ] && [ -n "$$(ls -A $(FAT_STAGE)/test)" ]; then \
+	    mcopy -s -i $(FAT_TMP) $(FAT_STAGE)/test ::/; \
+	fi
+
+	@echo "  [6/6] Embedding into image"
+	@dd if=$(FAT_TMP)   of=$@ bs=1M seek=1 conv=notrunc 2>/dev/null
+	@dd if=$(BOOT1_BIN) of=$@ bs=446 conv=notrunc 2>/dev/null
+	@dd if=$(BOOT2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
+
+	@rm -f $(FAT_TMP)
+	@rm -rf $(FAT_STAGE)
+	@echo "✅ Image: $@ ($$(du -h $@ | cut -f1))"
+
+# ============================================================
+#  Автозависимости
+# ============================================================
+# -include (с минусом) не падает, если .d ещё не сгенерированы
+# (первая сборка, после clean).
+#
+# Что внутри .d:
+#   build/kernel/task.o: src/task.c src/task.h src/heap.h src/paging.h ...
+#
+# А также (благодаря -MP) заголовки-призраки:
+#   src/task.h:
+# чтобы удаление заголовка не ломало сборку.
+# ============================================================
+
+-include $(KERNEL_DEPS)
+-include $(USER_DEPS)
+
+# Не удалять промежуточные .o при ошибке — иначе .d теряются
+.PRECIOUS: $(KERNEL_C_OBJECTS) $(KERNEL_ASM_OBJECTS) $(ACPICA_OBJECTS) $(USER_OBJECTS)
