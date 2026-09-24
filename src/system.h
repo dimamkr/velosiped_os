@@ -26,6 +26,8 @@ void outw(uint16_t port, uint16_t value);
 uint16_t inw(uint16_t port);
 void outl(uint16_t port, uint32_t value);
 uint32_t inl(uint16_t port);
+void wrmsr(uint32_t reg, uint32_t lo, uint32_t hi);
+uint64_t rdmsr(uint32_t reg);
 
 #define PANIC(msg) panic(msg, __FILE__, __LINE__)
 #define ASSERT(b) (likely(b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))

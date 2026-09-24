@@ -14,6 +14,8 @@
 #include "hash_table.h"
 #include "elf.h"
 #include "power.h"
+#include "sysenter.h"
+#include "vmm.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -1093,6 +1095,18 @@ bool_t terminal_reboot(argparse_command_t *command)
     return power_gracefully_reboot();
 }
 
+bool_t terminal_dbg(argparse_command_t *command)
+{
+    konsole_println("DEBUG COMMAND");
+
+    uint32_t handler = rdmsr(MSR_IA32_SYSENTER_EIP);
+    uint32_t stack = rdmsr(MSR_IA32_SYSENTER_ESP);
+
+    sysenter_carefully();
+
+    return true;
+}
+
 // --------- Хэндлер ---------
 
 void terminal_handle_command(const char *buffer)
@@ -1147,6 +1161,7 @@ void terminal_init()
     terminal_register_command_handler("exec", terminal_exec);
     terminal_register_command_handler("poweroff", terminal_poweroff);
     terminal_register_command_handler("reboot", terminal_reboot);
+    terminal_register_command_handler("dbg", terminal_dbg);
 }
 
 void terminal_main_loop()

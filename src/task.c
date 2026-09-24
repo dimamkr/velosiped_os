@@ -28,8 +28,6 @@ extern void task_switch(task_t *prev, task_t *next);
 extern void task_switch_from_isr(void);
 extern void goto_current_task(void);
 
-extern page_dict_t *kernel_page_dict;
-
 #pragma GCC optimize("no-optimize-sibling-calls")
 
 void lazy_task(void *_)

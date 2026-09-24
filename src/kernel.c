@@ -19,6 +19,8 @@
 #include "pat.h"
 #include "mouse.h"
 #include "power.h"
+#include "sysenter.h"
+
 
 void kernel_main_task(void *);
 
@@ -95,6 +97,10 @@ void kernel_main_task(void *_)
 
     PRINT_INIT("Terminal");
     terminal_init();
+    PRINT_OK;
+
+    PRINT_INIT("SYSENTER");
+    sysenter_init();
     PRINT_OK;
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов

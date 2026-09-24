@@ -11,6 +11,8 @@ uint32_t vmm_vaddr_to_phys(void *virt_addr);
 
 void *vmm_map_mmio(uint32_t phys, uint32_t size);
 void *vmm_map_framebuffer(uint32_t phys, uint32_t size);
+void *vmm_map_trampoline(uint32_t phys, uint32_t size);
+void *vmm_map_protected_rw(uint32_t phys, uint32_t size);
 
 page_dict_t *vmm_create_user(uint32_t size);
 page_dict_t *vmm_create_process_kernel_page_dict();

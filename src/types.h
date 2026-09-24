@@ -24,6 +24,7 @@ typedef bool bool_t;
 
 #define MAKEWORD(a, b) ((((uint16_t)(a)) << 8) | ((uint16_t)(b)))
 #define MAKEDWORD(a, b) ((((uint32_t)(a)) << 16) | ((uint32_t)(b)))
+#define MAKEQWORD(a, b) ((((uint64_t)(a)) << 32) | ((uint64_t)(b)))
 
 #define PAIR(type1, type2) \
     struct                 \

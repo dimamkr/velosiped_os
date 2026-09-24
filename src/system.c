@@ -45,6 +45,20 @@ void halt()
     asm volatile("hlt");
 }
 
+void wrmsr(uint32_t reg, uint32_t lo, uint32_t hi)
+{
+    asm volatile ("wrmsr" :: "a"(lo), "d"(hi), "c"(reg));
+}
+
+uint64_t rdmsr(uint32_t reg)
+{
+    uint32_t lo, hi;
+
+    asm volatile ("rdmsr" : "=a"(lo), "=d"(hi) : "c"(reg));
+
+    return MAKEQWORD(hi, lo);
+}
+
 void hang_forever()
 {
     while (true)

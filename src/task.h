@@ -67,6 +67,7 @@ bool_t task_create_process_from_elf(void *elf_data, void *arg, uint32_t stack_si
 extern task_t tasks[];
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
+extern page_dict_t *kernel_page_dict;
 
 // трюк для автоматической расстановки task_lock/unlock
 
