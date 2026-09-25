@@ -1010,7 +1010,8 @@ bool_t terminal_exec(argparse_command_t *command)
     }
 
     char *file_name = NULL;
-    char *process_arg = malloc(3);
+    AUTOFREE_PTR(char)
+    process_arg = malloc(3);
     memcpy(process_arg, ";(", 3);
     uint32_t stack_size = STACK_SIZE_SMALL;
 
@@ -1047,7 +1048,8 @@ bool_t terminal_exec(argparse_command_t *command)
         return false;
     }
 
-    fat32_basic_file_info_t *file = terminal_resolve_filename(files);
+    AUTOFREE_PTR(fat32_basic_file_info_t)
+    file = terminal_resolve_filename(files);
 
     if (file == NULL)
     {
@@ -1055,30 +1057,28 @@ bool_t terminal_exec(argparse_command_t *command)
     }
     if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
     {
-        free(file);
         konsole_println("Error: it isn't file");
         return false;
     }
 
-    void *buff = malloc(file->size + 1);
+    AUTOFREE_PTR(void)
+    buff = malloc(file->size + 1);
 
     fat32_read_file(&info, file, 0, buff, file->size);
 
     // elf_print_info(buff);
 
-    if (!task_create_user_process_from_elf(buff, process_arg, STACK_SIZE_SMALL, stack_size))
+    int argc = 2;
+    char *arg1 = "ECHO: ";
+    char *arg2 = process_arg;
+    char *argv[2] = {arg1, arg2};
+
+    if (!task_create_user_process_from_elf(buff, argc, argv, STACK_SIZE_SMALL, stack_size))
     {
         konsole_println("Error: it isn't elf file");
-        free(file);
-        free(process_arg);
-        free(buff);
         return false;
     }
     task_yield();
-
-    free(file);
-    free(process_arg);
-    free(buff);
 
     return true;
 }

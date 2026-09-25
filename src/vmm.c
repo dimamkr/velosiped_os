@@ -4,6 +4,8 @@
 #include "ram.h"
 #include "task.h"
 #include "konsole.h"
+#include "string.h"
+#include "pointer_utils.h"
 
 page_dict_t *kernel_page_dict;
 extern task_t *current_task;
@@ -125,10 +127,65 @@ page_dict_t *vmm_create_process_kernel_page_dict()
 }
 
 // возвращает верхушку
-uint32_t vmm_user_stack_create(page_dict_t *page_dict, uint32_t user_stack_size)
+uint32_t vmm_user_stack_create(page_dict_t *page_dict, int argc, char **argv, uint32_t user_stack_size)
 {
-    uint32_t user_stack_start = USER_STACK_TOP - user_stack_size;
-    page_dict_map_interval(page_dict, user_stack_start, user_stack_size, PAGE_USER_FLAGS);
+    ASSERT(argc >= 0);
+    ASSERT(user_stack_size >= KB);
 
-    return USER_STACK_TOP;
+    // размер служебных полей
+    uint32_t sysvals_size = sizeof(uint32_t) * (argc + 5); // ret + argc + argv_ptr + (argc+1) записей + выравнивание
+    for (int i = 0; i < argc; ++i)
+        sysvals_size += strlen(argv[i]) + 1;
+
+    uint32_t total_size = sysvals_size + user_stack_size;
+
+    uint32_t user_stack_start = USER_STACK_TOP - total_size;
+    page_dict_map_interval(page_dict, user_stack_start, total_size, PAGE_USER_FLAGS);
+
+    // временная смена словаря
+    // TODO на будущее: неоптимальное решение
+    page_dict_t *curr = current_task->page_dict;
+    page_dict_switch(page_dict);
+
+    uint32_t sp = USER_STACK_TOP;
+
+    // заполнение стека аргументами
+    uint32_t argv_addrs_size = (argc + 1) * sizeof(uint32_t);
+    AUTOFREE_PTR(uint32_t)
+    argv_addrs = (uint32_t *)malloc(argv_addrs_size);
+
+    if (unlikely(argv_addrs == NULL))
+    {
+        page_dict_switch(curr);
+        return 0;
+    }
+
+    for (int i = 0; i < argc; ++i)
+    {
+        uint32_t len = strlen(argv[i]) + 1;
+        sp -= len;
+
+        memcpy((void *)sp, argv[i], len);
+        argv_addrs[i] = (uint32_t)sp;
+    }
+    argv_addrs[argc] = 0;
+
+    sp &= ~(uint32_t)3;
+    sp -= argv_addrs_size;
+
+    uint32_t *sp2 = (uint32_t *)sp;
+    uint32_t argv_ptr = sp;
+
+    // значения второго аргумента
+    memcpy(sp2, argv_addrs, argv_addrs_size);
+    // второй аргумент
+    *--sp2 = argv_ptr;
+    //  первый аргумент
+    *--sp2 = argc;
+    // фейковый аддр возврата
+    *--sp2 = (uint32_t)NULL;
+
+    page_dict_switch(curr);
+
+    return (uint32_t)sp2;
 }

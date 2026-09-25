@@ -67,7 +67,7 @@ task_t *task_get_next(void);
 void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
 
-bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t kernel_stack_size, uint32_t user_stack_size);
+bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size, uint32_t user_stack_size);
 
 // extern task_t tasks[];
 extern task_t *current_task;

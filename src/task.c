@@ -130,8 +130,8 @@ static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32
     return task;
 }
 
-// размер пользовательского стека нигде не хранится и не используется (для польз стека должны быть заранее выделены страницы)
-static inline task_t *_task_init_user(uint32_t user_entry, void *arg, uint32_t kernel_stack_size,
+// пользовательский стек уже выделен и в нем уже лежат аргументы
+static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack_size,
                                       page_dict_t *page_dict, uint32_t user_stack_top)
 {
     task_t *task = _task_init_prefix(kernel_stack_size, page_dict);
@@ -194,13 +194,13 @@ void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size)
     _task_create_node(task);
 }
 
-static void _task_create_user_process(uint32_t user_entry, void *arg, uint32_t kernel_stack_size, page_dict_t *page_dict, uint32_t user_stack_top)
+static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size, page_dict_t *page_dict, uint32_t user_stack_top)
 {
-    task_t *task = _task_init_user(user_entry, arg, kernel_stack_size, page_dict, user_stack_top);
+    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top);
     _task_create_node(task);
 }
 
-bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t kernel_stack_size, uint32_t user_stack_size)
+bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size, uint32_t user_stack_size)
 {
     uint32_t entry;
     page_dict_t *page_dict;
@@ -209,9 +209,9 @@ bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t ker
         return false;
     }
 
-    uint32_t user_stack_top = vmm_user_stack_create(page_dict, user_stack_size);
+    uint32_t user_stack_top = vmm_user_stack_create(page_dict, argc, argv, user_stack_size);
 
-    _task_create_user_process(entry, arg, kernel_stack_size, page_dict, user_stack_top);
+    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top);
     return true;
 }
 
