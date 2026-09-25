@@ -15,7 +15,7 @@ void int_worker_init(void)
     int_worker_pending = false;
     int_worker_queue = ring_create(sizeof(isr_data_t), RING_SIZE);
 
-    task_create(int_worker_task, NULL, STACK_SIZE_LARGE);
+    task_create_kthread(int_worker_task, NULL, STACK_SIZE_LARGE);
 }
 
 // добавление данных прерывания в очередь для отложенной обработки
@@ -26,7 +26,7 @@ void int_worker_add(isr_data_t data)
         PANIC("INT WORKER QUEUE OVERFLOW");
     }
     int_worker_pending = true;
-    tasks[INT_WORKER_TASK_PID].state = TASK_READY;
+    task_set_state_ready(INT_WORKER_TASK_PID);
 }
 
 static inline void _call_curr_handler(isr_data_t data)
@@ -44,8 +44,7 @@ void int_worker_task(void *_)
         interrupt_disable(); // для избежания гонки и перевода в состояние TASK_WAITING если вдруг пришло прерывание на след строке
         if (!int_worker_pending)
         {
-            tasks[INT_WORKER_TASK_PID]
-                .state = TASK_WAITING;
+            task_set_state_waiting(INT_WORKER_TASK_PID);
             interrupt_enable();
             task_yield();
         }

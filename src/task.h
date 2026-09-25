@@ -1,6 +1,8 @@
 #ifndef TASK_H
 #define TASK_H
 
+// TODO рефакторинг с созданием .h файла прослойки для того чтобы все задачи делались желательно 1 способом
+
 #include "types.h"
 #include "heap.h"
 #include "task_event.h"
@@ -9,9 +11,9 @@
 #define MAX_TASKS 32
 #define TASK_AUTO_SWITCH_FREQ 100
 
-#define STACK_SIZE_SMALL KB
-#define STACK_SIZE_LARGE MB
-#define STACK_SIZE_ENORMOUS 4 * MB
+#define STACK_SIZE_SMALL (KB)
+#define STACK_SIZE_LARGE (MB)
+#define STACK_SIZE_ENORMOUS (4 * MB)
 
 #define LAZY_TASK_PID 0
 #define KERNEL_TASK_PID 1
@@ -51,20 +53,23 @@ void scheduler_start(void);
 void scheduler_init(void (*kernel_task_entry)(void *), void *arg, uint32_t stack_size);
 void scheduler_tick(uint32_t time_milisec); // вызывается из прерывания таймера
 
-void task_create(void (*entry)(void *), void *arg, uint32_t stack_size);
+void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size);
 void task_yield(void);
 void task_exit(void);
 void task_sleep(uint32_t ticks);
 void task_lock(void);
 void task_unlock(void);
+
+void task_set_state_waiting(uint32_t pid);
+void task_set_state_ready(uint32_t pid);
+
 task_t *task_get_next(void);
 void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
-void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict);
 
 bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t kernel_stack_size, uint32_t user_stack_size);
 
-extern task_t tasks[];
+// extern task_t tasks[];
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
 extern page_dict_t *kernel_page_dict;

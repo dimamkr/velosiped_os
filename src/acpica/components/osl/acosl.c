@@ -39,14 +39,14 @@ ACPI_PHYSICAL_ADDRESS AcpiOsGetRootPointer(void)
     void *start_scan_addr = vmm_map_mmio(0x000E0000, 131072);
     void *end_scan_addr = start_scan_addr + 131072;
 
-    for (void *cur = start_scan_addr;cur < end_scan_addr;cur += 16)
+    for (void *cur = start_scan_addr; cur < end_scan_addr; cur += 16)
     {
         if (memcmp(cur, "RSD PTR ", 8))
         {
             uint8_t checksum = 0;
 
-            for (void *cur1 = cur;cur1 < cur + 20;cur1++)
-                checksum += *(byte_t*)cur1;
+            for (void *cur1 = cur; cur1 < cur + 20; cur1++)
+                checksum += *(byte_t *)cur1;
 
             if (checksum == 0)
                 return (ACPI_PHYSICAL_ADDRESS)vmm_vaddr_to_phys(cur);
@@ -114,7 +114,7 @@ ACPI_STATUS AcpiOsCreateSemaphore(UINT32 MaxUnits, UINT32 InitialUnits, ACPI_SEM
         return AE_BAD_PARAMETER;
 
     *OutHandle = semaphore_create(MaxUnits);
-    
+
     if (InitialUnits != MaxUnits)
     {
         if (semaphore_acquire(*OutHandle, MaxUnits - InitialUnits, SYNC_TIMEOUT_INFINITE))
@@ -185,7 +185,7 @@ void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS Where, ACPI_SIZE Length)
 
     return result;
 }
-                   
+
 void AcpiOsUnmapMemory(void *LogicalAddress, ACPI_SIZE Size)
 {
     // NOT IMPLEMENTED
@@ -203,10 +203,11 @@ ACPI_STATUS AcpiOsGetPhysicalAddress(void *LogicalAddress, ACPI_PHYSICAL_ADDRESS
  */
 
 #ifdef ACPI_USE_CUSTOM_CACHE
- 
-struct ACPI_CACHE {
+
+struct ACPI_CACHE
+{
     uint16_t object_size;
-    uint16_t max_depth;            
+    uint16_t max_depth;
     void *buffer;
     dynamic_array_t *free_blocks;
 };
@@ -222,10 +223,10 @@ ACPI_STATUS AcpiOsCreateCache(char *CacheName, UINT16 ObjectSize, UINT16 MaxDept
     result->buffer = malloc((uint32_t)MaxDepth * (uint32_t)ObjectSize);
     result->free_blocks = dynamic_array_create(sizeof(uint16_t));
 
-    for (uint16_t i = 0;i < MaxDepth;i++)
+    for (uint16_t i = 0; i < MaxDepth; i++)
         dynamic_array_push_back(result->free_blocks, &i);
 
-    *ReturnCache = (ACPI_CACHE_T*)result;
+    *ReturnCache = (ACPI_CACHE_T *)result;
 
     return AE_OK;
 }
@@ -235,7 +236,7 @@ ACPI_STATUS AcpiOsDeleteCache(ACPI_CACHE_T *Cache)
     return AE_OK;
     TASK_LOCKED_FUNCTION;
 
-    struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
+    struct ACPI_CACHE *cache = (struct ACPI_CACHE *)Cache;
 
     free(cache->buffer);
     dynamic_array_destroy(cache->free_blocks);
@@ -266,7 +267,7 @@ void *AcpiOsAcquireObject(ACPI_CACHE_T *Cache)
     // return AcpiOsAllocateZeroed(10000);
     TASK_LOCKED_FUNCTION;
 
-    struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
+    struct ACPI_CACHE *cache = (struct ACPI_CACHE *)Cache;
 
     if (cache->free_blocks->elements_count == 0)
     {
@@ -283,13 +284,13 @@ void *AcpiOsAcquireObject(ACPI_CACHE_T *Cache)
     return result;
 }
 
-ACPI_STATUS AcpiOsReleaseObject (ACPI_CACHE_T *Cache, void *Object)
+ACPI_STATUS AcpiOsReleaseObject(ACPI_CACHE_T *Cache, void *Object)
 {
     // free(Object);
     // return AE_OK;
     TASK_LOCKED_FUNCTION;
 
-    struct ACPI_CACHE *cache = (struct ACPI_CACHE*)Cache;
+    struct ACPI_CACHE *cache = (struct ACPI_CACHE *)Cache;
 
     uint32_t index = (uint32_t)(Object - cache->buffer) / cache->object_size;
     uint32_t remainder = (uint32_t)(Object - cache->buffer) % cache->object_size;
@@ -299,7 +300,7 @@ ACPI_STATUS AcpiOsReleaseObject (ACPI_CACHE_T *Cache, void *Object)
         AcpiOsFree(Object);
         return AE_OK;
     }
-    
+
     dynamic_array_push_back(cache->free_blocks, &index);
 
     return AE_OK;
@@ -311,12 +312,13 @@ ACPI_STATUS AcpiOsReleaseObject (ACPI_CACHE_T *Cache, void *Object)
  * Interrupt handlers
  */
 
-struct AcpiIntRoutine {
+struct AcpiIntRoutine
+{
     ACPI_OSD_HANDLER routine;
     void *Context;
 };
 
-linked_list_node_t *AcpiIntHandlers [48] = {0};
+linked_list_node_t *AcpiIntHandlers[48] = {0};
 
 void AcpiInterruptTopHandler(isr_data_t data)
 {
@@ -325,9 +327,9 @@ void AcpiInterruptTopHandler(isr_data_t data)
 
 void AcpiInterruptLowHandler(isr_data_t data)
 {
-    for (linked_list_node_t *i = AcpiIntHandlers[data.int_no];i;i = i->right)
+    for (linked_list_node_t *i = AcpiIntHandlers[data.int_no]; i; i = i->right)
     {
-        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine*)i->value;
+        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine *)i->value;
 
         routine_data->routine(routine_data->Context);
     }
@@ -349,11 +351,11 @@ ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 InterruptNumber, ACPI_OSD_HANDLE
 {
     linked_list_node_t *right = NULL;
 
-    for (linked_list_node_t *i = AcpiIntHandlers[InterruptNumber + 32];i;i = right)
+    for (linked_list_node_t *i = AcpiIntHandlers[InterruptNumber + 32]; i; i = right)
     {
         right = i->right;
 
-        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine*)i->value;
+        struct AcpiIntRoutine *routine_data = (struct AcpiIntRoutine *)i->value;
 
         if (routine_data->routine == ServiceRoutine)
             linked_list_erase(&(AcpiIntHandlers[InterruptNumber + 32]), i);
@@ -366,7 +368,7 @@ ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 InterruptNumber, ACPI_OSD_HANDLE
  * Threads and Scheduling
  */
 
-uint32_t threads_to_wait = 0; 
+uint32_t threads_to_wait = 0;
 
 ACPI_THREAD_ID AcpiOsGetThreadId()
 {
@@ -375,7 +377,7 @@ ACPI_THREAD_ID AcpiOsGetThreadId()
 
 void AcpiThreadWrapper(void *_param) // какой-т костыль
 {
-    PAIR (ACPI_OSD_EXEC_CALLBACK, void*) *param = _param;
+    PAIR(ACPI_OSD_EXEC_CALLBACK, void *) *param = _param;
 
     (param->first)(param->second);
 
@@ -387,11 +389,11 @@ ACPI_STATUS AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Functio
 {
     __sync_fetch_and_add(&threads_to_wait, 1);
 
-    PAIR (ACPI_OSD_EXEC_CALLBACK, void*) *param = malloc(sizeof(PAIR (ACPI_OSD_EXEC_CALLBACK, void*)));
+    PAIR(ACPI_OSD_EXEC_CALLBACK, void *) *param = malloc(sizeof(PAIR(ACPI_OSD_EXEC_CALLBACK, void *)));
     param->first = Function; // лютый костыль
     param->second = Context;
 
-    task_create(AcpiThreadWrapper, param, STACK_SIZE_LARGE);
+    task_create_kthread(AcpiThreadWrapper, param, STACK_SIZE_LARGE);
 
     return AE_OK;
 }
@@ -427,17 +429,17 @@ ACPI_STATUS AcpiOsReadPort(ACPI_IO_ADDRESS Address, UINT32 *Value, UINT32 Width)
 {
     switch (Width)
     {
-        case 8:  
-            *Value = inb(Address);
-            return AE_OK;
-        case 16:
-            *Value = inw(Address);
-            return AE_OK;
-        case 32:
-            *Value = inl(Address);
-            return AE_OK;
-        default:
-            return AE_BAD_PARAMETER;
+    case 8:
+        *Value = inb(Address);
+        return AE_OK;
+    case 16:
+        *Value = inw(Address);
+        return AE_OK;
+    case 32:
+        *Value = inl(Address);
+        return AE_OK;
+    default:
+        return AE_BAD_PARAMETER;
     }
 }
 
@@ -445,17 +447,17 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 {
     switch (Width)
     {
-        case 8:
-            outb(Address, (uint8_t)Value);
-            return AE_OK;
-        case 16:
-            outw(Address, (uint16_t)Value);
-            return AE_OK;
-        case 32:
-            outl(Address, (uint32_t)Value);
-            return AE_OK;
-        default:
-            return AE_BAD_PARAMETER;
+    case 8:
+        outb(Address, (uint8_t)Value);
+        return AE_OK;
+    case 16:
+        outw(Address, (uint16_t)Value);
+        return AE_OK;
+    case 32:
+        outl(Address, (uint32_t)Value);
+        return AE_OK;
+    default:
+        return AE_BAD_PARAMETER;
     }
 }
 
@@ -469,17 +471,17 @@ ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 *Value, UINT3
 
     switch (Width)
     {
-        case 8:
-            *Value = *(uint8_t*)addr;
-            return AE_OK;
-        case 16:
-            *Value = *(uint16_t*)addr;
-            return AE_OK;
-        case 32:
-            *Value = *(uint32_t*)addr;
-            return AE_OK;
-        default:
-            return AE_BAD_PARAMETER;
+    case 8:
+        *Value = *(uint8_t *)addr;
+        return AE_OK;
+    case 16:
+        *Value = *(uint16_t *)addr;
+        return AE_OK;
+    case 32:
+        *Value = *(uint32_t *)addr;
+        return AE_OK;
+    default:
+        return AE_BAD_PARAMETER;
     }
 }
 
@@ -489,17 +491,17 @@ ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 Value, UINT3
 
     switch (Width)
     {
-        case 8:
-            *(uint8_t*)addr = (uint8_t)Value;
-            return AE_OK;
-        case 16:
-            *(uint16_t*)addr = (uint16_t)Value;
-            return AE_OK;
-        case 32:
-            *(uint32_t*)addr = (uint32_t)Value;
-            return AE_OK;
-        default:
-            return AE_BAD_PARAMETER;
+    case 8:
+        *(uint8_t *)addr = (uint8_t)Value;
+        return AE_OK;
+    case 16:
+        *(uint16_t *)addr = (uint16_t)Value;
+        return AE_OK;
+    case 32:
+        *(uint32_t *)addr = (uint32_t)Value;
+        return AE_OK;
+    default:
+        return AE_BAD_PARAMETER;
     }
 }
 
@@ -512,20 +514,20 @@ ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 Value, UINT3
 ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 *Value, UINT32 Width)
 {
     uint32_t raw = pci_read(PCI_MAKE_DEVICE_OFFSET(PciId->Bus, PciId->Device, PciId->Function), Reg & 0xFC);
-    
+
     switch (Width)
     {
-        case 8:
-            *Value = (raw >> ((Reg & 3) * 8)) & 0xFF;
-            return AE_OK;
-        case 16:
-            *Value = (raw >> ((Reg & 2) * 8)) & 0xFFFF;
-            return AE_OK;
-        case 32:
-            *Value = raw;
-            return AE_OK;
-        default:
-            return AE_BAD_PARAMETER;
+    case 8:
+        *Value = (raw >> ((Reg & 3) * 8)) & 0xFF;
+        return AE_OK;
+    case 16:
+        *Value = (raw >> ((Reg & 2) * 8)) & 0xFFFF;
+        return AE_OK;
+    case 32:
+        *Value = raw;
+        return AE_OK;
+    default:
+        return AE_BAD_PARAMETER;
     }
 }
 
@@ -538,7 +540,7 @@ ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 V
         uint32_t new;
         uint32_t shift = (Reg & 3) * 8;
         uint32_t mask = (Width == 8) ? 0xFF : 0xFFFF;
-        
+
         new = (old & ~(mask << shift)) | ((uint32_t)Value << shift);
         pci_write(PCI_MAKE_DEVICE_OFFSET(PciId->Bus, PciId->Device, PciId->Function), Reg & 0xFC, new);
     }
@@ -580,7 +582,7 @@ ACPI_STATUS AcpiOsSignal(UINT32 Function, void *Info)
     return AE_OK;
 }
 
-ACPI_STATUS AcpiOsEnterSleep (UINT8 SleepState, UINT32 RegaValue, UINT32 RegbValue)
+ACPI_STATUS AcpiOsEnterSleep(UINT8 SleepState, UINT32 RegaValue, UINT32 RegbValue)
 {
     // не используется
     return AE_OK;
@@ -590,14 +592,14 @@ ACPI_STATUS AcpiOsEnterSleep (UINT8 SleepState, UINT32 RegaValue, UINT32 RegbVal
  * Debug print routines
  */
 
-ACPI_PRINTF_LIKE (1)
+ACPI_PRINTF_LIKE(1)
 void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *Format, ...)
 {
     va_list args;
     va_start(args, Format);
 
     konsole_vprintf(Format, args);
-    
+
     va_end(args);
 }
 
@@ -661,7 +663,8 @@ ACPI_STATUS AcpiOsGetTableByIndex(UINT32 Index, ACPI_TABLE_HEADER **Table, UINT3
 
 ACPI_STATUS AcpiOsGetTableByAddress(ACPI_PHYSICAL_ADDRESS Address, ACPI_TABLE_HEADER **Table)
 {
-    return AE_NOT_IMPLEMENTED;if (Table)
+    return AE_NOT_IMPLEMENTED;
+    if (Table)
         *Table = NULL;
 
     return AE_NOT_FOUND;
@@ -681,7 +684,7 @@ char *AcpiOsGetNextFilename(void *DirHandle)
     return NULL; // NOT IMPLEMENTED
 }
 
-void AcpiOsCloseDirectory (void *DirHandle)
+void AcpiOsCloseDirectory(void *DirHandle)
 {
     // NOT IMPLEMENTED
 }
