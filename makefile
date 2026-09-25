@@ -17,9 +17,9 @@
 #    test/files/     файлы для /test на образе
 #
 #  Дерево сборки:
-#    build/boot/
-#    build/kernel/   и build/kernel/acpica/
-#    build/user/bin/
+#    build/режим/boot/
+#    build/режим/kernel/   и build/kernel/режим/acpica/
+#    build/режим/user/bin/
 # ============================================================
 
 # ------- Инструменты -------
@@ -41,12 +41,27 @@ USER_INC_DIR   = $(USER_DIR)/include
 
 TEST_FILES_DIR = test/files
 
+# ============================================================
+#  Режим сборки — определяется по целям в командной строке
+# ============================================================
+
+ifeq ($(origin BUILD_MODE), undefined)
+  ifneq ($(filter debug build-debug run-debug gdb,$(MAKECMDGOALS)),)
+    BUILD_MODE := debug
+  else
+    BUILD_MODE := release
+  endif
+endif
+
 # ------- Каталоги сборки -------
-BUILD_DIR        = build
+BUILD_DIR_ROOT = build
+BUILD_DIR        = $(BUILD_DIR_ROOT)/$(BUILD_MODE)
 BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
 BUILD_KERNEL_DIR = $(BUILD_DIR)/kernel
 BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/acpica
 BUILD_USER_BIN   = $(BUILD_DIR)/user/bin
+
+BUILD_LOGS_DIR  = $(BUILD_DIR)/LOGS
 
 # ============================================================
 #  Флаги
@@ -74,17 +89,23 @@ ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
 # ---- Пользовательские программы ----
 USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -nostartfiles \
                      -nodefaultlibs -static -no-pie -fno-pic -fno-builtin \
-                     -fno-stack-protector -I$(USER_INC_DIR) \
+                     -fno-stack-protector -mgeneral-regs-only -I$(USER_INC_DIR) \
                      -Wall -Wextra -Werror -MMD -MP
 USER_CFLAGS_RELEASE = $(USER_CFLAGS_COMMON) -O2
 USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
 USER_LDFLAGS = -m elf_i386 -T $(USER_DIR)/link.ld -nostdlib
 
-# ---- Значения по умолчанию (release) ----
-KERNEL_CFLAGS = $(KERNEL_CFLAGS_RELEASE)
-KERNEL_NASM   = $(KERNEL_NASM_RELEASE)
-USER_CFLAGS   = $(USER_CFLAGS_RELEASE)
+# ---- Значения которые будут использоваться ----
+ifeq ($(BUILD_MODE),debug)
+  KERNEL_CFLAGS = $(KERNEL_CFLAGS_DEBUG)
+  KERNEL_NASM   = $(KERNEL_NASM_DEBUG)
+  USER_CFLAGS   = $(USER_CFLAGS_DEBUG)
+else
+  KERNEL_CFLAGS = $(KERNEL_CFLAGS_RELEASE)
+  KERNEL_NASM   = $(KERNEL_NASM_RELEASE)
+  USER_CFLAGS   = $(USER_CFLAGS_RELEASE)
+endif
 
 # ============================================================
 #  Списки исходников и целей
@@ -133,20 +154,16 @@ IMAGE = $(BUILD_DIR)/myos.img
 #  Основные цели
 # ============================================================
 
-.PHONY: all run build-debug run-debug clean
+.PHONY: all release run build-debug debug run-debug clean
+
+debug: build-debug
+release: all
 
 all: $(IMAGE)
 	@echo "✅ Build complete: $<"
 
 # Отладочная сборка — отдельный build-каталог, чтобы не смешивать с release
-build-debug:
-	@echo "Building with debug info..."
-	$(MAKE) \
-	    BUILD_DIR=build/debug \
-	    KERNEL_CFLAGS='$(KERNEL_CFLAGS_DEBUG)' \
-	    KERNEL_NASM='$(KERNEL_NASM_DEBUG)' \
-	    USER_CFLAGS='$(USER_CFLAGS_DEBUG)' \
-	    all
+build-debug: all
 
 run: all
 	@echo "Starting QEMU..."
@@ -156,22 +173,22 @@ run: all
 	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
 	    -display sdl -vga std -m 256 -enable-kvm
 
-run-debug: build-debug
+run-debug: build-debug | $(BUILD_LOGS_DIR)
 	@echo "Starting QEMU with GDB server (port 1234)..."
-	@(nohup qemu-system-i386 -d int -D build/debug/interrupts.log \
+	@(nohup qemu-system-i386 -d int -D $(BUILD_LOGS_DIR)/interrupts.log \
 	    -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
 	    -device ahci,id=ahci \
 	    -device ide-hd,drive=disk,bus=ahci.0 \
-	    -drive format=raw,file=build/debug/myos.img,if=none,id=disk \
+	    -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
 	    -display sdl -vga std -s -S -m 256 \
-	    > build/debug/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
+	    > $(BUILD_LOGS_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
 	@timeout=0; \
 	while ! nc -z localhost 1234 2>/dev/null; do \
 	    sleep 0.1; \
 	    timeout=$$((timeout + 1)); \
 	    if [ $$timeout -gt 300 ]; then \
 	        echo "❌ Timeout waiting for QEMU"; \
-	        tail -n 10 build/debug/qemu.log; \
+	        tail -n 10 $(BUILD_LOGS_DIR)/qemu.log; \
 	        kill $$(cat /tmp/qemu.pid) 2>/dev/null || true; \
 	        exit 1; \
 	    fi; \
@@ -180,13 +197,13 @@ run-debug: build-debug
 
 clean:
 	@echo "🧹 Cleaning..."
-	$(RM) $(BUILD_DIR) build/debug
+	$(RM) $(BUILD_DIR_ROOT)
 
 # ============================================================
 #  Каталоги
 # ============================================================
 
-$(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN):
+$(BUILD_DIR)  $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_LOGS_DIR):
 	@mkdir -p $@
 
 # ============================================================
