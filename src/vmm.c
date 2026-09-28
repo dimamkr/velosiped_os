@@ -134,6 +134,8 @@ page_dict_t *vmm_create_process_kernel_page_dict()
 // возвращает верхушку
 uint32_t vmm_user_stack_create(page_dict_t *page_dict, int argc, char **argv, uint32_t user_stack_size)
 {
+    TASK_LOCKED_FUNCTION;
+
     ASSERT(argc >= 0);
     ASSERT(user_stack_size >= KB);
 
