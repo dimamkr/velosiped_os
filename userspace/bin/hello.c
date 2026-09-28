@@ -4,6 +4,7 @@ void _start(void)
 {
     static const char msg[] = "Hello from userspace!\n";
 
-    write(1, msg, sizeof(msg) - 1);
-    exit(0);
+    sys_write(0, msg, sizeof(msg));
+
+    sys_exit(0);
 }

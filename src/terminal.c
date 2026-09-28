@@ -1074,7 +1074,8 @@ bool_t terminal_exec(argparse_command_t *command)
         free(buff);
         return false;
     }
-    task_yield();
+
+    // task_yield();
 
     free(file);
     free(process_arg);
@@ -1101,10 +1102,15 @@ bool_t terminal_dbg(argparse_command_t *command)
 {
     konsole_println("DEBUG COMMAND");
 
-    uint32_t handler = rdmsr(MSR_IA32_SYSENTER_EIP);
-    uint32_t stack = rdmsr(MSR_IA32_SYSENTER_ESP);
-
-    sysenter_carefully();
+    asm volatile (
+        "movl %%esp, %%ecx\n"
+        "leal 1f, %%edx\n"
+        "sysenter\n"
+        "1:"
+        :
+        : "a" (228)
+        : "ecx", "edx", "memory"
+    );
 
     return true;
 }

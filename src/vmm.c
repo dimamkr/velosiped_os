@@ -100,6 +100,11 @@ void *vmm_map_framebuffer(uint32_t phys, uint32_t size)
     return vmm_map_special(phys, size, PAGE_PRESENT | PAGE_RW | PAGE_WRITE_COMBINE);
 }
 
+void *vmm_map_rw(uint32_t phys, uint32_t size)
+{
+    return vmm_map_special(phys, size, PAGE_PRESENT | PAGE_RW);
+}
+
 void vmm_unmap_page(void *virt_addr)
 {
     page_dict_unmap_page(current_task->page_dict, (uint32_t)virt_addr);

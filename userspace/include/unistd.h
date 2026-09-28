@@ -10,25 +10,42 @@
 #define SYS_EXIT 4
 #define SYS_BRK 12
 
-static inline int __syscall3(int n, int a, int b, int c)
+__attribute__((always_inline))
+static inline int _sysenter(int syscall_num, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5)
 {
-    int ret;
-    asm volatile("int $0x80"
-                 : "=a"(ret)
-                 : "a"(n), "b"(a), "c"(b), "d"(c)
-                 : "memory");
-    return ret;
+    int eax = syscall_num;
+
+    asm volatile (
+        "push %6\n"
+        "push %5\n"
+        "push %4\n"
+        "push %3\n"
+        "push %2\n"
+        "push %1\n"
+        "movl %%esp, %%ecx\n"
+        "leal 1f, %%edx\n"
+        "sysenter\n"
+        "1:\n"
+        "add $24, %%esp"
+        : "+a" (eax)
+        : "g" (arg0), "g" (arg1), "g" (arg2), "g" (arg3), "g"(arg4), "g"(arg5)
+        : "ecx", "edx", "memory"
+    );
+
+    return eax;
 }
 
-static inline int write(int fd, const void *buf, unsigned len)
+int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
 {
-    return __syscall3(SYS_WRITE, fd, (int)buf, (int)len);
+    return _sysenter(SYS_WRITE, fd, (int)buf, len, 0, 0, 0);
 }
 
-static inline void exit(int code)
+__attribute__((noreturn))
+void sys_exit(volatile int code)
 {
-    __syscall3(SYS_EXIT, code, 0, 0);
-    for (;;)
+    _sysenter(SYS_EXIT, code, 0, 0, 0, 0, 0);
+
+    while (1)
         asm volatile("pause");
 }
 
