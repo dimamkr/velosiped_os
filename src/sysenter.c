@@ -13,6 +13,8 @@ static int sys_exit(uint32_t status)
     return -1;
 }
 
+// TODO склеить системные вызовы по прерыванию с теми что из sysenter
+// TODO выводить посимвольно по соглашению
 static int sys_write(uint32_t file_descriptor, const char *buff, uint32_t size)
 {
     konsole_print(buff);
@@ -24,11 +26,11 @@ int sysenter_dispatcher(uint32_t syscall_num, const uint32_t *user_stack)
 {
     switch (syscall_num)
     {
-        case SYS_EXIT:
-            return sys_exit(user_stack[0]);
+    case SYS_EXIT:
+        return sys_exit(user_stack[0]);
 
-        case SYS_WRITE:
-            return sys_write(user_stack[0], (void*)user_stack[1], user_stack[2]);
+    case SYS_WRITE:
+        return sys_write(user_stack[0], (void *)user_stack[1], user_stack[2]);
     }
 }
 

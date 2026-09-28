@@ -10,12 +10,11 @@
 #define SYS_EXIT 4
 #define SYS_BRK 12
 
-__attribute__((always_inline))
-static inline int _sysenter(int syscall_num, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5)
+__attribute__((always_inline)) static inline int _sysenter(int syscall_num, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5)
 {
     int eax = syscall_num;
 
-    asm volatile (
+    asm volatile(
         "push %6\n"
         "push %5\n"
         "push %4\n"
@@ -27,21 +26,37 @@ static inline int _sysenter(int syscall_num, int arg0, int arg1, int arg2, int a
         "sysenter\n"
         "1:\n"
         "add $24, %%esp"
-        : "+a" (eax)
-        : "g" (arg0), "g" (arg1), "g" (arg2), "g" (arg3), "g"(arg4), "g"(arg5)
-        : "ecx", "edx", "memory"
-    );
+        : "+a"(eax)
+        : "g"(arg0), "g"(arg1), "g"(arg2), "g"(arg3), "g"(arg4), "g"(arg5)
+        : "ecx", "edx", "memory");
 
     return eax;
 }
 
-int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
+__attribute__((always_inline)) static inline int _syscall_int0x80(int num, int a0, int a1, int a2)
 {
-    return _sysenter(SYS_WRITE, fd, (int)buf, len, 0, 0, 0);
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(num), "b"(a0), "c"(a1), "d"(a2)
+                 : "memory");
+    return ret;
 }
 
-__attribute__((noreturn))
-void sys_exit(volatile int code)
+// TODO: через _sysenter
+int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
+{
+    // return _sysenter(SYS_WRITE, fd, (int)buf, len, 0, 0, 0);
+    return _syscall_int0x80(SYS_WRITE, fd, (int)buf, len);
+}
+
+// TODO: через _sysenter
+int sys_read(volatile int fd, volatile void *buf, volatile unsigned len)
+{
+    return _syscall_int0x80(SYS_READ, fd, (int)buf, len);
+}
+
+__attribute__((noreturn)) void sys_exit(volatile int code)
 {
     _sysenter(SYS_EXIT, code, 0, 0, 0, 0, 0);
 

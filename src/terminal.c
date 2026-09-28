@@ -1087,7 +1087,7 @@ bool_t terminal_exec(argparse_command_t *command)
     char *arg2 = process_arg;
     char *argv[2] = {arg1, arg2};
 
-    if (!task_create_user_process_from_elf(buff, argc, argv, STACK_SIZE_SMALL, stack_size, task_sids_none))
+    if (!task_create_user_process_from_elf(buff, argc, argv, STACK_SIZE_LARGE, stack_size, task_sids_keyboard_only))
     {
         konsole_println("Error: it isn't elf file");
         return false;
