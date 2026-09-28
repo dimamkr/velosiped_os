@@ -4,6 +4,7 @@
 #include "konsole.h"
 
 static void *_sysenter_stack_start;
+uint32_t _sysenter_system_var;
 
 static int sys_exit(uint32_t status)
 {
@@ -14,14 +15,9 @@ static int sys_exit(uint32_t status)
 
 static int sys_write(uint32_t file_descriptor, const char *buff, uint32_t size)
 {
-    // konsole_print(buff); проблемка
+    konsole_print(buff);
 
     return size;
-}
-
-uint32_t sysenter_stack_create_and_map(page_dict_t *page_dict)
-{
-    page_dict_map_interval(page_dict, SYSENTER_STACK_START_VADDR, SYSENTER_STACK_SIZE, PAGE_PRESENT | PAGE_RW);
 }
 
 int sysenter_dispatcher(uint32_t syscall_num, const uint32_t *user_stack)
@@ -47,5 +43,5 @@ void sysenter_init()
 
     wrmsr(MSR_IA32_SYSENTER_CS, SYSENTER_CS, 0);
     wrmsr(MSR_IA32_SYSENTER_EIP, SYSENTER_HANDLER_VADDR, 0);
-    wrmsr(MSR_IA32_SYSENTER_ESP, SYSENTER_STACK_VADDR, 0);
+    wrmsr(MSR_IA32_SYSENTER_ESP, 0, 0);
 }

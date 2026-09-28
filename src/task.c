@@ -135,8 +135,6 @@ static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32
 static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack_size,
                                       page_dict_t *page_dict, uint32_t user_stack_top)
 {
-    sysenter_stack_create_and_map(page_dict);
-
     task_t *task = _task_init_prefix(kernel_stack_size, page_dict);
 
     uint32_t *sp = (uint32_t *)_STACK_TOP(task);

@@ -11,11 +11,7 @@
 #define MSR_IA32_SYSENTER_EIP 0x176
 
 #define SYSENTER_CS 0x8
-#define SYSENTER_STACK_START_VADDR 0xB00B4000
-#define SYSENTER_STACK_VADDR 0xB00B4FFC
 #define SYSENTER_HANDLER_VADDR 0xB00B5000
-
-#define SYSENTER_STACK_SIZE 4096
 
 // Таблица системных вызовов (номера из Linux)
 #define SYS_READ 0
