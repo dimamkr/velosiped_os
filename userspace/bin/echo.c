@@ -15,8 +15,8 @@ void _start(int argc, char **argv)
 {
     for (int i = 0; i < argc; ++i)
     {
-        write(1, argv[i], strlen(argv[i]) + 1);
+        sys_write(1, argv[i], strlen(argv[i]) + 1);
     }
 
-    exit(0);
+    sys_exit(0);
 }
