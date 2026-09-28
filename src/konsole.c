@@ -162,6 +162,11 @@ void konsole_clear()
 
 void konsole_putch(char ch)
 {
+    TASK_LOCKED_FUNCTION;
+
+    if (ch == 0)
+        return;
+
     // чтобы curr_x и curr_y были в области видимости
     while (konsole_view_scroll_down())
     {
