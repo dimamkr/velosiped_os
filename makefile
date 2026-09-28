@@ -70,8 +70,10 @@ BUILD_LOGS_DIR  = $(BUILD_DIR)/LOGS
 # ---- Ядро ----
 # -MMD -MP  →  gcc генерирует .d-файлы с зависимостями от заголовков,
 #             которые затем подключаются через -include в конце.
+# много где разные типы указывают на одну память
 KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
                        -fno-stack-protector -fno-pic -mgeneral-regs-only \
+					   -fno-strict-aliasing \
                        -I$(SRC_DIR) -Werror -MMD -MP
 KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
 KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
