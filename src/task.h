@@ -7,6 +7,7 @@
 #include "heap.h"
 #include "task_event.h"
 #include "paging.h"
+#include "input_manager.h"
 
 #define MAX_TASKS 32
 #define TASK_AUTO_SWITCH_FREQ 100
@@ -18,6 +19,9 @@
 #define LAZY_TASK_PID 0
 #define KERNEL_TASK_PID 1
 #define INT_WORKER_TASK_PID 2
+
+#define TASK_INPUT_NEW -1  // новый поток ввода
+#define TASK_INPUT_NONE -2 // без потока ввода
 
 typedef enum
 {
@@ -44,6 +48,9 @@ typedef struct
     task_state_t state;
     uint32_t activation_time;
 
+    // потоки ввода
+    uint32_t input_sids[INPUT_CHANNELS];
+
     linked_list_node_t *node;
 } __attribute__((packed)) task_t;
 
@@ -53,7 +60,7 @@ void scheduler_start(void);
 void scheduler_init(void (*kernel_task_entry)(void *), void *arg, uint32_t stack_size);
 void scheduler_tick(uint32_t time_milisec); // вызывается из прерывания таймера
 
-void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size);
+void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size, uint32_t *input_sids);
 void task_yield(void);
 void task_exit(void);
 void task_sleep(uint32_t ticks);
@@ -66,13 +73,22 @@ void task_set_state_ready(uint32_t pid);
 task_t *task_get_next(void);
 void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
+void task_wait_for_input(uint32_t channel);
+bool_t task_input_get(uint32_t channel, void *out);
+bool_t task_input_queue_empty(uint32_t channel);
+void task_input_unregister(task_t *task, uint32_t channel);
 
-bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size, uint32_t user_stack_size);
+bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size,
+                                         uint32_t user_stack_size, uint32_t *input_sids);
 
 // extern task_t tasks[];
 extern task_t *current_task;
 extern volatile uint32_t need_reschedule;
 extern page_dict_t *kernel_page_dict;
+
+extern uint32_t task_sids_none[INPUT_CHANNELS];
+extern uint32_t task_sids_keyboard_only[INPUT_CHANNELS];
+extern uint32_t task_sids_keyboard_mouse_only[INPUT_CHANNELS];
 
 // трюк для автоматической расстановки task_lock/unlock
 

@@ -3,6 +3,7 @@
 #include "konsole.h"
 #include "datetime.h"
 #include "power.h"
+#include "composer.h"
 
 void outb(uint16_t port, byte_t value)
 {
@@ -47,14 +48,14 @@ void halt()
 
 void wrmsr(uint32_t reg, uint32_t lo, uint32_t hi)
 {
-    asm volatile ("wrmsr" :: "a"(lo), "d"(hi), "c"(reg));
+    asm volatile("wrmsr" ::"a"(lo), "d"(hi), "c"(reg));
 }
 
 uint64_t rdmsr(uint32_t reg)
 {
     uint32_t lo, hi;
 
-    asm volatile ("rdmsr" : "=a"(lo), "=d"(hi) : "c"(reg));
+    asm volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(reg));
 
     return MAKEQWORD(hi, lo);
 }
@@ -164,7 +165,7 @@ bool_t uint32_less(void *a, void *b)
     return *(uint32_t *)a < *(uint32_t *)b;
 }
 
-void panic(char *msg, char *file, uint32_t line)
+void panic(const char *msg, const char *func, const char *file, uint32_t line)
 {
     uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp, eflags;
 
@@ -197,7 +198,7 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_set_panic_color();
     konsole_printf("GURU MEDITATION (%s)\n", msg);
     konsole_set_bad_result_color();
-    konsole_printf("File: %s : %d\n", file, line);
+    konsole_printf("File: %s : %d; func: %s\n", file, line, func);
     konsole_set_base_color();
 
     konsole_printf("\n=== REGISTER DUMP ===\n");
@@ -210,6 +211,8 @@ void panic(char *msg, char *file, uint32_t line)
     konsole_printf("FS: 0x%02x  GS: 0x%02x  SS: 0x%02x\n", fs, gs, ss);
 
     konsole_print("\nSystem will reboot at 10s.\n");
+
+    composer_all();
 
     datetime_t time;
     datetime_t time0;
@@ -232,10 +235,31 @@ void panic(char *msg, char *file, uint32_t line)
     halt();
 }
 
+// TODO функции тут перезаписывают цвет
+void warning(const char *func, const char *file, uint32_t line, const char *fmt, ...)
+{
+    konsole_set_warning_color();
+
+    konsole_print("WARNING: ");
+
+    konsole_printf("File: %s : %d; func: %s\n", file, line, func);
+
+    va_list args;
+    va_start(args, fmt);
+    konsole_vprintf(fmt, args);
+    va_end(args);
+
+    konsole_println("");
+
+    composer_all();
+
+    konsole_set_base_color();
+}
+
 // TODO написать более понятный вывод
-void panic_assert(char *msg, char *file, uint32_t line)
+void panic_assert(const char *msg, const char *func, const char *file, uint32_t line)
 {
     konsole_set_panic_color();
     konsole_println("ASSERT FAILED");
-    panic(msg, file, line);
+    panic(msg, func, file, line);
 }

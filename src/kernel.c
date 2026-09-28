@@ -20,10 +20,9 @@
 #include "mouse.h"
 #include "power.h"
 #include "sysenter.h"
-
+#include "input_manager.h"
 
 void kernel_main_task(void *);
-
 
 __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 {
@@ -50,7 +49,7 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 
     timer_init(100);
 
-    keyboard_init();
+    input_manager_init();
 
     scheduler_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
     scheduler_start();
@@ -91,6 +90,10 @@ void kernel_main_task(void *_)
 
     task_unlock();
 
+    PRINT_INIT("keyboard");
+    keyboard_init();
+    PRINT_OK;
+
     PRINT_INIT("mouse");
     mouse_init();
     PRINT_OK;
@@ -104,10 +107,7 @@ void kernel_main_task(void *_)
     PRINT_OK;
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
-    // TODO история команд и того, что было на экране
-    // TODO дамп памяти
 
-    // TODO отдельная задача для нижних обработчиков прерываний
     // TODO сделать нормальный по распределению приоритетов планировщик
 
     // TODO пользовательские процессы из 3 кольца и безопасность

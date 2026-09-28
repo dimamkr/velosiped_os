@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "isr.h"
+#include <stdarg.h>
 
 #define BARRIER asm volatile("" ::: "memory")
 #define max(a, b) (_Generic((a), uint8_t: _uint8_max, uint16_t: _uint16_max, uint32_t: _uint32_max))((a), (b))
@@ -16,8 +17,9 @@ void memswap(void *buff_1, void *buff_2, uint32_t size);
 
 bool_t uint32_less(void *a, void *b);
 
-void panic(char *msg, char *file, uint32_t line);
-void panic_assert(char *msg, char *file, uint32_t line);
+void panic_assert(const char *msg, const char *func, const char *file, uint32_t line);
+void panic(const char *msg, const char *func, const char *file, uint32_t line);
+void warning(const char *func, const char *file, uint32_t line, const char *fmt, ...);
 void halt();
 void hang_forever(void);
 void outb(uint16_t port, byte_t value);
@@ -29,8 +31,9 @@ uint32_t inl(uint16_t port);
 void wrmsr(uint32_t reg, uint32_t lo, uint32_t hi);
 uint64_t rdmsr(uint32_t reg);
 
-#define PANIC(msg) panic(msg, __FILE__, __LINE__)
-#define ASSERT(b) (likely(b) ? (void)0 : panic_assert(#b, __FILE__, __LINE__))
+#define PANIC(msg) panic(msg, __func__, __FILE__, __LINE__)
+#define WARNING(fmt, ...) warning(__func__, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define ASSERT(b) (likely(b) ? (void)0 : panic_assert(#b, __func__, __FILE__, __LINE__))
 
 __attribute__((always_inline, artificial)) inline uint8_t _uint8_max(uint8_t a, uint8_t b)
 {

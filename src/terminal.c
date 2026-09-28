@@ -17,7 +17,9 @@
 #include "sysenter.h"
 #include "vmm.h"
 
-static char terminal_input_buff[256];
+#define TERMINAL_INPUT_BUFF_SIZE 256
+
+static char terminal_input_buff[TERMINAL_INPUT_BUFF_SIZE];
 static int terminal_input_buff_lenght;
 static bool_t terminal_EOI_flag;
 static bool_t terminal_cancelled_flag;
@@ -33,6 +35,12 @@ hash_table_t *cmd_handlers;
 
 static inline void terminal_input_buff_add_symbol(char symbol)
 {
+    if (terminal_input_buff_lenght >= TERMINAL_INPUT_BUFF_SIZE - 1)
+    {
+        WARNING("terminal buff is full");
+        return;
+    }
+
     terminal_input_buff[terminal_input_buff_lenght] = symbol;
     terminal_input_buff_lenght++;
 }
@@ -86,11 +94,17 @@ static inline void terminal_command_history_add()
     command_history_index = command_history->elements_count;
 }
 
-void terminal_process_keyboard_events(void)
+void terminal_process_keyboard_input(void)
 {
-    keyboard_event_t ev;
-    while (keyboard_dequeue_event(&ev))
+    while (!task_input_queue_empty(INPUT_CHANNEL_KEYBOARD))
     {
+        keyboard_event_t ev;
+        if (!task_input_get(INPUT_CHANNEL_KEYBOARD, &ev))
+        {
+            WARNING("skipped keyboard input");
+            continue;
+        }
+
         // Игнорируем отпускания
         if (!ev.pressed)
             continue;
@@ -160,8 +174,8 @@ static inline const char *terminal_get_input_line()
 
     while (!terminal_EOI_flag && !terminal_cancelled_flag)
     {
-        task_wait_until(keyboard_event);
-        terminal_process_keyboard_events();
+        task_wait_for_input(INPUT_CHANNEL_KEYBOARD);
+        terminal_process_keyboard_input();
     }
 
     if (terminal_EOI_flag)
@@ -1073,7 +1087,7 @@ bool_t terminal_exec(argparse_command_t *command)
     char *arg2 = process_arg;
     char *argv[2] = {arg1, arg2};
 
-    if (!task_create_user_process_from_elf(buff, argc, argv, STACK_SIZE_SMALL, stack_size))
+    if (!task_create_user_process_from_elf(buff, argc, argv, STACK_SIZE_SMALL, stack_size, task_sids_none))
     {
         konsole_println("Error: it isn't elf file");
         return false;
@@ -1102,15 +1116,14 @@ bool_t terminal_dbg(argparse_command_t *command)
 {
     konsole_println("DEBUG COMMAND");
 
-    asm volatile (
+    asm volatile(
         "movl %%esp, %%ecx\n"
         "leal 1f, %%edx\n"
         "sysenter\n"
         "1:"
         :
-        : "a" (228)
-        : "ecx", "edx", "memory"
-    );
+        : "a"(228)
+        : "ecx", "edx", "memory");
 
     return true;
 }

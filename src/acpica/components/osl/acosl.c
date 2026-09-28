@@ -393,7 +393,7 @@ ACPI_STATUS AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Functio
     param->first = Function; // лютый костыль
     param->second = Context;
 
-    task_create_kthread(AcpiThreadWrapper, param, STACK_SIZE_LARGE);
+    task_create_kthread(AcpiThreadWrapper, param, STACK_SIZE_LARGE, task_sids_none);
 
     return AE_OK;
 }

@@ -2,7 +2,7 @@
 #include "terminal.h"
 #include "system.h"
 #include "konsole.h"
-#include "task_event.h"
+#include "input_manager.h"
 #include "heap.h"
 
 #pragma GCC optimize("no-optimize-sibling-calls")
@@ -22,8 +22,6 @@ static volatile int event_queue_head = 0;
 static volatile int event_queue_tail = 0;
 
 static uint8_t current_modifiers = 0;
-
-task_event_t *keyboard_event = NULL;
 
 // ------------------------------------------------------------
 // Таблицы перекодировки (скан-код -> ASCII)
@@ -53,6 +51,7 @@ static const char scancode_shifted[] = {
 // Вспомогательные функции
 // ------------------------------------------------------------
 
+// TODO переписать через ring для единого стиля
 static bool scancode_buffer_push(uint8_t sc)
 {
     int next = (scancode_buffer_tail + 1) % SCANCODE_BUFFER_SIZE;
@@ -69,25 +68,6 @@ static bool scancode_buffer_pop(uint8_t *sc)
         return false;
     *sc = scancode_buffer[scancode_buffer_head];
     scancode_buffer_head = (scancode_buffer_head + 1) % SCANCODE_BUFFER_SIZE;
-    return true;
-}
-
-static bool event_queue_push(keyboard_event_t *ev)
-{
-    int next = (event_queue_tail + 1) % EVENT_QUEUE_SIZE;
-    if (next == event_queue_head)
-        return false;
-    event_queue[event_queue_tail] = *ev;
-    event_queue_tail = next;
-    return true;
-}
-
-bool keyboard_dequeue_event(keyboard_event_t *ev)
-{
-    if (event_queue_head == event_queue_tail)
-        return false;
-    *ev = event_queue[event_queue_head];
-    event_queue_head = (event_queue_head + 1) % EVENT_QUEUE_SIZE;
     return true;
 }
 
@@ -229,15 +209,16 @@ void keyboard_top_callback(isr_data_t data)
         uint8_t scancode = inb(KEYBOARD_DATA_PORT);
         if (scancode != 0)
         {
+            // переписать через ring
             scancode_buffer_push(scancode);
         }
     }
 }
 
+// TODO разобраться и исправить логику
 void keyboard_bottom_callback(isr_data_t data)
 {
     uint8_t scancode;
-    bool any_event = false;
     while (scancode_buffer_pop(&scancode))
     {
 
@@ -250,19 +231,8 @@ void keyboard_bottom_callback(isr_data_t data)
 
         if (ev.keycode != 0)
         {
-            if (event_queue_push(&ev))
-            {
-                any_event = true;
-            }
-            else
-            {
-                PANIC("KEYBOARD EVENT QUEUE OVERFLOW");
-            }
+            input_manager_receive_input(INPUT_CHANNEL_KEYBOARD, &ev);
         }
-    }
-    if (any_event)
-    {
-        task_event_flush(keyboard_event);
     }
 }
 
@@ -272,7 +242,6 @@ void keyboard_bottom_callback(isr_data_t data)
 
 void keyboard_init()
 {
-    keyboard_event = task_event_create();
     outb(KEYBOARD_STATUS_PORT, 0xAE); // включить клавиатуру
     interrupt_register(IRQ1, keyboard_top_callback, keyboard_bottom_callback);
 }

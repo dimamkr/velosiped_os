@@ -61,6 +61,8 @@ void composer_init(void);
 void composer_flush_prepare(void);
 void composer_flush(void);
 
+void composer_all(void);
+
 static inline void __layer_edit_end_trick(layer_t **layer)
 {
     layer_end_edit(*layer);

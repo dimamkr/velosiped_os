@@ -15,5 +15,7 @@ void task_event_flush(task_event_t *this);
 void task_event_add(task_event_t *this, uint32_t pid);
 void task_event_init(task_event_t *this);
 task_event_t *task_event_create(void);
+void task_event_destroy(task_event_t *this);
+void task_event_erase(task_event_t *this, uint32_t pid);
 
 #endif

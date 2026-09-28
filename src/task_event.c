@@ -30,3 +30,27 @@ void task_event_flush(task_event_t *this)
         linked_list_erase(&(this->front), this->front);
     }
 }
+
+void task_event_destroy(task_event_t *this)
+{
+    TASK_LOCKED_FUNCTION;
+
+    linked_list_destroy(&this->front);
+}
+
+void task_event_erase(task_event_t *this, uint32_t pid)
+{
+    TASK_LOCKED_FUNCTION;
+
+    linked_list_node_t *curr = this->front;
+
+    while (curr)
+    {
+        if (*(uint32_t *)curr->value == pid)
+        {
+            linked_list_erase(&this->front, curr);
+            return;
+        }
+        curr = curr->right;
+    }
+}

@@ -13,6 +13,10 @@
 
 #define _STACK_TOP(task) (((uint32_t)task->stack_start + task->stack_size))
 
+uint32_t task_sids_none[INPUT_CHANNELS];
+uint32_t task_sids_keyboard_only[INPUT_CHANNELS];
+uint32_t task_sids_keyboard_mouse_only[INPUT_CHANNELS];
+
 task_t tasks[MAX_TASKS];
 bitmap_t *tasks_used_bitmap;
 uint32_t tasks_last_used_id;
@@ -67,7 +71,7 @@ static inline uint32_t _tasks_erase(uint32_t pid)
     bitmap_clear_bit(tasks_used_bitmap, pid);
 }
 
-static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_dict)
+static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_dict, uint32_t *input_sids)
 {
     ASSERT(task_count < MAX_TASKS);
 
@@ -86,12 +90,39 @@ static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_d
 
     task->ebp = 0;
 
+    for (int ch = 0; ch < INPUT_CHANNELS; ++ch)
+    {
+        switch (input_sids[ch])
+        {
+        case TASK_INPUT_NONE:
+            task->input_sids[ch] = TASK_INPUT_NONE;
+            break;
+        case TASK_INPUT_NEW:
+        {
+            uint32_t sid = input_manager_register_to_new_stream(ch, pid);
+            if (sid == (uint32_t)-1)
+            {
+                WARNING("bad sid");
+                task->input_sids[ch] = TASK_INPUT_NONE;
+            }
+            else
+            {
+                task->input_sids[ch] = sid;
+            }
+            break;
+        }
+        default:
+            task->input_sids[ch] = input_sids[ch];
+            input_manager_register_to_stream(ch, input_sids[ch], pid);
+        }
+    }
+
     return task;
 }
 
-static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32_t stack_size)
+static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32_t stack_size, uint32_t *input_sids)
 {
-    task_t *task = _task_init_prefix(stack_size, kernel_page_dict);
+    task_t *task = _task_init_prefix(stack_size, kernel_page_dict, input_sids);
 
     // инициализация стека
     uint32_t *sp = (uint32_t *)_STACK_TOP(task);
@@ -133,9 +164,9 @@ static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32
 
 // пользовательский стек уже выделен и в нем уже лежат аргументы
 static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack_size,
-                                      page_dict_t *page_dict, uint32_t user_stack_top)
+                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids)
 {
-    task_t *task = _task_init_prefix(kernel_stack_size, page_dict);
+    task_t *task = _task_init_prefix(kernel_stack_size, page_dict, input_sids);
 
     uint32_t *sp = (uint32_t *)_STACK_TOP(task);
 
@@ -167,14 +198,24 @@ static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack
 // Инициализация планировщика и передача управления ему
 void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
+    for (int i = 0; i < INPUT_CHANNELS; ++i)
+    {
+        task_sids_none[i] = TASK_INPUT_NONE;
+        task_sids_keyboard_mouse_only[i] = TASK_INPUT_NONE;
+        task_sids_keyboard_only[i] = TASK_INPUT_NONE;
+    }
+    task_sids_keyboard_mouse_only[INPUT_CHANNEL_MOUSE] = TASK_INPUT_NEW;
+    task_sids_keyboard_mouse_only[INPUT_CHANNEL_KEYBOARD] = TASK_INPUT_NEW;
+    task_sids_keyboard_only[INPUT_CHANNEL_KEYBOARD] = TASK_INPUT_NEW;
+
     tasks_used_bitmap = bitmap_create(MAX_TASKS);
 
     // ВНИМАНИЕ ЛЕНИВАЯ ЗАДАЧА ИМЕЕТ НОМЕР СТРОГО 0
-    task_t *lazy = _task_init_kernel(lazy_task, NULL, STACK_SIZE_LARGE);
+    task_t *lazy = _task_init_kernel(lazy_task, NULL, STACK_SIZE_LARGE, task_sids_none);
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
     task_set_current(lazy);
 
-    task_create_kthread(k_entry, arg, stack_size);
+    task_create_kthread(k_entry, arg, stack_size, task_sids_keyboard_only);
     kernel_task = &tasks[1];     // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
     task_set_current(&tasks[1]); // задача ядра
 
@@ -189,19 +230,22 @@ static inline void _task_create_node(task_t *task)
 }
 
 // создание потока ядра
-void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size)
+void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size, uint32_t *input_sids)
 {
-    task_t *task = _task_init_kernel(entry, arg, stack_size);
+    task_t *task = _task_init_kernel(entry, arg, stack_size, input_sids);
     _task_create_node(task);
 }
 
-static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size, page_dict_t *page_dict, uint32_t user_stack_top)
+static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size,
+                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids)
 {
-    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top);
+    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top, input_sids);
     _task_create_node(task);
 }
 
-bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size, uint32_t user_stack_size)
+// тут ввод
+bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size,
+                                         uint32_t user_stack_size, uint32_t *input_sids)
 {
     uint32_t entry;
     page_dict_t *page_dict;
@@ -212,7 +256,7 @@ bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, 
 
     uint32_t user_stack_top = vmm_user_stack_create(page_dict, argc, argv, user_stack_size);
 
-    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top);
+    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top, input_sids);
     return true;
 }
 
@@ -300,6 +344,11 @@ void task_destroy_from_accumulator()
     if (to_destroy_accumulator->page_dict != kernel_page_dict)
     {
         page_dict_destroy(to_destroy_accumulator->page_dict);
+    }
+
+    for (int ch = 0; ch < INPUT_CHANNELS; ++ch)
+    {
+        task_input_unregister(to_destroy_accumulator, ch);
     }
 
     _tasks_erase(to_destroy_accumulator->pid);
@@ -398,6 +447,47 @@ void task_wait_until(task_event_t *ev)
 {
     task_event_add(ev, current_task->pid);
     task_yield();
+}
+
+void task_wait_for_input(uint32_t channel)
+{
+    uint32_t sid = current_task->input_sids[channel];
+    if (sid == TASK_INPUT_NONE || sid == TASK_INPUT_NEW)
+        return;
+
+    task_event_t *ev = input_manager_get_event(channel, sid);
+    if (ev)
+        task_wait_until(ev);
+}
+
+bool_t task_input_get(uint32_t channel, void *out)
+{
+    uint32_t sid = current_task->input_sids[channel];
+    if (sid == TASK_INPUT_NONE || sid == TASK_INPUT_NEW)
+    {
+        WARNING("bas sid: %u", current_task->input_sids[channel]);
+        return false;
+    }
+    return input_manager_give_input_el(channel, sid, out);
+}
+
+bool_t task_input_queue_empty(uint32_t channel)
+{
+    uint32_t sid = current_task->input_sids[channel];
+    if (sid == TASK_INPUT_NONE || sid == TASK_INPUT_NEW)
+    {
+        WARNING("bas sid: %u", current_task->input_sids[channel]);
+        return true;
+    }
+    return input_manager_queue_empty(channel, sid);
+}
+
+void task_input_unregister(task_t *task, uint32_t channel)
+{
+    uint32_t sid = task->input_sids[channel];
+    if (sid == TASK_INPUT_NONE || sid == TASK_INPUT_NEW)
+        return;
+    input_manager_unregister_from_stream(channel, sid, task->pid);
 }
 
 void task_set_state_waiting(uint32_t pid)

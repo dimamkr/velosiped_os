@@ -15,7 +15,7 @@ void int_worker_init(void)
     int_worker_pending = false;
     int_worker_queue = ring_create(sizeof(isr_data_t), RING_SIZE);
 
-    task_create_kthread(int_worker_task, NULL, STACK_SIZE_LARGE);
+    task_create_kthread(int_worker_task, NULL, STACK_SIZE_LARGE, task_sids_none);
 }
 
 // добавление данных прерывания в очередь для отложенной обработки

@@ -190,6 +190,14 @@ void composer_flush(void)
     layers_dirty = false;
 }
 
+// принудительный вывод
+void composer_all(void)
+{
+    composer_flush_prepare();
+    composer_flush();
+    framebuffer_flush();
+}
+
 void composer_task(void *_)
 {
     (void)_;
@@ -201,9 +209,7 @@ void composer_task(void *_)
         if (!layers_dirty)
             continue;
 
-        composer_flush_prepare();
-        composer_flush();
-        framebuffer_flush();
+        composer_all();
     }
 }
 
@@ -211,5 +217,5 @@ void composer_init(void)
 {
     layers = dynamic_array_create(sizeof(layer_t *));
     layers_dirty = true;
-    task_create_kthread(composer_task, NULL, STACK_SIZE_LARGE);
+    task_create_kthread(composer_task, NULL, STACK_SIZE_LARGE, task_sids_none);
 }
