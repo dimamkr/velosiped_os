@@ -28,7 +28,7 @@
 #define MMIO_VIRT_BASE 0xF0000000
 
 // пользовательские дефайны
-#define USER_STACK_TOP 0x7FFFF000
+#define USER_STACK_TOP 0xBFFFF000
 
 static inline void *ram_kernel_to_virt(void *phys_addr)
 {

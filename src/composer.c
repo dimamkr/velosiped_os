@@ -211,5 +211,5 @@ void composer_init(void)
 {
     layers = dynamic_array_create(sizeof(layer_t *));
     layers_dirty = true;
-    task_create(composer_task, NULL, STACK_SIZE_LARGE);
+    task_create_kthread(composer_task, NULL, STACK_SIZE_LARGE);
 }

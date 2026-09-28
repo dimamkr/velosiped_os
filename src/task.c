@@ -131,8 +131,8 @@ static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32
     return task;
 }
 
-// размер пользовательского стека нигде не хранится и не используется (для польз стека должны быть заранее выделены страницы)
-static inline task_t *_task_init_user(uint32_t user_entry, void *arg, uint32_t kernel_stack_size,
+// пользовательский стек уже выделен и в нем уже лежат аргументы
+static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack_size,
                                       page_dict_t *page_dict, uint32_t user_stack_top)
 {
     sysenter_stack_create_and_map(page_dict);
@@ -140,10 +140,6 @@ static inline task_t *_task_init_user(uint32_t user_entry, void *arg, uint32_t k
     task_t *task = _task_init_prefix(kernel_stack_size, page_dict);
 
     uint32_t *sp = (uint32_t *)_STACK_TOP(task);
-
-    // 1) Аргумент и return address для entry (Ring 0 часть)
-    // *--sp = (uint32_t)arg;
-    *--sp = (uint32_t)task_exit; // если entry вернётся
 
     // подставные данные iret для Ring 3
     *--sp = 0x23;           // SS
@@ -177,13 +173,11 @@ void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 
     // ВНИМАНИЕ ЛЕНИВАЯ ЗАДАЧА ИМЕЕТ НОМЕР СТРОГО 0
     task_t *lazy = _task_init_kernel(lazy_task, NULL, STACK_SIZE_LARGE);
-    lazy->page_dict = kernel_page_dict;
     lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
     task_set_current(lazy);
 
-    task_create(k_entry, arg, stack_size);
-    kernel_task = &tasks[1]; // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
-    kernel_task->page_dict = kernel_page_dict;
+    task_create_kthread(k_entry, arg, stack_size);
+    kernel_task = &tasks[1];     // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
     task_set_current(&tasks[1]); // задача ядра
 
     // ВНИМАНИЕ ЗАДАЧА int_worker ИМЕЕТ НОМЕР СТРОГО 2
@@ -196,32 +190,20 @@ static inline void _task_create_node(task_t *task)
     task->node = node;
 }
 
-// Создание новой задачи
-void task_create(void (*entry)(void *), void *arg, uint32_t stack_size)
-{
-    task_t *task = _task_init_kernel(entry, arg, stack_size);
-    if (current_task)
-    {
-        task->page_dict = current_task->page_dict;
-    }
-
-    _task_create_node(task);
-}
-
-// задача но со своим словарем страниц
-void task_create_process(void (*entry)(void *), void *arg, uint32_t stack_size, page_dict_t *page_dict)
+// создание потока ядра
+void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size)
 {
     task_t *task = _task_init_kernel(entry, arg, stack_size);
     _task_create_node(task);
 }
 
-void task_create_user_process(uint32_t user_entry, void *arg, uint32_t kernel_stack_size, page_dict_t *page_dict, uint32_t user_stack_top)
+static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size, page_dict_t *page_dict, uint32_t user_stack_top)
 {
-    task_t *task = _task_init_user(user_entry, arg, kernel_stack_size, page_dict, user_stack_top);
+    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top);
     _task_create_node(task);
 }
 
-bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t kernel_stack_size, uint32_t user_stack_size)
+bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, uint32_t kernel_stack_size, uint32_t user_stack_size)
 {
     uint32_t entry;
     page_dict_t *page_dict;
@@ -230,9 +212,9 @@ bool_t task_create_user_process_from_elf(void *elf_data, void *arg, uint32_t ker
         return false;
     }
 
-    uint32_t user_stack_top = vmm_user_stack_create(page_dict, user_stack_size);
+    uint32_t user_stack_top = vmm_user_stack_create(page_dict, argc, argv, user_stack_size);
 
-    task_create_user_process(entry, arg, kernel_stack_size, page_dict, user_stack_top);
+    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top);
     return true;
 }
 
@@ -315,14 +297,12 @@ void task_yield()
 // TODO рефакторинг для общей логики сишной части переключения
 void task_destroy_from_accumulator()
 {
+    vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
+
     if (to_destroy_accumulator->page_dict != kernel_page_dict)
     {
         page_dict_destroy(to_destroy_accumulator->page_dict);
     }
-
-    vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
-
-    tss_entry.esp0 = _STACK_TOP(current_task);
 
     _tasks_erase(to_destroy_accumulator->pid);
     task_count--;
@@ -346,19 +326,18 @@ void task_exit()
 
     to_destroy_accumulator = current_task;
     to_destroy_accumulator->state = TASK_TERMINATED;
-    task_set_current(task_get_next());
+
+    task_t *next = task_get_next();
+    tss_entry.esp0 = _STACK_TOP(next);
+
+    task_set_current(next);
+    next->state = TASK_RUNNING;
     goto_current_task();
 }
 
 void task_switch_prepare()
 {
     task_t *next = task_get_next();
-
-    if (next->pid == 4)
-    {
-        uint32_t volatile a = 0;
-        a++;
-    }
 
     // страницы ядра точно выделены
     vmm_page_dict_switch(current_task->page_dict, next->page_dict);
@@ -421,4 +400,13 @@ void task_wait_until(task_event_t *ev)
 {
     task_event_add(ev, current_task->pid);
     task_yield();
+}
+
+void task_set_state_waiting(uint32_t pid)
+{
+    tasks[pid].state = TASK_WAITING;
+}
+void task_set_state_ready(uint32_t pid)
+{
+    tasks[pid].state = TASK_READY;
 }
