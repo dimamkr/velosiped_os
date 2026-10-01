@@ -1,5 +1,5 @@
 # ============================================================
-#  Makefile — 32-битное ядро
+#  Makefile — 32-битное ядро (рекурсивная структура src/)
 # ============================================================
 #
 #  Цели:
@@ -9,17 +9,8 @@
 #    run-debug    QEMU с GDB-сервером
 #    clean        удалить build/
 #
-#  Дерево исходников:
-#    src/            ядро
-#    src/boot/       загрузчики (boot1, boot2)
-#    userspace/bin/  пользовательские программы (1 .c = 1 программа)
-#    userspace/include/ общие заголовки
-#    test/files/     файлы для /test на образе
-#
-#  Дерево сборки:
-#    build/режим/boot/
-#    build/режим/kernel/   и build/kernel/режим/acpica/
-#    build/режим/user/bin/
+#  Любые .c/.asm под src/ (кроме src/acpica и src/boot) собираются
+#  рекурсивно с сохранением структуры каталогов в build/kernel/.
 # ============================================================
 
 # ------- Инструменты -------
@@ -42,7 +33,7 @@ USER_INC_DIR   = $(USER_DIR)/include
 TEST_FILES_DIR = test/files
 
 # ============================================================
-#  Режим сборки — определяется по целям в командной строке
+#  Режим сборки
 # ============================================================
 
 ifeq ($(origin BUILD_MODE), undefined)
@@ -53,28 +44,36 @@ ifeq ($(origin BUILD_MODE), undefined)
   endif
 endif
 
-# ------- Каталоги сборки -------
-BUILD_DIR_ROOT = build
+BUILD_DIR_ROOT   = build
 BUILD_DIR        = $(BUILD_DIR_ROOT)/$(BUILD_MODE)
 BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
 BUILD_KERNEL_DIR = $(BUILD_DIR)/kernel
 BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/acpica
 BUILD_USER_BIN   = $(BUILD_DIR)/user/bin
+BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
 
-BUILD_LOGS_DIR  = $(BUILD_DIR)/LOGS
+# ============================================================
+#  Автоматический сбор include-путей
+# ============================================================
+# Все подкаталоги src/, кроме acpica и boot, добавляются как -I.
+# Это позволяет писать #include "konsole.h" без пути,
+# даже если konsole.h лежит в src/gui/konsole/.
+
+KERNEL_SRC_DIRS := $(shell find $(SRC_DIR) -type d \
+                       -not -path '$(SRC_DIR)/acpica*' \
+                       -not -path '$(SRC_DIR)/boot*')
+
+KERNEL_INCLUDES := $(addprefix -I,$(KERNEL_SRC_DIRS))
 
 # ============================================================
 #  Флаги
 # ============================================================
 
-# ---- Ядро ----
-# -MMD -MP  →  gcc генерирует .d-файлы с зависимостями от заголовков,
-#             которые затем подключаются через -include в конце.
-# много где разные типы указывают на одну память
 KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
                        -fno-stack-protector -fno-pic -mgeneral-regs-only \
-					   -fno-strict-aliasing \
-                       -I$(SRC_DIR) -Werror -MMD -MP
+                       -fno-strict-aliasing \
+                       $(KERNEL_INCLUDES) \
+                       -Werror -MMD -MP
 KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
 KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
@@ -98,7 +97,6 @@ USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
 USER_LDFLAGS = -m elf_i386 -T $(USER_DIR)/link.ld -nostdlib
 
-# ---- Значения которые будут использоваться ----
 ifeq ($(BUILD_MODE),debug)
   KERNEL_CFLAGS = $(KERNEL_CFLAGS_DEBUG)
   KERNEL_NASM   = $(KERNEL_NASM_DEBUG)
@@ -110,15 +108,21 @@ else
 endif
 
 # ============================================================
-#  Списки исходников и целей
+#  Списки источников и целей
 # ============================================================
 
-# ---- Ядро ----
-KERNEL_C_SOURCES   = $(wildcard $(SRC_DIR)/*.c)
-KERNEL_ASM_SOURCES = $(wildcard $(SRC_DIR)/*.asm)
+# ---- Ядро: рекурсивный обход src/, кроме acpica и boot ----
+KERNEL_C_SOURCES := $(shell find $(SRC_DIR) -name '*.c' \
+                       -not -path '$(SRC_DIR)/acpica/*' \
+                       -not -path '$(SRC_DIR)/boot/*')
 
-KERNEL_C_OBJECTS   = $(patsubst $(SRC_DIR)/%.c,   $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_C_SOURCES))
-KERNEL_ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_ASM_SOURCES))
+KERNEL_ASM_SOURCES := $(shell find $(SRC_DIR) -name '*.asm' \
+                         -not -path '$(SRC_DIR)/acpica/*' \
+                         -not -path '$(SRC_DIR)/boot/*')
+
+# Зеркалируем относительные пути в build/kernel/
+KERNEL_C_OBJECTS   := $(patsubst $(SRC_DIR)/%.c,   $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_C_SOURCES))
+KERNEL_ASM_OBJECTS := $(patsubst $(SRC_DIR)/%.asm, $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_ASM_SOURCES))
 
 # ---- ACPICA ----
 ALL_ACPICA_SOURCES = $(wildcard $(ACPICA_DIR)/components/*/*.c)
@@ -145,7 +149,7 @@ USER_C_SOURCES = $(wildcard $(USER_BIN_DIR)/*.c)
 USER_OBJECTS   = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.o,   $(USER_C_SOURCES))
 USER_BINARIES  = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.elf, $(USER_C_SOURCES))
 
-# ---- Файлы автозависимостей (.d), генерируются -MMD ----
+# ---- Зависимости ----
 KERNEL_DEPS = $(KERNEL_C_OBJECTS:.o=.d) $(ACPICA_OBJECTS:.o=.d)
 USER_DEPS   = $(USER_OBJECTS:.o=.d)
 
@@ -164,7 +168,6 @@ release: all
 all: $(IMAGE)
 	@echo "✅ Build complete: $<"
 
-# Отладочная сборка — отдельный build-каталог, чтобы не смешивать с release
 build-debug: all
 
 run: all
@@ -205,7 +208,7 @@ clean:
 #  Каталоги
 # ============================================================
 
-$(BUILD_DIR)  $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_LOGS_DIR):
+$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_LOGS_DIR):
 	@mkdir -p $@
 
 # ============================================================
@@ -217,23 +220,26 @@ $(BUILD_BOOT_DIR)/%.bin: $(BOOT_SRC_DIR)/%.asm | $(BUILD_BOOT_DIR)
 	$(NASM) -f bin -o $@ $<
 
 # ============================================================
-#  Ядро
+#  Ядро (рекурсивно)
 # ============================================================
 
-$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_KERNEL_DIR)
+$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
 	@echo "  [CC]    $<"
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_KERNEL_DIR)
+$(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.asm
+	@mkdir -p $(dir $@)
 	@echo "  [ASM]   $<"
 	$(NASM) $(KERNEL_NASM) -o $@ $<
 
-$(BUILD_ACPI_DIR)/%.o: $(ACPICA_DIR)/%.c | $(BUILD_ACPI_DIR)
+# ACPICA — отдельное правило, свой набор флагов
+$(BUILD_ACPI_DIR)/%.o: $(ACPICA_DIR)/%.c
 	@mkdir -p $(dir $@)
 	@echo "  [ACPI]  $<"
 	$(CC) $(KERNEL_CFLAGS) $(ACPICA_CFLAGS) -c -o $@ $<
 
-$(BUILD_KERNEL_DIR)/kernel.elf: $(KERNEL_OBJECTS) $(SRC_DIR)/link.ld | $(BUILD_KERNEL_DIR)
+$(BUILD_KERNEL_DIR)/kernel.elf: $(KERNEL_OBJECTS) $(SRC_DIR)/link.ld
 	@echo "  [LD]    kernel.elf"
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
@@ -312,16 +318,6 @@ $(IMAGE): $(BOOT1_BIN) $(BOOT2_BIN) \
 
 # ============================================================
 #  Автозависимости
-# ============================================================
-# -include (с минусом) не падает, если .d ещё не сгенерированы
-# (первая сборка, после clean).
-#
-# Что внутри .d:
-#   build/kernel/task.o: src/task.c src/task.h src/heap.h src/paging.h ...
-#
-# А также (благодаря -MP) заголовки-призраки:
-#   src/task.h:
-# чтобы удаление заголовка не ломало сборку.
 # ============================================================
 
 -include $(KERNEL_DEPS)
