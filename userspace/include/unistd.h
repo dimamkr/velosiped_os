@@ -45,7 +45,7 @@ __attribute__((always_inline)) static inline int _syscall_int0x80(int num, int a
 
 int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
 {
-    return _syscall_int0x80(SYS_WRITE, fd, (int)buf, len, 0, 0, 0);
+    return _syscall_int0x80(SYS_WRITE, fd, (int)buf, len);
 }
 
 int sys_read(volatile int fd, volatile void *buf, volatile unsigned len)
