@@ -231,7 +231,7 @@ void keyboard_bottom_callback(isr_data_t data)
 
         if (ev.keycode != 0)
         {
-            input_manager_receive_input(INPUT_CHANNEL_KEYBOARD, &ev);
+            input_manager_add_input_el(INPUT_CHANNEL_KEYBOARD, &ev);
         }
     }
 }

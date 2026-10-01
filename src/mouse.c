@@ -4,6 +4,7 @@
 #include "isr.h"
 #include "framebuffer.h"
 #include "ring.h"
+#include "input_manager.h"
 
 #pragma GCC optimize("no-optimize-sibling-calls")
 
@@ -188,6 +189,17 @@ void mouse_bottom_callback(isr_data_t data)
 
         // Обновить курсор в композиторе
         mouse_cursor_move(mouse_x, mouse_y);
+
+        // перевод в структуру
+        mouse_event_t ev;
+        ev.dx = dx;
+        ev.dy = dy;
+        ev.buttons = MOUSE_BUTTON_LEFT * left + MOUSE_BUTTON_RIGHT * right + MOUSE_BUTTON_MIDDLE * middle;
+        ev.wheel = 0;
+
+        // TODO не протестировано
+        // отправить ввод
+        input_manager_add_input_el(INPUT_CHANNEL_MOUSE, &ev);
     }
 }
 

@@ -13,6 +13,7 @@
 
 #define _STACK_TOP(task) (((uint32_t)task->stack_start + task->stack_size))
 
+// удобная регистрация новых потоков ввода
 uint32_t task_sids_none[INPUT_CHANNELS];
 uint32_t task_sids_keyboard_only[INPUT_CHANNELS];
 uint32_t task_sids_keyboard_mouse_only[INPUT_CHANNELS];
@@ -468,7 +469,7 @@ bool_t task_input_get(uint32_t channel, void *out)
         WARNING("bas sid: %u", current_task->input_sids[channel]);
         return false;
     }
-    return input_manager_give_input_el(channel, sid, out);
+    return input_manager_get_input_el(channel, sid, out);
 }
 
 bool_t task_input_queue_empty(uint32_t channel)

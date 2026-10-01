@@ -1,5 +1,6 @@
 #include "input_manager.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "task.h"
 #include "timer.h"
 
@@ -7,7 +8,8 @@ input_channel_t input_channels[INPUT_CHANNELS] = {0};
 
 static uint32_t _input_channels_sizeof_element[INPUT_CHANNELS] =
     {
-        [INPUT_CHANNEL_KEYBOARD] = sizeof(keyboard_event_t)};
+        [INPUT_CHANNEL_KEYBOARD] = sizeof(keyboard_event_t),
+        [INPUT_CHANNEL_MOUSE] = sizeof(mouse_event_t)};
 
 static inline int _find_free_stream(uint32_t ch)
 {
@@ -124,7 +126,7 @@ void input_manager_unregister_from_stream(uint32_t ch, uint32_t sid, uint32_t pi
 }
 
 // рассылка ввода по всем активным каналам
-void input_manager_receive_input(uint32_t ch, void *input_el)
+void input_manager_add_input_el(uint32_t ch, void *input_el)
 {
     TASK_LOCKED_FUNCTION;
 
@@ -137,7 +139,7 @@ void input_manager_receive_input(uint32_t ch, void *input_el)
         input_stream_t *is = &input_channels[ch].input_streams[i];
         if (is->flags & IS_FLAG_ACTIVE)
         {
-            if (!ring_push_back(is->input_queue, input_el))
+            if (unlikely(!ring_push_back(is->input_queue, input_el)))
             {
                 dropped_count++;
                 uint32_t now = timer_get_time();
@@ -153,6 +155,7 @@ void input_manager_receive_input(uint32_t ch, void *input_el)
     }
 }
 
+// получить task_event ввода
 task_event_t *input_manager_get_event(uint32_t ch, uint32_t sid)
 {
     input_stream_t *is = &input_channels[ch].input_streams[sid];
@@ -163,7 +166,8 @@ task_event_t *input_manager_get_event(uint32_t ch, uint32_t sid)
     return NULL;
 }
 
-bool_t input_manager_give_input_el(uint32_t ch, uint32_t sid, void *out)
+// получить элемент ввода
+bool_t input_manager_get_input_el(uint32_t ch, uint32_t sid, void *out)
 {
     if (!out)
         return false;

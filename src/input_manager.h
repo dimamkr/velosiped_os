@@ -32,8 +32,8 @@ void input_manager_init(void);
 uint32_t input_manager_register_to_new_stream(uint32_t ch, uint32_t pid);
 void input_manager_register_to_stream(uint32_t ch, uint32_t sid, uint32_t pid);
 void input_manager_unregister_from_stream(uint32_t ch, uint32_t sid, uint32_t pid);
-void input_manager_receive_input(uint32_t ch, void *input_el);
-bool_t input_manager_give_input_el(uint32_t ch, uint32_t sid, void *out);
+void input_manager_add_input_el(uint32_t ch, void *input_el);
+bool_t input_manager_get_input_el(uint32_t ch, uint32_t sid, void *out);
 bool_t input_manager_queue_empty(uint32_t ch, uint32_t sid);
 
 task_event_t *input_manager_get_event(uint32_t ch, uint32_t sid);

@@ -6,6 +6,8 @@
 #include "renderer.h"
 #include "task.h"
 
+// TODO потом вынести в userspace
+
 dynamic_array_t *layers;    // хранит layer_t*
 static bool_t layers_dirty; // хоть какой-то слой в массиве изменился
 
