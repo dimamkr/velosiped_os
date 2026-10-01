@@ -27,7 +27,7 @@ int sys_write(uint32_t fd, const char *buff, uint32_t size)
     if (!user_ptr_ok((uint32_t)buff, size))
         return -1;
 
-    konsole_println("W");
+    // konsole_println("W");
     for (uint32_t i = 0; i < size; i++)
         konsole_putch(buff[i]);
 
@@ -53,7 +53,7 @@ int sys_read(uint32_t fd, void *buff, uint32_t size)
         task_wait_for_input(INPUT_CHANNEL_KEYBOARD);
     }
 
-    konsole_printf(" keycode %d pressed %d\n", ev.keycode, ev.pressed);
+    // konsole_printf(" keycode %d pressed %d\n", ev.keycode, ev.pressed);
 
     memcpy(buff, &ev, sizeof(ev));
     return sizeof(ev);

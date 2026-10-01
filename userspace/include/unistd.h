@@ -13,27 +13,32 @@
 __attribute__((always_inline)) static inline int _sysenter(int syscall_num, int arg0, int arg1, int arg2, int arg3, int arg4, int arg5)
 {
     int eax = syscall_num;
+    int args[6] = {arg0, arg1, arg2, arg3, arg4, arg5};
+    int saved_esp;
 
     asm volatile(
-        "push %6\n"
-        "push %5\n"
-        "push %4\n"
-        "push %3\n"
-        "push %2\n"
-        "push %1\n"
-        "movl %%esp, %%ecx\n"
-        "leal 1f, %%edx\n"
-        "sysenter\n"
-        "1:\n"
-        "add $24, %%esp"
-        : "+a"(eax)
-        : "g"(arg0), "g"(arg1), "g"(arg2), "g"(arg3), "g"(arg4), "g"(arg5)
+        "movl %%esp, %1\n\t"    // сохраняем esp в аккумулятор
+        "leal %2, %%esp\n\t"    // esp теперь на начале массива аргументов
+        "movl %%esp, %%ecx\n\t" // usr esp для sysenter
+        "leal 1f, %%edx\n\t"    // адрес возврата для sysenter
+        "sysenter\n\t"
+
+        "1:\n\t" // возвращается сюда
+
+        "movl %1, %%esp\n\t" // восстанавливаем esp
+        : "+a"(eax), "=r"(saved_esp)
+        : "m"(args)
         : "ecx", "edx", "memory");
 
     return eax;
 }
 
-__attribute__((always_inline)) static inline int _syscall_int0x80(int num, int a0, int a1, int a2)
+__attribute__((always_inline)) static inline int _sysenter3(int syscall_num, int arg0, int arg1, int arg2)
+{
+    return _sysenter(syscall_num, arg0, arg1, arg2, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int _syscall3_int0x80(int num, int a0, int a1, int a2)
 {
     int ret;
     asm volatile("int $0x80"
@@ -45,12 +50,12 @@ __attribute__((always_inline)) static inline int _syscall_int0x80(int num, int a
 
 int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
 {
-    return _syscall_int0x80(SYS_WRITE, fd, (int)buf, len);
+    return _sysenter3(SYS_WRITE, fd, (int)buf, len);
 }
 
 int sys_read(volatile int fd, volatile void *buf, volatile unsigned len)
 {
-    return _syscall_int0x80(SYS_READ, fd, (int)buf, len);
+    return _sysenter3(SYS_READ, fd, (int)buf, len);
 }
 
 __attribute__((noreturn)) void sys_exit(volatile int code)

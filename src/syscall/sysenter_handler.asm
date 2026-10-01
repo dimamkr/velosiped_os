@@ -12,8 +12,8 @@ sysenter_handler_entry:
     ; TODO: подумать
     mov [_sysenter_system_var], eax
     mov eax, [current_task]
-    mov esp, [eax + 16]
-    add esp, [eax + 20]
+    mov esp, [eax + 16] ; устанавливаем esp на stack_start
+    add esp, [eax + 20] ; устанавливаем esp на stack_start+stack_size
     mov eax, [_sysenter_system_var]
 
     push edx ; сохраняем eip

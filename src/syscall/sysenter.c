@@ -9,6 +9,7 @@ uint32_t _sysenter_system_var;
 
 int sysenter_dispatcher(uint32_t syscall_num, const uint32_t *user_stack)
 {
+    // konsole_printf("SYS %d %u\n", syscall_num, user_stack);
     if (syscall_num < SYSCALL3_TABLE_COUNT && syscall3_table[syscall_num])
     {
         return syscall3_table[syscall_num](user_stack[0], user_stack[1], user_stack[2]);
