@@ -6,7 +6,7 @@
 [EXTERN task_switch_from_isr]
 [EXTERN need_reschedule]
 
-[EXTERN syscall_handler]
+[EXTERN syscall_int_handler]
 
 ; TODO рефакторинг
 ; много повторяющегося кода
@@ -200,7 +200,7 @@ syscall_common:
 
     ; вызываем обработчик ядра
 	push esp ; передача указателя на аргумент (чтобы не создался код очистки)
-    call syscall_handler
+    call syscall_int_handler
     add esp, 4
 
     pop eax
