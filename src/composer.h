@@ -52,6 +52,7 @@ static inline void layer_put_pixel(layer_t *this, int32_t x_local, int32_t y_loc
 }
 
 void layer_move(layer_t *this, int32_t new_x, int32_t new_y);
+void layer_set_z_index(layer_t *this, uint32_t z_index);
 
 layer_t *composer_create_layer(int32_t x_left, int32_t y_up, int32_t x_len, int32_t y_len, int32_t z_index, uint32_t flags);
 void composer_add_layer(layer_t *this);

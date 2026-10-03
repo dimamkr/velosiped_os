@@ -65,6 +65,12 @@ void layer_end_edit(layer_t *this)
     }
 }
 
+void layer_set_z_index(layer_t *this, uint32_t z_index)
+{
+    this->z_index = z_index;
+    layers_dirty = true;
+}
+
 // сам инициализирует буффер
 void layer_init(layer_t *this, int32_t x_left, int32_t y_up, int32_t x_len, int32_t y_len, int32_t z_index, uint32_t flags)
 {
@@ -129,6 +135,7 @@ void composer_add_layer(layer_t *this)
     dynamic_array_push_back(layers, &this);
 }
 
+// пометить на удаление из массива и destroy в будущем
 void composer_erase_layer(layer_t *this)
 {
     TASK_LOCKED_FUNCTION;
@@ -137,6 +144,8 @@ void composer_erase_layer(layer_t *this)
     ASSERT(id < layers->elements_count); // слой найден
 
     (*(layer_t **)dynamic_array_get_by_index(layers, id))->flags &= ~_LAYER_PRESENT;
+
+    layers_dirty = true;
 }
 
 void composer_compose_layer(layer_t *this)
