@@ -55,15 +55,23 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
     scheduler_start();
 }
 
+// TODO FIX при переходе сюда все еще есть мизерное окно когда прерывания разрешены (если придет клавиатурное то все сломается)
+// и вовсе не факт что задача ядра будет запущена первой. сначала может быть int_worker
+
 // к этому моменту должны быть настроены все прерывания
 // они автоматически разрешены из-за начального стека задачи
 void kernel_main_task(void *_)
 {
+    interrupt_disable();
     task_lock();
 
     composer_init();
 
     konsole_init();
+
+    keyboard_init();
+
+    interrupt_enable();
 
     PRINT_INIT("AHCI");
     if (ahci_init())
@@ -88,12 +96,6 @@ void kernel_main_task(void *_)
 
     power_init();
 
-    task_unlock();
-
-    PRINT_INIT("keyboard");
-    keyboard_init();
-    PRINT_OK;
-
     PRINT_INIT("mouse");
     mouse_init();
     PRINT_OK;
@@ -105,6 +107,8 @@ void kernel_main_task(void *_)
     PRINT_INIT("SYSENTER");
     sysenter_init();
     PRINT_OK;
+
+    task_unlock();
 
     // TODO режим отладки с кучей логов в консоль и сохранение в буфер логов
 
