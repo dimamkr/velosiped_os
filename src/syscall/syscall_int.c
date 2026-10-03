@@ -8,10 +8,13 @@ void syscall_int_handler(isr_data_t *data)
     uint32_t arg1 = data->ebx;
     uint32_t arg2 = data->ecx;
     uint32_t arg3 = data->edx;
+    uint32_t arg4 = data->esi;
+    uint32_t arg5 = data->edi;
+    uint32_t arg6 = data->ebp;
 
-    if (sysno < SYSCALL3_TABLE_COUNT && syscall3_table[sysno])
+    if (sysno < SYSCALL6_TABLE_COUNT && syscall6_table[sysno])
     {
-        int ret = syscall3_table[sysno](arg1, arg2, arg3);
+        int ret = syscall6_table[sysno](arg1, arg2, arg3, arg4, arg5, arg6);
         data->eax = ret; // возвращаемое значение
     }
     else
