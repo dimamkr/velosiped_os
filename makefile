@@ -23,8 +23,9 @@ RM      = rm -rf
 # ------- Каталоги исходников -------
 SRC_DIR        = src
 BOOT_SRC_DIR   = $(SRC_DIR)/boot
-ACPICA_DIR     = $(SRC_DIR)/acpica
+ACPICA_DIR     = $(SRC_DIR)/third_party/acpica
 ACPICA_INCLUDE = $(ACPICA_DIR)/include
+LINKER_SCRIPT  = $(SRC_DIR)/arch/link.ld
 
 USER_DIR       = userspace
 USER_BIN_DIR   = $(USER_DIR)/bin
@@ -48,7 +49,7 @@ BUILD_DIR_ROOT   = build
 BUILD_DIR        = $(BUILD_DIR_ROOT)/$(BUILD_MODE)
 BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
 BUILD_KERNEL_DIR = $(BUILD_DIR)/kernel
-BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/acpica
+BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/third_party/acpica
 BUILD_USER_BIN   = $(BUILD_DIR)/user/bin
 BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
 
@@ -60,8 +61,8 @@ BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
 # даже если konsole.h лежит в src/gui/konsole/.
 
 KERNEL_SRC_DIRS := $(shell find $(SRC_DIR) -type d \
-                       -not -path '$(SRC_DIR)/acpica*' \
-                       -not -path '$(SRC_DIR)/boot*')
+                       -not -path '$(ACPICA_DIR)*' \
+                       -not -path '$(BOOT_SRC_DIR)*')
 
 KERNEL_INCLUDES := $(addprefix -I,$(KERNEL_SRC_DIRS))
 
@@ -80,7 +81,7 @@ KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 KERNEL_NASM_RELEASE = -f elf32
 KERNEL_NASM_DEBUG   = -f elf32 -g
 
-KERNEL_LDFLAGS = -m elf_i386 -T $(SRC_DIR)/link.ld -nostdlib
+KERNEL_LDFLAGS = -m elf_i386 -T $(LINKER_SCRIPT) -nostdlib
 
 # ---- ACPICA ----
 ACPICA_CFLAGS  = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
@@ -113,12 +114,12 @@ endif
 
 # ---- Ядро: рекурсивный обход src/, кроме acpica и boot ----
 KERNEL_C_SOURCES := $(shell find $(SRC_DIR) -name '*.c' \
-                       -not -path '$(SRC_DIR)/acpica/*' \
-                       -not -path '$(SRC_DIR)/boot/*')
+                       -not -path '$(ACPICA_DIR)/*' \
+                       -not -path '$(BOOT_SRC_DIR)/*')
 
 KERNEL_ASM_SOURCES := $(shell find $(SRC_DIR) -name '*.asm' \
-                         -not -path '$(SRC_DIR)/acpica/*' \
-                         -not -path '$(SRC_DIR)/boot/*')
+                         -not -path '$(ACPICA_DIR)/*' \
+                         -not -path '$(BOOT_SRC_DIR)/*')
 
 # Зеркалируем относительные пути в build/kernel/
 KERNEL_C_OBJECTS   := $(patsubst $(SRC_DIR)/%.c,   $(BUILD_KERNEL_DIR)/%.o, $(KERNEL_C_SOURCES))
@@ -239,7 +240,7 @@ $(BUILD_ACPI_DIR)/%.o: $(ACPICA_DIR)/%.c
 	@echo "  [ACPI]  $<"
 	$(CC) $(KERNEL_CFLAGS) $(ACPICA_CFLAGS) -c -o $@ $<
 
-$(BUILD_KERNEL_DIR)/kernel.elf: $(KERNEL_OBJECTS) $(SRC_DIR)/link.ld
+$(BUILD_KERNEL_DIR)/kernel.elf: $(KERNEL_OBJECTS) $(LINKER_SCRIPT)
 	@echo "  [LD]    kernel.elf"
 	$(LD) $(KERNEL_LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
