@@ -34,6 +34,8 @@ typedef enum
 
 typedef struct
 {
+    // строго фиксированный порядок (ручное обращение в asm)
+    //------------------------
     uint32_t pid;
 
     uint32_t esp; // указатель стека (сохраняется при переключении)
@@ -44,6 +46,7 @@ typedef struct
     uint32_t stack_size;
 
     page_dict_t *page_dict;
+    //------------------------
 
     task_state_t state;
     uint32_t activation_time;
@@ -53,6 +56,11 @@ typedef struct
 
     linked_list_node_t *node;
 } __attribute__((packed)) task_t;
+
+_Static_assert(__builtin_offsetof(task_t, esp) == 4, "esp offset");
+_Static_assert(__builtin_offsetof(task_t, stack_start) == 16, "stack_start offset");
+_Static_assert(__builtin_offsetof(task_t, stack_size) == 20, "stack_size offset");
+_Static_assert(__builtin_offsetof(task_t, page_dict) == 24, "page_dict offset");
 
 void goto_current_task(void);
 
