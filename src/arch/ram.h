@@ -30,6 +30,12 @@
 // пользовательские дефайны
 #define USER_STACK_TOP 0xBFFFF000
 
+#define USER_HEAP_START 0x20000000
+#define USER_HEAP_LIMIT 0x40000000
+
+#define USER_MMAP_START 0x40000000
+#define USER_MMAP_LIMIT 0xB0000000
+
 static inline void *ram_kernel_to_virt(void *phys_addr)
 {
     ASSERT((uint32_t)phys_addr <= (KERNEL_END - RAM_VIRTUAL_START));

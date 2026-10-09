@@ -20,6 +20,8 @@ int sysenter_dispatcher(uint32_t syscall_num, const uint32_t *user_stack)
 
 void sysenter_init()
 {
+    interrupt_disable();
+
     uint32_t sysenter_handler_phys = vmm_vaddr_to_phys(sysenter_handler_entry);
 
     // page_dict_unmap_page(kernel_page_dict, ((uint32_t)_trampoline_stack_start & 0xFFFFF000));
@@ -30,4 +32,6 @@ void sysenter_init()
     wrmsr(MSR_IA32_SYSENTER_CS, SYSENTER_CS, 0);
     wrmsr(MSR_IA32_SYSENTER_EIP, SYSENTER_HANDLER_VADDR, 0);
     wrmsr(MSR_IA32_SYSENTER_ESP, 0, 0);
+
+    interrupt_enable();
 }

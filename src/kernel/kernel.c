@@ -21,6 +21,7 @@
 #include "power.h"
 #include "sysenter.h"
 #include "input_manager.h"
+#include "sys_time.h"
 
 void kernel_main_task(void *);
 
@@ -70,6 +71,8 @@ void kernel_main_task(void *_)
     konsole_init();
 
     keyboard_init();
+
+    sys_time_init();
 
     interrupt_enable();
 

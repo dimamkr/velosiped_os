@@ -6,20 +6,12 @@
 #include "paging.h"
 #include "vmm.h"
 
-#define MSR_IA32_SYSENTER_CS  0x174
+#define MSR_IA32_SYSENTER_CS 0x174
 #define MSR_IA32_SYSENTER_ESP 0x175
 #define MSR_IA32_SYSENTER_EIP 0x176
 
 #define SYSENTER_CS 0x8
 #define SYSENTER_HANDLER_VADDR 0xB00B5000
-
-// Таблица системных вызовов (номера из Linux)
-#define SYS_READ 0
-#define SYS_WRITE 1
-#define SYS_OPEN 2
-#define SYS_CLOSE 3
-#define SYS_EXIT 4
-#define SYS_BRK 12
 
 int sysenter_dispatcher(uint32_t syscall_num, const uint32_t *user_stack);
 uint32_t sysenter_stack_create_and_map(page_dict_t *page_dict);

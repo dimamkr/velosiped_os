@@ -4,7 +4,7 @@
 
 void syscall_int_handler(isr_data_t *data)
 {
-    int sysno = data->eax;
+    uint32_t sysno = data->eax;
     uint32_t arg1 = data->ebx;
     uint32_t arg2 = data->ecx;
     uint32_t arg3 = data->edx;

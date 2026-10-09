@@ -54,6 +54,11 @@ typedef struct
     // потоки ввода
     uint32_t input_sids[INPUT_CHANNELS];
 
+    // пользовательская куча, память
+    uint32_t brk;     // нижняя граница кучи (растёт вверх)
+    uint32_t brk_end; // замаплено до этого адреса
+    uint32_t _task_mmap_next;
+
     linked_list_node_t *node;
 } __attribute__((packed)) task_t;
 

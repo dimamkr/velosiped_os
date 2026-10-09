@@ -118,6 +118,11 @@ static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_d
         }
     }
 
+    // инициализация пользовательской кучи
+    task->brk = 0;
+    task->brk_end = 0;
+    task->_task_mmap_next = 0;
+
     return task;
 }
 
