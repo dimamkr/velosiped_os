@@ -1027,7 +1027,7 @@ bool_t terminal_exec(argparse_command_t *command)
     AUTOFREE_PTR(char)
     process_arg = malloc(3);
     memcpy(process_arg, ";(", 3);
-    uint32_t stack_size = STACK_SIZE_SMALL;
+    uint32_t stack_size = STACK_SIZE_LARGE;
 
     for (uint32_t i = 0; i < command->arguments->elements_count; i++)
     {
@@ -1190,8 +1190,10 @@ void terminal_main_loop()
     konsole_println("");
     while (1)
     {
+        konsole_set_preambula_color();
         terminal_print_path(NULL);
         konsole_print(">");
+        konsole_set_base_color();
 
         const char *cmd = terminal_get_input_line();
 
