@@ -30,6 +30,12 @@ LINKER_SCRIPT  = $(SRC_DIR)/arch/link.ld
 USER_DIR       = userspace
 USER_BIN_DIR   = $(USER_DIR)/bin
 USER_INC_DIR   = $(USER_DIR)/include
+USER_LIB_DIR   = $(USER_DIR)/lib
+USER_LINKER_SCRIPT = $(USER_DIR)/link.ld
+
+# PICOLIBC_DIR = third_party/picolibc
+
+
 
 TEST_FILES_DIR = test/files
 
@@ -48,9 +54,10 @@ endif
 BUILD_DIR_ROOT   = build
 BUILD_DIR        = $(BUILD_DIR_ROOT)/$(BUILD_MODE)
 BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
-BUILD_KERNEL_DIR = $(BUILD_DIR)/kernel
+BUILD_KERNEL_DIR = $(BUILD_DIR)/src
 BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/third_party/acpica
-BUILD_USER_BIN   = $(BUILD_DIR)/user/bin
+BUILD_USER_BIN   = $(BUILD_DIR)/userspace/bin
+BUILD_USER_LIB =  $(BUILD_DIR)/userspace/lib
 BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
 
 # ============================================================
@@ -78,8 +85,9 @@ KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
 KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
 KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
-KERNEL_NASM_RELEASE = -f elf32
-KERNEL_NASM_DEBUG   = -f elf32 -g
+KERNEL_NASM_COMMON = -f elf32
+KERNEL_NASM_RELEASE = $(KERNEL_NASM_COMMON)
+KERNEL_NASM_DEBUG   = $(KERNEL_NASM_COMMON) -g
 
 KERNEL_LDFLAGS = -m elf_i386 -T $(LINKER_SCRIPT) -nostdlib
 
@@ -96,8 +104,11 @@ USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -nostartfiles \
 USER_CFLAGS_RELEASE = $(USER_CFLAGS_COMMON) -O2
 USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
-USER_LDFLAGS = -m elf_i386 -T $(USER_DIR)/link.ld -nostdlib
+USER_NASM = -f elf32
 
+USER_LDFLAGS = -m elf_i386 -T $(USER_LINKER_SCRIPT) -nostdlib
+
+# объявление флагов для текущей сборки
 ifeq ($(BUILD_MODE),debug)
   KERNEL_CFLAGS = $(KERNEL_CFLAGS_DEBUG)
   KERNEL_NASM   = $(KERNEL_NASM_DEBUG)
@@ -150,12 +161,45 @@ USER_C_SOURCES = $(wildcard $(USER_BIN_DIR)/*.c)
 USER_OBJECTS   = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.o,   $(USER_C_SOURCES))
 USER_BINARIES  = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.elf, $(USER_C_SOURCES))
 
+# ---- Пользовательская lib ----
+USER_LIB_C_SOURCES := $(shell find $(USER_LIB_DIR) -name '*.c')
+USER_LIB_ASM_SOURCES := $(shell find $(USER_LIB_DIR) -name '*.asm')
+
+# Зеркалируем относительные пути
+USER_LIB_C_OBJECTS   := $(patsubst $(USER_LIB_DIR)/%.c,   $(BUILD_USER_LIB)/%.o, $(USER_LIB_C_SOURCES))
+USER_LIB_ASM_OBJECTS := $(patsubst $(USER_LIB_DIR)/%.asm, $(BUILD_USER_LIB)/%.o, $(USER_LIB_ASM_SOURCES))
+
+USER_LIB_OBJECTS = $(USER_LIB_C_OBJECTS) $(USER_LIB_ASM_OBJECTS)
+
 # ---- Зависимости ----
 KERNEL_DEPS = $(KERNEL_C_OBJECTS:.o=.d) $(ACPICA_OBJECTS:.o=.d)
-USER_DEPS   = $(USER_OBJECTS:.o=.d)
+USER_DEPS   = $(USER_OBJECTS:.o=.d) $(USER_LIB_C_OBJECTS:.o=.d)
 
 # ---- Образ ----
 IMAGE = $(BUILD_DIR)/myos.img
+
+# ============================================================
+#  qemu
+# ============================================================
+
+QEMU = qemu-system-i386
+
+QEMU_FLAGS_COMMON = -device ahci,id=ahci \
+	    -device ide-hd,drive=disk,bus=ahci.0 \
+	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
+	    -display sdl -vga std -m 256 -enable-kvm
+
+QEMU_FLAGS_RELEASE = $(QEMU_FLAGS_COMMON) -enable-kvm
+
+QEMU_FLAGS_DEBUG = -device ahci,id=ahci \
+	    -device ide-hd,drive=disk,bus=ahci.0 \
+	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
+	    -display sdl -vga std \
+		-monitor unix:/tmp/qemu-monitor.sock,server,nowait\
+		 -s -S -d int -D $(BUILD_LOGS_DIR)/interrupts.log\
+	    > $(QEMU_LOG) 2>&1 & echo $$! > /tmp/qemu.pid
+
+QEMU_LOG = $(BUILD_LOGS_DIR)/qemu.log
 
 # ============================================================
 #  Основные цели
@@ -163,38 +207,28 @@ IMAGE = $(BUILD_DIR)/myos.img
 
 .PHONY: all release run build-debug debug run-debug clean
 
+# парсер по словам определит флаги
 debug: build-debug
+build-debug: all
 release: all
 
 all: $(IMAGE)
 	@echo "✅ Build complete: $<"
 
-build-debug: all
-
 run: all
 	@echo "Starting QEMU..."
-	qemu-system-i386 -monitor stdio \
-	    -device ahci,id=ahci \
-	    -device ide-hd,drive=disk,bus=ahci.0 \
-	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
-	    -display sdl -vga std -m 256 -enable-kvm
+	$(QEMU) $(QEMU_FLAGS_RELEASE)
 
-run-debug: build-debug | $(BUILD_LOGS_DIR)
+run-debug: all | $(BUILD_LOGS_DIR)
 	@echo "Starting QEMU with GDB server (port 1234)..."
-	@(nohup qemu-system-i386 -d int -D $(BUILD_LOGS_DIR)/interrupts.log \
-	    -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
-	    -device ahci,id=ahci \
-	    -device ide-hd,drive=disk,bus=ahci.0 \
-	    -drive format=raw,file=$(BUILD_DIR)/myos.img,if=none,id=disk \
-	    -display sdl -vga std -s -S -m 256 \
-	    > $(BUILD_LOGS_DIR)/qemu.log 2>&1 & echo $$! > /tmp/qemu.pid)
+	@(nohup $(QEMU) $(QEMU_FLAGS_DEBUG))
 	@timeout=0; \
 	while ! nc -z localhost 1234 2>/dev/null; do \
 	    sleep 0.1; \
 	    timeout=$$((timeout + 1)); \
 	    if [ $$timeout -gt 300 ]; then \
 	        echo "❌ Timeout waiting for QEMU"; \
-	        tail -n 10 $(BUILD_LOGS_DIR)/qemu.log; \
+	        tail -n 10 $(QEMU_LOG); \
 	        kill $$(cat /tmp/qemu.pid) 2>/dev/null || true; \
 	        exit 1; \
 	    fi; \
@@ -209,7 +243,7 @@ clean:
 #  Каталоги
 # ============================================================
 
-$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_LOGS_DIR):
+$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_USER_LIB) $(BUILD_LOGS_DIR):
 	@mkdir -p $@
 
 # ============================================================
@@ -224,6 +258,8 @@ $(BUILD_BOOT_DIR)/%.bin: $(BOOT_SRC_DIR)/%.asm | $(BUILD_BOOT_DIR)
 #  Ядро (рекурсивно)
 # ============================================================
 
+# правило компиляции для всех .o файлов которые сопоставляются
+# по относительному пути .c файлам в исходниках
 $(BUILD_KERNEL_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	@echo "  [CC]    $<"
@@ -249,17 +285,35 @@ $(BUILD_KERNEL_DIR)/kernel.bin: $(BUILD_KERNEL_DIR)/kernel.elf
 	$(OBJCOPY) -O binary -S $< $@
 	@echo "          size: $$(wc -c < $@) bytes"
 
+
+# ============================================================
+#  Пользовательский lib
+# ============================================================
+
+$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.asm | $(BUILD_USER_LIB)
+	@echo "  [UASM]   $<"
+	$(NASM) $(USER_NASM) -o $@ $<
+
+$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.c | $(BUILD_USER_LIB)
+	@echo "  [UCC]   $<"
+	$(CC) $(USER_CFLAGS) -c -o $@ $<
+
 # ============================================================
 #  Пользовательские программы
 # ============================================================
+
+$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.asm | $(BUILD_USER_BIN)
+	@echo "  [UASM]   $<"
+	$(NASM) $(USER_NASM) -o $@ $<
 
 $(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.c | $(BUILD_USER_BIN)
 	@echo "  [UCC]   $<"
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
 
-$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_DIR)/link.ld
+# линкуется с lib
+$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_LIB_OBJECTS) $(USER_LINKER_SCRIPT)
 	@echo "  [ULD]   $@"
-	$(LD) $(USER_LDFLAGS) -o $@ $<
+	$(LD) $(USER_LDFLAGS) $(USER_LIB_OBJECTS) -o $@ $<
 
 # ============================================================
 #  Диск
@@ -325,4 +379,5 @@ $(IMAGE): $(BOOT1_BIN) $(BOOT2_BIN) \
 -include $(USER_DEPS)
 
 # Не удалять промежуточные .o при ошибке — иначе .d теряются
-.PRECIOUS: $(KERNEL_C_OBJECTS) $(KERNEL_ASM_OBJECTS) $(ACPICA_OBJECTS) $(USER_OBJECTS)
+.PRECIOUS: $(KERNEL_C_OBJECTS) $(KERNEL_ASM_OBJECTS) $(ACPICA_OBJECTS) \
+           $(USER_OBJECTS) $(USER_LIB_OBJECTS)
