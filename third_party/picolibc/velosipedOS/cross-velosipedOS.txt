@@ -1,0 +1,18 @@
+[binaries]
+c = 'gcc'
+ar = 'ar'
+as = 'as'
+nm = 'nm'
+strip = 'strip'
+
+[host_machine]
+system = 'none'
+cpu_family = 'x86'
+cpu = 'i386'
+endian = 'little'
+
+[properties]
+skip_sanity_check = true
+
+[built-in options]
+c_args = ['-m32', '-fno-pic', '-fno-pie', '-mgeneral-regs-only']
