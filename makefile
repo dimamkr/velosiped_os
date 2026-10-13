@@ -20,6 +20,11 @@ LD      = ld
 OBJCOPY = objcopy
 RM      = rm -rf
 
+# libgcc для 32-битных рантайм-хелперов (__udivdi3, __udivmoddi4 и т.п.)
+LIBGCC  = $(shell $(CC) -m32 -print-libgcc-file-name)
+# внутренние заголовки GCC (stddef.h, stdarg.h, stdbool.h, ...)
+GCC_INCLUDE_DIR = $(shell $(CC) -print-file-name=include)
+
 # ------- Каталоги исходников -------
 SRC_DIR        = src
 BOOT_SRC_DIR   = $(SRC_DIR)/boot
@@ -32,8 +37,6 @@ USER_BIN_DIR   = $(USER_DIR)/bin
 USER_INC_DIR   = $(USER_DIR)/include
 USER_LIB_DIR   = $(USER_DIR)/lib
 USER_LINKER_SCRIPT = $(USER_DIR)/link.ld
-
-# PICOLIBC_DIR = third_party/picolibc
 
 
 
@@ -59,6 +62,17 @@ BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/third_party/acpica
 BUILD_USER_BIN   = $(BUILD_DIR)/userspace/bin
 BUILD_USER_LIB =  $(BUILD_DIR)/userspace/lib
 BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
+
+# ---- Picolibc ----
+PICOLIBC_DIR         = third_party/picolibc
+PICOLIBC_CROSS       = $(PICOLIBC_DIR)/velosipedOS/cross-velosipedOS.txt
+BUILD_PICOLIBC_DIR   = $(BUILD_DIR)/third_party/picolibc
+
+PICOLIBC_INSTALL_DIR = $(BUILD_PICOLIBC_DIR)/install
+PICOLIBC_INCLUDE_DIR = $(PICOLIBC_INSTALL_DIR)/include
+PICOLIBC_LIB_DIR     = $(PICOLIBC_INSTALL_DIR)/lib
+PICOLIBC_LIBC        = $(PICOLIBC_LIB_DIR)/libc.a
+PICOLIBC_LIBM        = $(PICOLIBC_LIB_DIR)/libm.a
 
 # ============================================================
 #  Автоматический сбор include-путей
@@ -97,9 +111,12 @@ ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
 ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
 
 # ---- Пользовательские программы ----
-USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -nostartfiles \
+USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdinc -nostdlib -nostartfiles \
                      -nodefaultlibs -static -no-pie -fno-pic -fno-builtin \
-                     -fno-stack-protector -mgeneral-regs-only -I$(USER_INC_DIR) \
+                     -fno-stack-protector -mgeneral-regs-only \
+                     -I$(PICOLIBC_INCLUDE_DIR) \
+                     -I$(USER_INC_DIR) \
+                     -isystem $(GCC_INCLUDE_DIR) \
                      -Wall -Wextra -Werror -MMD -MP
 USER_CFLAGS_RELEASE = $(USER_CFLAGS_COMMON) -O2
 USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
@@ -205,7 +222,7 @@ QEMU_LOG = $(BUILD_LOGS_DIR)/qemu.log
 #  Основные цели
 # ============================================================
 
-.PHONY: all release run build-debug debug run-debug clean
+.PHONY: all release run build-debug debug run-debug clean picolibc_build
 
 # парсер по словам определит флаги
 debug: build-debug
@@ -243,7 +260,8 @@ clean:
 #  Каталоги
 # ============================================================
 
-$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) $(BUILD_USER_LIB) $(BUILD_LOGS_DIR):
+$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) \
+$(BUILD_USER_LIB) $(BUILD_LOGS_DIR) $(BUILD_PICOLIBC_DIR):
 	@mkdir -p $@
 
 # ============================================================
@@ -287,14 +305,44 @@ $(BUILD_KERNEL_DIR)/kernel.bin: $(BUILD_KERNEL_DIR)/kernel.elf
 
 
 # ============================================================
+#  picolibc
+# ============================================================
+
+$(BUILD_PICOLIBC_DIR)/build.ninja: $(PICOLIBC_CROSS) | $(BUILD_PICOLIBC_DIR)
+	@echo "  [MESON] picolibc configure"
+	meson setup $(BUILD_PICOLIBC_DIR) $(PICOLIBC_DIR) \
+	    --cross-file $(abspath $(PICOLIBC_CROSS)) \
+	    -Dpicocrt=false \
+	    -Dsemihost=false \
+	    -Dposix-console=false \
+	    -Dtests=false \
+	    -Dmultilib=false \
+	    -Dsingle-thread=true \
+	    -Dthread-local-storage=false \
+	    -Dnewlib-global-errno=true \
+	    -Denable-malloc=true \
+	    -Dprefix=$(abspath $(PICOLIBC_INSTALL_DIR)) \
+	    -Dincludedir=include \
+	    -Dlibdir=lib
+
+$(PICOLIBC_LIBC): $(BUILD_PICOLIBC_DIR)/build.ninja
+	@echo "  [NINJA] picolibc build & install"
+	ninja -C $(BUILD_PICOLIBC_DIR)
+	ninja -C $(BUILD_PICOLIBC_DIR) install
+
+picolibc_build: $(PICOLIBC_LIBC)
+
+# ============================================================
 #  Пользовательский lib
 # ============================================================
 
-$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.asm | $(BUILD_USER_LIB)
+$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.asm $(PICOLIBC_LIBC) | $(BUILD_USER_LIB)
+	@mkdir -p $(dir $@)
 	@echo "  [UASM]   $<"
 	$(NASM) $(USER_NASM) -o $@ $<
 
-$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.c | $(BUILD_USER_LIB)
+$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.c $(PICOLIBC_LIBC) | $(BUILD_USER_LIB)
+	@mkdir -p $(dir $@)
 	@echo "  [UCC]   $<"
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
 
@@ -302,18 +350,21 @@ $(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.c | $(BUILD_USER_LIB)
 #  Пользовательские программы
 # ============================================================
 
-$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.asm | $(BUILD_USER_BIN)
+$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.asm $(PICOLIBC_LIBC) | $(BUILD_USER_BIN)
+	@mkdir -p $(dir $@)
 	@echo "  [UASM]   $<"
 	$(NASM) $(USER_NASM) -o $@ $<
 
-$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.c | $(BUILD_USER_BIN)
+$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.c $(PICOLIBC_LIBC) | $(BUILD_USER_BIN)
+	@mkdir -p $(dir $@)
 	@echo "  [UCC]   $<"
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
 
 # линкуется с lib
-$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_LIB_OBJECTS) $(USER_LINKER_SCRIPT)
+$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_LIB_OBJECTS) \
+                         $(USER_LINKER_SCRIPT) $(PICOLIBC_LIBC)
 	@echo "  [ULD]   $@"
-	$(LD) $(USER_LDFLAGS) $(USER_LIB_OBJECTS) -o $@ $<
+	$(LD) $(USER_LDFLAGS) -o $@ $< $(USER_LIB_OBJECTS) $(PICOLIBC_LIBC) $(LIBGCC)
 
 # ============================================================
 #  Диск

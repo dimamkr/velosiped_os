@@ -1,8 +1,13 @@
-#include "unistd.h"
+#include "syscall.h"
 #include "input.h"
-#include <stdint.h>
+#include "windows.h"
 
-// нейрозмейка
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+/* нейрозмейка */
 
 #define GRID_W 20
 #define GRID_H 15
@@ -14,7 +19,6 @@
 #define MAX_SNAKE 300
 #define TICK_MS 120
 
-#define COLOR_BG 0xFF101020
 #define COLOR_GRID_A 0xFF181828
 #define COLOR_GRID_B 0xFF202030
 #define COLOR_SNAKE 0xFF30D030
@@ -27,9 +31,9 @@ typedef struct
     int x, y;
 } point_t;
 
-static uint32_t framebuf[WIN_W * WIN_H];
+static uint32_t *framebuf;
 
-// --- рисование ---
+/* --- рисование --- */
 
 static void fill_rect(int x, int y, int w, int h, uint32_t color)
 {
@@ -65,22 +69,14 @@ static void draw_cell(int gx, int gy, uint32_t color)
     fill_rect(gx * CELL + 1, gy * CELL + 1, CELL - 2, CELL - 2, color);
 }
 
-// --- рандом ---
+/* --- еда --- */
 
-static uint32_t rng_state = 0xC0FFEE;
-
-static uint32_t rng(void)
-{
-    rng_state = rng_state * 1103515245u + 12345u;
-    return rng_state >> 16;
-}
-
-static void place_food(point_t *food, point_t *snake, int len)
+static void place_food(point_t *food, const point_t *snake, int len)
 {
     for (int tries = 0; tries < 2000; ++tries)
     {
-        int x = rng() % GRID_W;
-        int y = rng() % GRID_H;
+        int x = rand() % GRID_W;
+        int y = rand() % GRID_H;
         int ok = 1;
         for (int i = 0; i < len; ++i)
             if (snake[i].x == x && snake[i].y == y)
@@ -95,18 +91,24 @@ static void place_food(point_t *food, point_t *snake, int len)
             return;
         }
     }
-    // всё занято — победа
-    food->x = -1;
+    food->x = -1; /* всё занято — победа */
     food->y = -1;
 }
 
-// --- игра ---
+/* --- игра --- */
 
-void _start(void)
+int main(void)
 {
     int win = sys_win_create(WIN_W, WIN_H, 120, 90, 500);
     if (win < 0)
-        sys_exit(1);
+        return 1;
+
+    framebuf = malloc(WIN_W * WIN_H * sizeof(uint32_t));
+    if (!framebuf)
+    {
+        sys_win_destroy(win);
+        return 1;
+    }
 
     point_t snake[MAX_SNAKE];
     int len = 3;
@@ -124,7 +126,6 @@ void _start(void)
 
     for (;;)
     {
-        // --- отрисовка ---
         draw_board();
         if (food.x >= 0)
             draw_cell(food.x, food.y, COLOR_FOOD);
@@ -132,10 +133,8 @@ void _start(void)
             draw_cell(snake[i].x, snake[i].y, i == 0 ? COLOR_HEAD : COLOR_SNAKE);
         sys_win_commit(win, framebuf);
 
-        // --- спим тик ---
         sys_sleep(TICK_MS);
 
-        // --- читаем все накопившиеся нажатия ---
         while (sys_poll(0))
         {
             if (sys_read(0, &ev, sizeof(ev)) != sizeof(ev))
@@ -174,55 +173,50 @@ void _start(void)
                 }
                 break;
             case KEY_ESC:
+                free(framebuf);
                 sys_win_destroy(win);
-                sys_exit(0);
+                return 0;
             }
         }
 
         dx = ndx;
         dy = ndy;
 
-        // --- движение ---
         point_t head = {snake[0].x + dx, snake[0].y + dy};
 
-        // стена
         if (head.x < 0 || head.x >= GRID_W ||
             head.y < 0 || head.y >= GRID_H)
             break;
 
         int eating = (head.x == food.x && head.y == food.y);
 
-        // хвост, если не растём, не считается — он уйдёт с этой клетки
         int check = eating ? len : len - 1;
         for (int i = 0; i < check; ++i)
             if (snake[i].x == head.x && snake[i].y == head.y)
-            {
-                sys_win_destroy(win);
-                sys_exit(0);
-            }
+                goto game_over;
 
-        // сдвиг тела в хвост
         if (eating)
         {
             if (len < MAX_SNAKE)
                 len++;
             place_food(&food, snake, len);
+            printf("%d\n", len);
         }
         for (int i = len - 1; i > 0; --i)
             snake[i] = snake[i - 1];
         snake[0] = head;
 
-        // победа — если вся сетка занята
         if (food.x < 0)
             break;
     }
 
-    // --- game over ---
+game_over:
     for (int i = 0; i < WIN_W * WIN_H; ++i)
         framebuf[i] = COLOR_DEAD;
     sys_win_commit(win, framebuf);
     sys_sleep(2000);
 
+    free(framebuf);
     sys_win_destroy(win);
-    sys_exit(0);
+    return 0;
 }

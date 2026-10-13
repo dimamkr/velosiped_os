@@ -1,10 +1,13 @@
 #include <unistd.h>
+#include <stdio.h>
 
-void _start(void)
+int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
     static const char msg[] = "Hello from userspace!\n";
 
-    sys_write(1, msg, sizeof(msg));
+    printf("%s\n", msg);
 
-    sys_exit(0);
+    return 0;
 }

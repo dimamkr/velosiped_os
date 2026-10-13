@@ -67,11 +67,6 @@ __attribute__((always_inline)) static inline int _syscall6_int0x80(int num, int 
     return eax;
 }
 
-__attribute__((always_inline)) static inline int _syscall3_int0x80(int syscall_num, int arg0, int arg1, int arg2)
-{
-    return _syscall6_int0x80(syscall_num, arg0, arg1, arg2, 0, 0, 0);
-}
-
 static inline int sys_write(volatile int fd, const volatile void *buf, volatile unsigned len)
 {
     return _sysenter3(SYS_WRITE, fd, (int)buf, len);
@@ -82,38 +77,13 @@ static inline int sys_read(volatile int fd, volatile void *buf, volatile unsigne
     return _sysenter3(SYS_READ, fd, (int)buf, len);
 }
 
-__attribute__((noreturn)) void sys_exit(volatile int code)
-{
-    _sysenter6(SYS_EXIT, code, 0, 0, 0, 0, 0);
+// __attribute__((noreturn)) void sys_exit(volatile int code)
+// {
+//     _sysenter6(SYS_EXIT, code, 0, 0, 0, 0, 0);
 
-    while (1)
-        asm volatile("pause");
-}
-
-__attribute__((always_inline)) static inline int sys_win_create(int w, int h, int x, int y, int z)
-{
-    return _sysenter6(SYS_WIN_CREATE, w, h, x, y, z, 0);
-}
-
-__attribute__((always_inline)) static inline int sys_win_commit(int handle, const void *usr_buf)
-{
-    return _sysenter6(SYS_WIN_COMMIT, handle, (int)usr_buf, 0, 0, 0, 0);
-}
-
-__attribute__((always_inline)) static inline int sys_win_move(int handle, int x, int y)
-{
-    return _sysenter6(SYS_WIN_MOVE, handle, x, y, 0, 0, 0);
-}
-
-__attribute__((always_inline)) static inline int sys_win_set_z(int handle, int z)
-{
-    return _sysenter6(SYS_WIN_SET_Z, handle, z, 0, 0, 0, 0);
-}
-
-__attribute__((always_inline)) static inline int sys_win_destroy(int handle)
-{
-    return _sysenter6(SYS_WIN_DESTROY, handle, 0, 0, 0, 0, 0);
-}
+//     while (1)
+//         asm volatile("pause");
+// }
 
 __attribute__((always_inline)) static inline int sys_sleep(int ms)
 {
