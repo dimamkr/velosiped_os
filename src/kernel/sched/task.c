@@ -118,6 +118,9 @@ static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_d
         }
     }
 
+    // инициализация контекста fpu
+    task->fpu_context = fpu_context_create();
+
     // инициализация пользовательской кучи
     task->brk = 0;
     task->brk_end = 0;
@@ -332,7 +335,6 @@ static inline void task_switch_prepare_state(task_t *prev, task_t *next)
         prev->state = TASK_READY;
     }
     next->state = TASK_RUNNING;
-    task_set_current(next);
 }
 
 // Добровольная передача управления
@@ -345,23 +347,29 @@ void task_yield()
 // TODO рефакторинг для общей логики сишной части переключения
 void task_destroy_from_accumulator()
 {
-    vmm_page_dict_switch(to_destroy_accumulator->page_dict, current_task->page_dict);
+    task_t *acc = to_destroy_accumulator;
 
-    if (to_destroy_accumulator->page_dict != kernel_page_dict)
+    vmm_page_dict_switch(acc->page_dict, current_task->page_dict);
+
+    if (acc->page_dict != kernel_page_dict)
     {
-        page_dict_destroy(to_destroy_accumulator->page_dict);
+        page_dict_destroy(acc->page_dict);
     }
+
+    free(acc->stack_start);
 
     for (int ch = 0; ch < INPUT_CHANNELS; ++ch)
     {
-        task_input_unregister(to_destroy_accumulator, ch);
+        task_input_unregister(acc, ch);
     }
 
-    _tasks_erase(to_destroy_accumulator->pid);
+    free(acc->fpu_context);
+
+    _tasks_erase(acc->pid);
     task_count--;
 
-    linked_list_erase(&current_task_node, to_destroy_accumulator->node);
-    free(to_destroy_accumulator->stack_start);
+    linked_list_erase(&current_task_node, acc->node);
+
     to_destroy_accumulator = NULL;
 }
 
@@ -398,7 +406,16 @@ void task_switch_prepare()
     // для того чтобы процессор переходил на соотв ядерный стек процесса при прерываниях (если процесс пользовательский)
     tss_entry.esp0 = _STACK_TOP(next);
 
+    // TODO ленивое переключение через исключение
+    fpu_context_save(current_task->fpu_context);
+
     task_switch_prepare_state(current_task, next);
+    task_set_current(next);
+}
+
+void task_switch_finish()
+{
+    fpu_context_restore(current_task->fpu_context);
 }
 
 // Блокировка задачи

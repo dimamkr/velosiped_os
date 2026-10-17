@@ -45,6 +45,12 @@ void konsole_set_info_color();
         konsole_set_bad_result_color(); \
         konsole_println("Fail");        \
     } while (0)
+#define PRINT_CHECK(x, init_x) \
+    PRINT_INIT(x);             \
+    if (init_x())              \
+        PRINT_OK;              \
+    else                       \
+        PRINT_FAIL
 
 typedef struct
 {

@@ -8,6 +8,7 @@
 #include "task_event.h"
 #include "paging.h"
 #include "input_manager.h"
+#include "sse.h"
 
 #define MAX_TASKS 32
 #define TASK_AUTO_SWITCH_FREQ 100
@@ -53,6 +54,9 @@ typedef struct
 
     // потоки ввода
     uint32_t input_sids[INPUT_CHANNELS];
+
+    // sse контекст
+    fpu_context_t *fpu_context;
 
     // пользовательская куча, память
     uint32_t brk;     // нижняя граница кучи (растёт вверх)

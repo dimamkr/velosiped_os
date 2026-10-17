@@ -113,7 +113,7 @@ ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
 # ---- Пользовательские программы ----
 USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdinc -nostdlib -nostartfiles \
                      -nodefaultlibs -static -no-pie -fno-pic -fno-builtin \
-                     -fno-stack-protector -mgeneral-regs-only \
+                     -fno-stack-protector -msse -mfpmath=sse \
                      -I$(PICOLIBC_INCLUDE_DIR) \
                      -I$(USER_INC_DIR) \
                      -isystem $(GCC_INCLUDE_DIR) \

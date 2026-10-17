@@ -7,12 +7,15 @@
 
 [EXTERN task_get_next]
 [EXTERN task_switch_prepare]
+[EXTERN task_switch_finish]
 [EXTERN task_destroy_from_accumulator]
 
 ; --- Переключение на задачу без обработки предыдущей ---
 goto_current_task:
     mov eax, [current_task] ; указатель на задачу
     mov esp, [eax + 4]
+
+    call task_switch_finish
 
     mov eax, dword [to_destroy_accumulator]
     test eax, eax
@@ -43,7 +46,7 @@ task_switch_from_isr:
     mov eax, [current_task]
     mov esp, [eax + 4]
 
-    ;TODO делать в будущем переключение стека тут (так как не всегда стек в области видимости ядра)
+    call task_switch_finish
 
     ; Восстанавливаем контекст новой задачи
     pop ds

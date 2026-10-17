@@ -22,6 +22,7 @@
 #include "sysenter.h"
 #include "input_manager.h"
 #include "sys_time.h"
+#include "sse.h"
 
 void kernel_main_task(void *);
 
@@ -110,6 +111,8 @@ void kernel_main_task(void *_)
     PRINT_INIT("SYSENTER");
     sysenter_init();
     PRINT_OK;
+
+    PRINT_CHECK("sse", sse_init);
 
     task_unlock();
 

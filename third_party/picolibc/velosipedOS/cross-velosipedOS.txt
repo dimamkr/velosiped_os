@@ -15,4 +15,4 @@ endian = 'little'
 skip_sanity_check = true
 
 [built-in options]
-c_args = ['-m32', '-fno-pic', '-fno-pie', '-mgeneral-regs-only']
+c_args = ['-m32', '-fno-pic', '-fno-pie', '-msse', '-mfpmath=sse']

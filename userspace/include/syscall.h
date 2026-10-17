@@ -95,4 +95,135 @@ __attribute__((always_inline)) static inline int sys_poll(int fd)
     return _sysenter6(SYS_POLL, fd, 0, 0, 0, 0, 0);
 }
 
+/* ============================================================
+ *  Process
+ * ============================================================ */
+
+__attribute__((always_inline)) static inline int sys_getpid(void)
+{
+    return _sysenter6(SYS_GETPID, 0, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_getppid(void)
+{
+    return _sysenter6(SYS_GETPPID, 0, 0, 0, 0, 0, 0);
+}
+
+__attribute__((noreturn)) static inline void sys_exit(int code)
+{
+    _sysenter6(SYS_EXIT, code, 0, 0, 0, 0, 0);
+
+    /* недостижимо: ядро убивает процесс в SYS_EXIT */
+    for (;;)
+        __asm__ volatile("pause");
+}
+
+__attribute__((always_inline)) static inline int sys_kill(int pid, int sig)
+{
+    return _sysenter6(SYS_KILL, pid, sig, 0, 0, 0, 0);
+}
+
+/* ============================================================
+ *  Memory
+ * ============================================================ */
+
+/* new_brk == 0 — узнать текущий brk, иначе установить новый.
+   Возвращает актуальный brk (или старый, если new_brk вне допустимого диапазона). */
+__attribute__((always_inline)) static inline int sys_brk(void *new_brk)
+{
+    return _sysenter6(SYS_BRK, (int)new_brk, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_mmap2(void *addr, unsigned len,
+                                                           int prot, int flags,
+                                                           int fd, int offset)
+{
+    return _sysenter6(SYS_MMAP2, (int)addr, len, prot, flags, fd, offset);
+}
+
+__attribute__((always_inline)) static inline int sys_munmap(void *addr, unsigned len)
+{
+    return _sysenter6(SYS_MUNMAP, (int)addr, len, 0, 0, 0, 0);
+}
+
+/* ============================================================
+ *  Files
+ * ============================================================ */
+
+__attribute__((always_inline)) static inline int sys_open(const char *path, int flags, int mode)
+{
+    return _sysenter6(SYS_OPEN, (int)path, flags, mode, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_close(int fd)
+{
+    return _sysenter6(SYS_CLOSE, fd, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_lseek(int fd, int offset, int whence)
+{
+    return _sysenter6(SYS_LSEEK, fd, offset, whence, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_stat(const char *path, void *st)
+{
+    return _sysenter6(SYS_STAT, (int)path, (int)st, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_fstat(int fd, void *st)
+{
+    return _sysenter6(SYS_FSTAT, fd, (int)st, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_unlink(const char *path)
+{
+    return _sysenter6(SYS_UNLINK, (int)path, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_chdir(const char *path)
+{
+    return _sysenter6(SYS_CHDIR, (int)path, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_getcwd(char *buf, unsigned size)
+{
+    return _sysenter6(SYS_GETCWD, (int)buf, size, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_dup(int oldfd)
+{
+    return _sysenter6(SYS_DUP, oldfd, 0, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_access(const char *path, int mode)
+{
+    return _sysenter6(SYS_ACCESS, (int)path, mode, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_ioctl(int fd, int req, void *arg)
+{
+    return _sysenter6(SYS_IOCTL, fd, req, (int)arg, 0, 0, 0);
+}
+
+/* ============================================================
+ *  Time
+ * ============================================================ */
+
+/* struct k_timespec { int32_t tv_sec; int32_t tv_nsec; } */
+__attribute__((always_inline)) static inline int sys_clock_gettime(int clk, void *ts)
+{
+    return _sysenter6(SYS_CLOCK_GETTIME, clk, (int)ts, 0, 0, 0, 0);
+}
+
+/* struct k_timeval { int32_t tv_sec; int32_t tv_usec; } */
+__attribute__((always_inline)) static inline int sys_gettimeofday(void *tv, void *tz)
+{
+    return _sysenter6(SYS_GETTIMEOFDAY, (int)tv, (int)tz, 0, 0, 0, 0);
+}
+
+__attribute__((always_inline)) static inline int sys_nanosleep(void *req, void *rem)
+{
+    return _sysenter6(SYS_NANOSLEEP, (int)req, (int)rem, 0, 0, 0, 0);
+}
+
 #endif
