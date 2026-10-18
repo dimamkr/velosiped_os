@@ -1,7 +1,6 @@
 #include "string.h"
 #include "bitmap.h"
 
-__attribute__((optimize("O3,unroll-loops")))
 uint32_t
 strlen(const char *s)
 {

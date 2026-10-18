@@ -8,7 +8,6 @@
 #include "types.h"
 #include "datetime.h"
 #include "ahci.h"
-#include "fat32.h"
 #include "task.h"
 #include "argparse.h"
 #include "hash_table.h"
@@ -16,6 +15,7 @@
 #include "power.h"
 #include "sysenter.h"
 #include "vmm.h"
+#include "vfs.h"
 
 static char terminal_input_buff[256];
 static int terminal_input_buff_lenght;
@@ -25,9 +25,9 @@ static bool_t terminal_cancelled_flag;
 dynamic_array_t *command_history; // хранит указатели на начала строк (char*)
 int command_history_index;
 
-fat32_info_t info;
-fat32_basic_file_info_t root;
-dynamic_array_t *path = NULL;
+vfs_info_t info;
+vfs_file_t *root;
+vfs_file_t *current_dir;
 
 hash_table_t *cmd_handlers;
 
@@ -292,22 +292,17 @@ bool_t terminal_print_disks(argparse_command_t *command)
 
 bool_t terminal_print_path(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
         return false;
 
-    for (uint8_t i = 0; i < path->elements_count; i++)
-    {
-        fat32_basic_file_info_t *dir = dynamic_array_get_by_index(path, i);
-
-        konsole_printf("%s/", dir->filename);
-    }
+    konsole_printf("%s/", current_dir->filename);
 
     return true;
 }
 
 bool_t terminal_print_listdir(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -335,7 +330,7 @@ bool_t terminal_print_listdir(argparse_command_t *command)
         }
     }
 
-    listdir = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+    listdir = vfs_find_files(current_dir, pattern, ignore_case);
 
     if (listdir == NULL)
     {
@@ -355,77 +350,87 @@ bool_t terminal_print_listdir(argparse_command_t *command)
 
     for (uint32_t i = 0; i < listdir->elements_count; i++)
     {
-        fat32_basic_file_info_t *file_info = dynamic_array_get_by_index(listdir, i);
+        vfs_file_t *file_info = dynamic_array_get_by_index(listdir, i);
 
         konsole_printf("Filename: %s\n", file_info->filename);
 
         konsole_print("Attributes: ");
 
-        if (file_info->attributes & FAT32_ATTRIBUTE_ARCHIVE)
+        if (file_info->attributes & VFS_ATTRIBUTE_ARCHIVE)
             konsole_print("Archived ");
-        if (file_info->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+        if (file_info->attributes & VFS_ATTRIBUTE_DIRECTORY)
             konsole_print("Directory ");
-        if (file_info->attributes & FAT32_ATTRIBUTE_HIDDEN)
+        if (file_info->attributes & VFS_ATTRIBUTE_HIDDEN)
             konsole_print("Hidden ");
-        if (file_info->attributes & FAT32_ATTRIBUTE_READONLY)
+        if (file_info->attributes & VFS_ATTRIBUTE_READONLY)
             konsole_print("Readonly ");
-        if (file_info->attributes & FAT32_ATTRIBUTE_SYSTEM)
+        if (file_info->attributes & VFS_ATTRIBUTE_SYSTEM)
             konsole_print("System ");
-        if (file_info->attributes & FAT32_ATTRIBUTE_VOLUME_ID)
+        if (file_info->attributes & VFS_ATTRIBUTE_VOLUME_ID)
             konsole_print("VolumeID ");
 
         konsole_println("");
 
-        datetime_t dt;
-        datetime_datetime_from_fat(&(file_info->creation_datetime), &dt);
-        konsole_printf("Created at: %d-%d-%d %d:%d:%d\n", dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
-        datetime_datetime_from_fat(&(file_info->last_modify_datetime), &dt);
-        konsole_printf("Modified at: %d-%d-%d %d:%d:%d\n", dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
+        konsole_printf("Created at: %d-%d-%d %d:%d:%d\n",
+            file_info->creation_datetime.day,
+            file_info->creation_datetime.month,
+            file_info->creation_datetime.year,
+            file_info->creation_datetime.hour,
+            file_info->creation_datetime.minute,
+            file_info->creation_datetime.second);
 
-        if (!(file_info->attributes & (FAT32_ATTRIBUTE_DIRECTORY | FAT32_ATTRIBUTE_VOLUME_ID)))
+        konsole_printf("Modified at: %d-%d-%d %d:%d:%d\n",
+            file_info->modify_datetime.day,
+            file_info->modify_datetime.month,
+            file_info->modify_datetime.year,
+            file_info->modify_datetime.hour,
+            file_info->modify_datetime.minute,
+            file_info->modify_datetime.second);
+
+        if (!(file_info->attributes & (VFS_ATTRIBUTE_DIRECTORY | VFS_ATTRIBUTE_VOLUME_ID)))
             konsole_printf("Size: %d B\n", file_info->size);
 
         konsole_println("========");
-
-        free(file_info->filename);
     }
 
-    dynamic_array_destroy(listdir);
+    vfs_destroy_files_array(listdir);
 
     return true;
 }
 
-fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
+vfs_file_t *terminal_resolve_filename(dynamic_array_t *files)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
     }
 
-    fat32_basic_file_info_t *result = malloc(sizeof(fat32_basic_file_info_t));
+    vfs_file_t *result = malloc(sizeof(vfs_file_t));
     uint32_t choice = 0;
 
     if (files->elements_count == 1)
-        memcpy(result, dynamic_array_get_top(files), sizeof(fat32_basic_file_info_t));
+        memcpy(result, dynamic_array_get_top(files), sizeof(vfs_file_t));
     else
     {
         konsole_println("Which one?");
 
         for (uint32_t i = 0; i < files->elements_count; i++)
         {
-            fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
-
-            datetime_t dt;
-            datetime_datetime_from_fat(&(file->creation_datetime), &dt);
+            vfs_file_t *file = dynamic_array_get_by_index(files, i);
 
             konsole_printf("[%d]: '%s' (%s), created at %d-%d-%d %d:%d:%d",
                            i,
                            file->filename,
-                           file->attributes & FAT32_ATTRIBUTE_DIRECTORY ? "dir" : "file",
-                           dt.day, dt.month, dt.year, dt.hour, dt.minute, dt.second);
+                           file->attributes & VFS_ATTRIBUTE_DIRECTORY ? "dir" : "file",
+                           file->creation_datetime.day,
+                           file->creation_datetime.month,
+                           file->creation_datetime.year,
+                           file->creation_datetime.hour,
+                           file->creation_datetime.minute,
+                           file->creation_datetime.second);
 
-            if (!(file->attributes & FAT32_ATTRIBUTE_DIRECTORY))
+            if (!(file->attributes & VFS_ATTRIBUTE_DIRECTORY))
                 konsole_printf(", size: %d B", file->size);
 
             konsole_println("");
@@ -445,7 +450,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
             choice = strtoul(choice_str, NULL, 10);
 
             if (choice != -1 && choice < files->elements_count)
-                memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(fat32_basic_file_info_t));
+                memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(vfs_file_t));
             else
             {
                 konsole_println("Error: invalid option");
@@ -459,8 +464,8 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
     {
         if (i == choice)
             continue;
-        fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
-        free(file->filename);
+        vfs_file_t *file = dynamic_array_get_by_index(files, i);
+        vfs_cleanup_file_obj(file);
     }
 
     dynamic_array_destroy(files);
@@ -470,7 +475,7 @@ fat32_basic_file_info_t *terminal_resolve_filename(dynamic_array_t *files)
 
 bool_t terminal_view(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -505,11 +510,11 @@ bool_t terminal_view(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, false);
+    dynamic_array_t *files = vfs_find_files(current_dir, pattern, false);
 
     if (files == NULL)
     {
-        konsole_println("Error: disk error");
+        konsole_println("Error: filesystem error");
         return false;
     }
 
@@ -520,20 +525,22 @@ bool_t terminal_view(argparse_command_t *command)
         return false;
     }
 
-    fat32_basic_file_info_t *file = terminal_resolve_filename(files);
+    vfs_file_t *file = terminal_resolve_filename(files);
 
     if (file == NULL)
     {
         return false;
     }
-    if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
     {
+        vfs_cleanup_file_obj(file);
         free(file);
         konsole_println("Error: it isn't file");
         return false;
     }
     else if (file->size == 0)
     {
+        vfs_cleanup_file_obj(file);
         free(file);
         return true;
     }
@@ -542,7 +549,20 @@ bool_t terminal_view(argparse_command_t *command)
     unsigned char *buffer = malloc(buffer_size);
     buffer[buffer_size - 1] = '\0';
 
-    fat32_read_file(&info, file, start_pos, buffer, buffer_size - 1);
+    vfs_stream_t *stream = vfs_open(file, VFS_FLAG_READ);
+
+    if (start_pos > 0)
+        vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+
+    if (stream == NULL)
+    {
+        vfs_cleanup_file_obj(file);
+        free(file);
+        konsole_println("Error: filesystem error");
+        return false;
+    }
+
+    vfs_read(stream, buffer, buffer_size - 1);
 
     if (hex)
     {
@@ -555,6 +575,8 @@ bool_t terminal_view(argparse_command_t *command)
         konsole_println(buffer);
     }
 
+    vfs_close(stream);
+    vfs_cleanup_file_obj(file);
     free(file);
     free(buffer);
 
@@ -563,7 +585,7 @@ bool_t terminal_view(argparse_command_t *command)
 
 bool_t terminal_change_dir(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -590,7 +612,15 @@ bool_t terminal_change_dir(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+    if (pattern == NULL || strlen(pattern) == 0)
+    {
+        vfs_cleanup_file_obj(current_dir);
+        vfs_copy_file_obj(current_dir, root);
+
+        return true;
+    }
+
+    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
 
     if (files == NULL)
     {
@@ -605,35 +635,23 @@ bool_t terminal_change_dir(argparse_command_t *command)
         return false;
     }
 
-    fat32_basic_file_info_t *dir = terminal_resolve_filename(files);
+    vfs_file_t *dir = terminal_resolve_filename(files);
 
     if (dir == NULL)
     {
         return false;
     }
-    if (!(dir->attributes & FAT32_ATTRIBUTE_DIRECTORY))
+    if (!(dir->attributes & VFS_ATTRIBUTE_DIRECTORY))
     {
         free(dir);
         konsole_println("Error: it isn't directory");
         return false;
     }
 
-    if (strcmp(dir->filename, ".") == 0)
-    {
-        free(dir);
-        return true;
-    }
-    else if (strcmp(dir->filename, "..") == 0)
-    {
-        fat32_basic_file_info_t *current_directory = dynamic_array_get_top(path);
-        free(current_directory->filename);
-        dynamic_array_pop_back(path);
-    }
-    else
-    {
-        dynamic_array_push_back(path, dir);
-    }
+    vfs_cleanup_file_obj(current_dir);
+    vfs_copy_file_obj(current_dir, dir);
 
+    vfs_cleanup_file_obj(dir);
     free(dir);
 
     return true;
@@ -641,7 +659,7 @@ bool_t terminal_change_dir(argparse_command_t *command)
 
 bool_t terminal_write(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -650,8 +668,7 @@ bool_t terminal_write(argparse_command_t *command)
     uint32_t start_pos = 0;
     char *pattern = NULL;
     bool_t hex = false;
-    bool_t overwrite = false;
-    bool_t append = false;
+    uint8_t flags = VFS_FLAG_WRITE;
     bool_t ignore_case = false;
 
     for (uint32_t i = 0; i < command->arguments->elements_count; i++)
@@ -677,9 +694,9 @@ bool_t terminal_write(argparse_command_t *command)
         else if (strcmp(arg->name, "opt") == 0)
         {
             if (strcmp(arg->value, "overwrite") == 0)
-                overwrite = true;
+                flags |= VFS_FLAG_OVERWRITE;
             else if (strcmp(arg->value, "append") == 0)
-                append = true;
+                flags |= VFS_FLAG_APPEND;
             else if (strcmp(arg->value, "ignore-case"))
                 ignore_case = true;
             else
@@ -690,7 +707,7 @@ bool_t terminal_write(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
 
     if (files == NULL)
     {
@@ -705,49 +722,46 @@ bool_t terminal_write(argparse_command_t *command)
         return false;
     }
 
-    fat32_basic_file_info_t *file = terminal_resolve_filename(files);
+    vfs_file_t *file = terminal_resolve_filename(files);
 
     if (file == NULL)
     {
         return false;
     }
-    if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
     {
         free(file);
         konsole_println("Error: it isn't file");
         return false;
     }
 
-    if (append)
-        start_pos = file->size;
-    if (overwrite)
-    {
-        if (!fat32_erase_file_sync(&info, file))
-        {
-            free(file);
-            konsole_println("Error: erase error");
-            return false;
-        }
+    konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
 
-        file->size = 0;
-        file->cluster_num = 0;
+    vfs_stream_t *stream = vfs_open(file, flags);
+
+    if (stream == NULL)
+    {
+        vfs_cleanup_file_obj(file);
+        free(file);
+        konsole_println("Error: filesystem error");
+        return false;
     }
 
-    konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
+    if (start_pos > 0)
+        vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
 
     const unsigned char *input_line;
 
-    uint32_t buffer_size = 32;
-    uint32_t buffer_free_space = buffer_size;
-    bool_t enter = false;
-
-    byte_t *buffer = malloc(buffer_size);
-
     if (hex)
     {
+        byte_t *buffer = NULL;
+
         while (input_line = terminal_get_input_line())
         {
-            unsigned char write_byte[3];
+            buffer = realloc(buffer, strlen(input_line));
+            uint32_t buffer_ind = 0;
+
+            uint8_t write_byte[3];
             uint8_t cursor = 0;
 
             for (const unsigned char *cur = input_line;; cur++)
@@ -757,28 +771,21 @@ bool_t terminal_write(argparse_command_t *command)
                     write_byte[cursor] = '\0';
                     cursor = 0;
 
-                    if (buffer_free_space == 0)
-                    {
-                        buffer_free_space += buffer_size;
-                        buffer_size *= 2;
-                        realloc(buffer, buffer_size);
-                    }
-
                     uint32_t byte_num = strtoul(write_byte, NULL, 16);
 
                     if (byte_num != -1)
                     {
-                        buffer[buffer_size - buffer_free_space] = byte_num & 0xFF;
+                        buffer[buffer_ind++] = byte_num & 0xFF;
                     }
                     else
                     {
                         free(buffer);
+                        vfs_close(stream);
+                        vfs_cleanup_file_obj(file);
                         free(file);
                         konsole_println("Error: invalid byte");
                         return false;
                     }
-
-                    buffer_free_space--;
                 }
                 else
                     write_byte[cursor++] = *cur;
@@ -786,6 +793,8 @@ bool_t terminal_write(argparse_command_t *command)
                 if (cursor > 3)
                 {
                     free(buffer);
+                    vfs_close(stream);
+                    vfs_cleanup_file_obj(file);
                     free(file);
                     konsole_println("Error: invalid byte");
                     return false;
@@ -794,44 +803,25 @@ bool_t terminal_write(argparse_command_t *command)
                 if (*cur == '\0')
                     break;
             }
+
+            vfs_write(stream, buffer, buffer_ind);
         }
+
+        free(buffer);
     }
     else
     {
         while (input_line = terminal_get_input_line())
         {
-            uint32_t length = strlen(input_line);
-
-            while (buffer_free_space < length + enter)
-            {
-                buffer_free_space += buffer_size;
-                buffer_size *= 2;
-                buffer = realloc(buffer, buffer_size);
-            }
-
-            if (enter)
-            {
-                buffer[buffer_size - buffer_free_space] = '\n';
-                buffer_free_space--;
-            }
-            enter = true;
-
-            memcpy(buffer + (buffer_size - buffer_free_space), input_line, length);
-            buffer_free_space -= length;
+            vfs_write(stream, (void*)input_line, strlen(input_line));
+            vfs_write(stream, (void*)"\n", 1);
         }
     }
 
     konsole_println("===================");
 
-    if (!fat32_write_file_sync(&info, file, start_pos, buffer, buffer_size - buffer_free_space))
-    {
-        free(buffer);
-        free(file);
-        konsole_println("Error: disk write error");
-        return false;
-    }
-
-    free(buffer);
+    vfs_close(stream);
+    vfs_cleanup_file_obj(file);
     free(file);
 
     konsole_println("Success");
@@ -841,7 +831,7 @@ bool_t terminal_write(argparse_command_t *command)
 
 bool_t terminal_newfile(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -859,13 +849,13 @@ bool_t terminal_newfile(argparse_command_t *command)
         else if (strcmp(arg->name, "attr") == 0)
         {
             if (strcmp(arg->value, "hidden") == 0)
-                attributes |= FAT32_ATTRIBUTE_HIDDEN;
+                attributes |= VFS_ATTRIBUTE_HIDDEN;
             else if (strcmp(arg->value, "archive") == 0)
-                attributes |= FAT32_ATTRIBUTE_ARCHIVE;
+                attributes |= VFS_ATTRIBUTE_ARCHIVE;
             else if (strcmp(arg->value, "system") == 0)
-                attributes |= FAT32_ATTRIBUTE_SYSTEM;
+                attributes |= VFS_ATTRIBUTE_SYSTEM;
             else if (strcmp(arg->value, "readonly") == 0)
-                attributes |= FAT32_ATTRIBUTE_READONLY;
+                attributes |= VFS_ATTRIBUTE_READONLY;
             else
             {
                 konsole_printf("Error: unknown file attribute '%s'\n", arg->value);
@@ -875,14 +865,14 @@ bool_t terminal_newfile(argparse_command_t *command)
     }
 
     if (attributes == 0)
-        attributes = FAT32_ATTRIBUTE_ARCHIVE;
+        attributes = VFS_ATTRIBUTE_ARCHIVE;
     if (filename == NULL || strlen(filename) == 0)
     {
         konsole_println("Error: filename not specified");
         return false;
     }
 
-    if (!fat32_create_file(&info, dynamic_array_get_top(path), filename, attributes, NULL))
+    if (!vfs_newfile(current_dir, filename, attributes, NULL))
     {
         konsole_println("Error: filesystem error");
         return false;
@@ -893,7 +883,7 @@ bool_t terminal_newfile(argparse_command_t *command)
 
 bool_t terminal_newdir(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -911,11 +901,11 @@ bool_t terminal_newdir(argparse_command_t *command)
         else if (strcmp(arg->name, "attr") == 0)
         {
             if (strcmp(arg->value, "hidden") == 0)
-                attributes |= FAT32_ATTRIBUTE_HIDDEN;
+                attributes |= VFS_ATTRIBUTE_HIDDEN;
             else if (strcmp(arg->value, "system") == 0)
-                attributes |= FAT32_ATTRIBUTE_SYSTEM;
+                attributes |= VFS_ATTRIBUTE_SYSTEM;
             else if (strcmp(arg->value, "readonly") == 0)
-                attributes |= FAT32_ATTRIBUTE_READONLY;
+                attributes |= VFS_ATTRIBUTE_READONLY;
             else
             {
                 konsole_printf("Error: unknown directory attribute '%s'\n", arg->value);
@@ -930,7 +920,7 @@ bool_t terminal_newdir(argparse_command_t *command)
         return false;
     }
 
-    if (!fat32_create_directory(&info, dynamic_array_get_top(path), dirname, attributes, NULL))
+    if (!vfs_newdir(current_dir, dirname, attributes, NULL))
     {
         konsole_println("Error: filesystem error");
         return false;
@@ -941,7 +931,7 @@ bool_t terminal_newdir(argparse_command_t *command)
 
 bool_t terminal_remove(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -968,7 +958,7 @@ bool_t terminal_remove(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), pattern, ignore_case);
+    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
 
     if (files == NULL)
     {
@@ -985,13 +975,13 @@ bool_t terminal_remove(argparse_command_t *command)
 
     for (uint32_t i = 0; i < files->elements_count; i++)
     {
-        fat32_basic_file_info_t *file = dynamic_array_get_by_index(files, i);
+        vfs_file_t *file = dynamic_array_get_by_index(files, i);
 
-        if (!fat32_remove_file(&info, file))
+        if (!vfs_remove(file))
             konsole_printf("Error: can not remove file '%s'\n", file->filename);
     }
 
-    fat32_destroy_files_list(files);
+    vfs_destroy_files_array(files);
 
     return true;
 }
@@ -1003,7 +993,7 @@ void foo(void *arg)
 
 bool_t terminal_exec(argparse_command_t *command)
 {
-    if (!path)
+    if (!current_dir)
     {
         konsole_println("Error: path is empty (ROOT is not mounted)");
         return false;
@@ -1033,7 +1023,7 @@ bool_t terminal_exec(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = fat32_find_files(&info, dynamic_array_get_top(path), file_name, false);
+    dynamic_array_t *files = vfs_find_files(current_dir, file_name, false);
 
     if (files == NULL)
     {
@@ -1048,14 +1038,13 @@ bool_t terminal_exec(argparse_command_t *command)
         return false;
     }
 
-    AUTOFREE_PTR(fat32_basic_file_info_t)
-    file = terminal_resolve_filename(files);
+    AUTOFREE_PTR(vfs_file_t) file = terminal_resolve_filename(files);
 
     if (file == NULL)
     {
         return false;
     }
-    if (file->attributes & FAT32_ATTRIBUTE_DIRECTORY)
+    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
     {
         konsole_println("Error: it isn't file");
         return false;
@@ -1064,7 +1053,9 @@ bool_t terminal_exec(argparse_command_t *command)
     AUTOFREE_PTR(void)
     buff = malloc(file->size + 1);
 
-    fat32_read_file(&info, file, 0, buff, file->size);
+    vfs_stream_t *stream = vfs_open(file, VFS_FLAG_READ);
+    vfs_read(stream, buff, file->size);
+    vfs_close(stream);
 
     // elf_print_info(buff);
 
@@ -1102,20 +1093,30 @@ bool_t terminal_dbg(argparse_command_t *command)
 {
     konsole_println("DEBUG COMMAND");
 
-    asm volatile (
-        "movl %%esp, %%ecx\n"
-        "leal 1f, %%edx\n"
-        "sysenter\n"
-        "1:"
-        :
-        : "a" (228)
-        : "ecx", "edx", "memory"
-    );
-
     return true;
 }
 
 // --------- Хэндлер ---------
+
+bool_t terminal_mount_root()
+{
+    uint8_t boot_disk_id = disk_get_boot_disk_id();
+    if (boot_disk_id == -1)
+        return false;
+
+    uint8_t bootable_partition_id = mbr_get_bootable_partition(boot_disk_id);
+    if (bootable_partition_id == -1)
+        return false;
+
+    root = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
+    if (root == NULL)
+        return false;
+
+    current_dir = malloc(sizeof(vfs_file_t));
+    vfs_copy_file_obj(current_dir, root);
+
+    return true;
+}
 
 void terminal_handle_command(const char *buffer)
 {
@@ -1134,14 +1135,7 @@ void terminal_handle_command(const char *buffer)
 
 void terminal_init()
 {
-    if (fat32_get_bootable_partition_info_sync(&info))
-    {
-        path = dynamic_array_create(sizeof(fat32_basic_file_info_t));
-        fat32_basic_file_info_t root;
-        fat32_mount(&info, "ROOT", &root);
-        dynamic_array_push_back(path, &root);
-    }
-    else
+    if (!terminal_mount_root())
     {
         konsole_set_bad_result_color();
         konsole_println("\nError: can't mount root");

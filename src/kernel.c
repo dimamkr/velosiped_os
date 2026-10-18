@@ -9,7 +9,6 @@
 #include "disk.h"
 #include "task.h"
 #include "mbr.h"
-#include "fat32.h"
 #include "vmm.h"
 #include "pmm.h"
 #include "pio.h"
@@ -20,6 +19,7 @@
 #include "mouse.h"
 #include "power.h"
 #include "sysenter.h"
+#include "vfs.h"
 
 
 void kernel_main_task(void *);
@@ -86,6 +86,10 @@ void kernel_main_task(void *_)
     PRINT_OK;
 
     disk_init();
+
+    PRINT_INIT("VFS");
+    vfs_init();
+    PRINT_OK;
 
     power_init();
 

@@ -556,6 +556,8 @@ bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
 
     if (!(new_file_info.attributes & FAT32_ATTRIBUTE_DIRECTORY))
         new_file_info.size = max(file_info->size, start_position + buffer_size);
+    
+    memcpy(file_info, &new_file_info, sizeof(fat32_basic_file_info_t));
 
     if (!fat32_update_directory_entry(info, &new_file_info))
         return false;
@@ -574,6 +576,8 @@ bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_i
     if (file_info->cluster_num != 0)
         if (!fat32_release_clusters_sync(info, file_info->cluster_num))
             return false;
+
+    memcpy(file_info, &new_file_info, sizeof(fat32_basic_file_info_t));
 
     return fat32_update_directory_entry(info, &new_file_info);
 }
@@ -920,6 +924,10 @@ bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_i
     memcpy(special_records + 1, special_records, sizeof(fat32_file_record_t));
 
     special_records[1].dos_filename[1] = '.';
+
+    uint32_t prev_cluster = dir_info->cluster_num == info->root_cluster ? 0 : dir_info->cluster_num;
+    special_records[1].cluster_num_lo = prev_cluster & 0xFFFF;
+    special_records[1].cluster_num_lo = prev_cluster >> 16;
 
     uint32_t new_cluster = fat32_take_new_cluster_sync(info, 0);
 
