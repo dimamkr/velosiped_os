@@ -1,0 +1,56 @@
+#ifndef RAM_H
+#define RAM_H
+
+#include "system.h"
+
+// схема физической оперативной памяти
+
+// TODO получать размер ram из прерывания биоса когда все остальное заработает
+//  характеристики
+#define TOTAL_RAM (0xFFFFFFFF) // 4*GB - 1
+
+// начало всех системных структур (в виртуальной таблице)
+#define RAM_VIRTUAL_START 0xC0000000
+
+// системные структуры
+#define KERNEL_ENTRY_START (RAM_VIRTUAL_START + 0x10000)
+#define VIDEO_MEMORY_START (RAM_VIRTUAL_START + 0xB8000)
+#define VIDEO_MEMORY_END (VIDEO_MEMORY_START + 4 * KB)
+#define KERNEL_ENTRY_STACK (RAM_VIRTUAL_START + 0x90000) // временный стек до перехода в задачу ядра
+// первые 4 мб под ядро
+// границы кучи
+#define KHEAP_START (RAM_VIRTUAL_START + 4 * MB)
+#define KHEAP_END (RAM_VIRTUAL_START + 64 * MB)
+
+#define KERNEL_END (KHEAP_END)
+
+// адрес начиная с которого инициализируются адреса для MMIO
+#define MMIO_VIRT_BASE 0xF0000000
+
+// пользовательские дефайны
+#define USER_STACK_TOP 0xBFFFF000
+
+#define USER_HEAP_START 0x20000000
+#define USER_HEAP_LIMIT 0x40000000
+
+#define USER_MMAP_START 0x40000000
+#define USER_MMAP_LIMIT 0xB0000000
+
+static inline void *ram_kernel_to_virt(void *phys_addr)
+{
+    ASSERT((uint32_t)phys_addr <= (KERNEL_END - RAM_VIRTUAL_START));
+    return phys_addr + RAM_VIRTUAL_START;
+}
+
+static inline void *ram_kernel_to_phys(void *virt_addr)
+{
+    ASSERT((uint32_t)virt_addr >= RAM_VIRTUAL_START);
+    return virt_addr - RAM_VIRTUAL_START;
+}
+
+// TODO везде добавить
+#define STACK_ALIGN 16
+
+#define ALIGNED(addr, align) ((uint32_t)addr & ~((uint32_t)align - 1))
+
+#endif
