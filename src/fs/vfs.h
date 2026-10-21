@@ -68,7 +68,7 @@ static void vfs_info_cleanup_routine(void *_info);
 bool_t vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src);
 void vfs_destroy_files_array(dynamic_array_t *files);
 vfs_file_t *vfs_mount_partition(uint8_t disk_id, uint8_t partition_id, char *mountpoint);
-bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id);
+bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold);
 dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case);
 void vfs_unmount_partitions_by_name(const char *mountpoint, bool_t ignore_case);
 dynamic_array_t *vfs_find_files_in_directory(vfs_file_t *directory, const char *_pattern, bool_t ignore_case);

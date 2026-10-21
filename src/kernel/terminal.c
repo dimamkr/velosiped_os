@@ -316,12 +316,6 @@ bool_t terminal_print_path(argparse_command_t *command)
 
 bool_t terminal_print_listdir(argparse_command_t *command)
 {
-    if (!current_dir)
-    {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
-        return false;
-    }
-
     dynamic_array_t *listdir;
     char *pattern = NULL;
     bool_t ignore_case = false;
@@ -414,12 +408,6 @@ bool_t terminal_print_listdir(argparse_command_t *command)
 
 vfs_file_t *terminal_resolve_filename(dynamic_array_t *files)
 {
-    if (!current_dir)
-    {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
-        return false;
-    }
-
     vfs_file_t *result = malloc(sizeof(vfs_file_t));
     uint32_t choice = 0;
 
@@ -491,7 +479,7 @@ bool_t terminal_view(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -601,7 +589,7 @@ bool_t terminal_change_dir(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -675,7 +663,7 @@ bool_t terminal_write(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -847,7 +835,7 @@ bool_t terminal_newfile(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -899,7 +887,7 @@ bool_t terminal_newdir(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -947,7 +935,7 @@ bool_t terminal_remove(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -1000,6 +988,192 @@ bool_t terminal_remove(argparse_command_t *command)
     return true;
 }
 
+bool_t terminal_fsleave(argparse_command_t *command)
+{
+    if (root != NULL)
+    {
+        vfs_cleanup_file_obj(root);
+        free(root);
+        root = NULL;
+    }
+
+    if (current_dir != NULL)
+    {
+        vfs_cleanup_file_obj(current_dir);
+        free(current_dir);
+        current_dir = NULL;
+    }
+
+    return true;
+}
+
+bool_t terminal_mount(argparse_command_t *command)
+{
+    uint8_t disk_id = -1, partition_num = -1;
+    char *mountpoint = NULL;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (i == 0 && arg->value == NULL)
+            disk_id = strtoul(arg->name, NULL, 10);
+        else if (i == 1 && arg->value == NULL)
+            partition_num = strtoul(arg->name, NULL, 10);
+        else if (i == 2 && arg->value == NULL)
+            mountpoint = arg->name;
+        else
+        {
+            konsole_println("Error: invalid argument");
+            return false;
+        }
+    }
+
+    if (disk_id == -1 || partition_num == -1 || mountpoint == NULL)
+    {
+        konsole_println("Error: invalid argument");
+        return false;
+    }
+
+    if (vfs_mount_partition(disk_id, partition_num, mountpoint) == NULL)
+    {
+        konsole_println("Error: filesystem error");
+        return false;
+    }
+
+    return true;
+}
+
+bool_t terminal_umount(argparse_command_t *command)
+{
+    uint8_t disk_id = 0xFF, partition_num = 0xFF;
+    char *mountpoint = NULL;
+    bool_t ignore_case = false;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (strcmp(arg->name, "disk") == 0)
+            disk_id = strtoul(arg->value, NULL, 10);
+        else if (strcmp(arg->name, "partition") == 0)
+            partition_num = strtoul(arg->value, NULL, 10);
+        else if (strcmp(arg->name, "mountpoint") == 0)
+            mountpoint = arg->value;
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
+        }
+        else
+        {
+            konsole_println("Error: invalid argument");
+            return false;
+        }
+    }
+
+    if (disk_id != 0xFF && partition_num != 0xFF)
+    {
+        if (!vfs_unmount_partition(disk_id, partition_num, 2))
+        {
+            konsole_println("Error: filesystem error");
+            return false;
+        }
+
+        return true;
+    }
+    else if (mountpoint != NULL)
+    {
+        vfs_unmount_partitions_by_name(mountpoint, ignore_case);
+
+        return true;
+    }
+
+    konsole_println("Error: invalid argument");
+    return false;
+}
+
+bool_t terminal_change_root(argparse_command_t *command)
+{
+    char *pattern = NULL;
+    bool_t ignore_case = false;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == 0)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
+        }
+    }
+
+    if (pattern == NULL || strlen(pattern) == 0)
+    {
+        konsole_println("Error: invalid argument");
+
+        return false;
+    }
+
+    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
+
+    if (files == NULL)
+    {
+        konsole_println("Error: disk error");
+        return false;
+    }
+
+    if (files->elements_count == 0)
+    {
+        konsole_println("Error: No such directory");
+        dynamic_array_destroy(files);
+        return false;
+    }
+
+    vfs_file_t *dir = terminal_resolve_filename(files);
+
+    if (dir == NULL)
+    {
+        konsole_println("Error: no such file");
+        return false;
+    }
+    if (!(dir->attributes & VFS_ATTRIBUTE_DIRECTORY))
+    {
+        free(dir);
+        konsole_println("Error: it isn't directory");
+        return false;
+    }
+
+    if (root != NULL)
+    {
+        vfs_cleanup_file_obj(root);
+        free(root);
+    }
+    
+    root = dir;
+
+    if (current_dir == NULL)
+    {
+        current_dir = malloc(sizeof(vfs_file_t));
+        vfs_copy_file_obj(current_dir, root);
+    }
+
+    return true;
+}
+
 void foo(void *arg)
 {
     konsole_println(arg);
@@ -1009,7 +1183,7 @@ bool_t terminal_exec(argparse_command_t *command)
 {
     if (!current_dir)
     {
-        konsole_println("Error: path is empty (ROOT is not mounted)");
+        konsole_println("Error: root is empty");
         return false;
     }
 
@@ -1122,9 +1296,14 @@ bool_t terminal_mount_root()
     if (bootable_partition_id == -1)
         return false;
 
-    root = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
-    if (root == NULL)
+    root = malloc(sizeof(vfs_file_t));
+    vfs_file_t *new_root = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
+    if (new_root == NULL)
+    {
+        free(root);
         return false;
+    }
+    vfs_copy_file_obj(root, new_root);
 
     current_dir = malloc(sizeof(vfs_file_t));
     vfs_copy_file_obj(current_dir, root);
@@ -1178,6 +1357,10 @@ void terminal_init()
     terminal_register_command_handler("poweroff", terminal_poweroff);
     terminal_register_command_handler("reboot", terminal_reboot);
     terminal_register_command_handler("dbg", terminal_dbg);
+    terminal_register_command_handler("mount", terminal_mount);
+    terminal_register_command_handler("umount", terminal_umount);
+    terminal_register_command_handler("chroot", terminal_change_root);
+    terminal_register_command_handler("fsleave", terminal_fsleave);
 }
 
 void terminal_main_loop()

@@ -1,4 +1,5 @@
 #include "vfs.h"
+#include "konsole.h"
 
 
 static hash_table_t *mountpoints;
@@ -142,7 +143,7 @@ vfs_file_t *vfs_mount_partition(uint8_t disk_id, uint8_t partition_id, char *mou
 }
 
 
-bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id)
+bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold)
 {
     uint16_t key = MAKEWORD(disk_id, partition_id);
 
@@ -153,8 +154,10 @@ bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id)
 
     vfs_file_t *mp = hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1);
 
-    disk_flush_cache_sync(disk_id);
+    if (!RC_DESTROY_IF_LESS(mp->info, threshold))
+        return false;
 
+    disk_flush_cache_sync(disk_id);
     vfs_cleanup_file_obj(mp);
 
     hash_table_erase(mountpoints, mountpoint, strlen(mountpoint) + 1);
@@ -179,14 +182,15 @@ dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case)
                 vfs_file_t *mp = hash_table_get(mountpoints, node->value, node->value_size);
 
                 dynamic_array_push_back(results, mp);
-                vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results));
+
+                if (!vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results)))
+                    dynamic_array_pop_back(results);
             }
         }
     }
 
     return results;
 }
-
 
 void vfs_unmount_partitions_by_name(const char *mountpoint, bool_t ignore_case)
 {
@@ -196,15 +200,18 @@ void vfs_unmount_partitions_by_name(const char *mountpoint, bool_t ignore_case)
     {
         vfs_file_t *mp = dynamic_array_get_by_index(partitions, i);
 
-        vfs_unmount_partition(mp->info->disk_id, mp->info->partition_id);
+        vfs_unmount_partition(mp->info->disk_id, mp->info->partition_id, 3);
     }
 
-    dynamic_array_destroy(partitions);
+    vfs_destroy_files_array(partitions);
 }
 
 // TODO: сделать штуку типа FindFirstFile, FindNextFile вместо этого
 dynamic_array_t *vfs_find_files_in_directory(vfs_file_t *directory, const char *_pattern, bool_t ignore_case)
 {
+    if (directory == NULL)
+        return dynamic_array_create(sizeof(vfs_file_t));
+
     if (_pattern == NULL)
         _pattern = "*";
 
@@ -256,45 +263,52 @@ dynamic_array_t *vfs_find_files_in_directory(vfs_file_t *directory, const char *
         dynamic_array_t *all_files;
         vfs_file_t *current_dir = dynamic_array_get_bottom(search_queue);
 
-        switch (directory->info->filesystem)
+        if (current_dir->attributes & VFS_ATTRIBUTE_DIRECTORY)
         {
-            case VFS_FS_FAT32:
+            switch (directory->info->filesystem)
             {
-                all_files = fat32_read_directory(&(directory->info->fat32), &(current_dir->fat32));
-
-                if (!all_files)
+                case VFS_FS_FAT32:
                 {
-                    vfs_destroy_files_array(search_queue);
-                    free(path);
-                    free(pattern);
+                    all_files = fat32_read_directory(&(directory->info->fat32), &(current_dir->fat32));
 
-                    return NULL;
-                }
-
-                for (uint32_t i = 0;i < all_files->elements_count;i++)
-                {
-                    fat32_basic_file_info_t *file = dynamic_array_get_by_index(all_files, i);
-
-                    if (is_matching_pattern(file->filename, path[pattern_ind], ignore_case))
+                    if (!all_files)
                     {
-                        vfs_file_t new_file;
-                        memcpy(&(new_file.fat32), file, sizeof(fat32_basic_file_info_t));
-                        new_file.info = directory->info;
+                        vfs_destroy_files_array(search_queue);
+                        free(path);
+                        free(pattern);
 
-                        vfs_fill_file_obj_from_fat32(&new_file);
-
-                        if ((new_file.attributes & VFS_ATTRIBUTE_DIRECTORY) && (new_file.fat32.cluster_num == 0))
-                            new_file.fat32.cluster_num = 2; // костыль
-
-                        dynamic_array_push_back(search_queue, &new_file);
+                        return NULL;
                     }
-                    else
-                        free(file->filename);
+
+                    for (uint32_t i = 0;i < all_files->elements_count;i++)
+                    {
+                        fat32_basic_file_info_t *file = dynamic_array_get_by_index(all_files, i);
+
+                        if (is_matching_pattern(file->filename, path[pattern_ind], ignore_case))
+                        {
+                            vfs_file_t new_file;
+                            memcpy(&(new_file.fat32), file, sizeof(fat32_basic_file_info_t));
+                            new_file.info = directory->info;
+
+                            if (!vfs_fill_file_obj_from_fat32(&new_file))
+                            {
+                                free(file->filename);
+                                continue;
+                            }
+
+                            if ((new_file.attributes & VFS_ATTRIBUTE_DIRECTORY) && (new_file.fat32.cluster_num == 0))
+                                new_file.fat32.cluster_num = 2; // костыль
+
+                            dynamic_array_push_back(search_queue, &new_file);
+                        }
+                        else
+                            free(file->filename);
+                    }
+
+                    dynamic_array_destroy(all_files);
+
+                    break;
                 }
-
-                dynamic_array_destroy(all_files);
-
-                break;
             }
         }
 
@@ -333,7 +347,7 @@ dynamic_array_t *vfs_find_files(vfs_file_t *directory, const char *_pattern, boo
         pattern_start++;
         root_name = pattern_start;
 
-        uint32_t pattern_start_ind = strchr_r(pattern_start, '/');
+        uint32_t pattern_start_ind = strchr(pattern_start, '/');
 
         if (pattern_start_ind != -1)
         {
@@ -352,11 +366,11 @@ dynamic_array_t *vfs_find_files(vfs_file_t *directory, const char *_pattern, boo
     {
         result = dynamic_array_create(sizeof(vfs_file_t));
 
-        dynamic_array_t *mountpoints = vfs_search_mountpoints(root_name, ignore_case);
+        dynamic_array_t *mountpoints_found = vfs_search_mountpoints(root_name, ignore_case);
 
-        for (uint32_t i = 0;i < mountpoints->elements_count;i++)
+        for (uint32_t i = 0;i < mountpoints_found->elements_count;i++)
         {
-            vfs_file_t *mp = dynamic_array_get_by_index(mountpoints, i);
+            vfs_file_t *mp = dynamic_array_get_by_index(mountpoints_found, i);
 
             if (!return_mountpoints)
             {
@@ -384,11 +398,9 @@ dynamic_array_t *vfs_find_files(vfs_file_t *directory, const char *_pattern, boo
                 dynamic_array_push_back(result, mp);
                 vfs_copy_file_obj(dynamic_array_get_top(result), dynamic_array_get_top(result));
             }
-
-            vfs_cleanup_file_obj(mp);
         }
 
-        dynamic_array_destroy(mountpoints);
+        vfs_destroy_files_array(mountpoints_found);
     }
     else
         result = vfs_find_files_in_directory(directory, pattern_start, ignore_case);
