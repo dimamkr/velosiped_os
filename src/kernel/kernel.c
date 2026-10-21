@@ -53,8 +53,8 @@ __attribute__((section(".text.start"), cdecl)) void kernel_entry(void *param)
 
     input_manager_init();
 
-    scheduler_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
-    scheduler_start();
+    tasks_init(kernel_main_task, NULL, STACK_SIZE_LARGE);
+    tasks_start();
 }
 
 // TODO FIX при переходе сюда все еще есть мизерное окно когда прерывания разрешены (если придет клавиатурное то все сломается)

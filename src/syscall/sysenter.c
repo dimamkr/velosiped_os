@@ -1,7 +1,7 @@
 #include "sysenter.h"
 #include "heap.h"
 #include "task.h"
-#include "konsole.h"
+#include "vmm.h"
 #include "_syscall_func.h"
 
 static void *_sysenter_stack_start;
