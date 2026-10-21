@@ -8,7 +8,7 @@
 #include "paging.h"
 #include "sse.h"
 
-#define MAX_TASKS 8
+#define MAX_TASKS 32
 #define TASK_AUTO_SWITCH_FREQ 100
 
 #define STACK_SIZE_SMALL (KB)

@@ -24,6 +24,7 @@ static inline void _proc_task_state(task_t *task, uint32_t time_milisec)
         }
         break;
     case TASK_TERMINATED:
+        // TODO лучше тут не удалять, а использовать очередь зомби задач и потом их чистить
         tasks_erase_task(task);
         break;
 
