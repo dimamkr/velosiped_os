@@ -4,10 +4,8 @@
 // TODO рефакторинг с созданием .h файла прослойки для того чтобы все задачи делались желательно 1 способом
 
 #include "types.h"
-#include "heap.h"
 #include "task_event.h"
 #include "paging.h"
-#include "input_manager.h"
 #include "sse.h"
 
 #define MAX_TASKS 32
@@ -24,58 +22,13 @@
 #define TASK_INPUT_NEW -1  // новый поток ввода
 #define TASK_INPUT_NONE -2 // без потока ввода
 
-typedef enum
-{
-    TASK_RUNNING,
-    TASK_READY,
-    TASK_TERMINATED,
-    TASK_SLEEPING,
-    TASK_WAITING
-} task_state_t;
-
-typedef struct
-{
-    // строго фиксированный порядок (ручное обращение в asm)
-    //------------------------
-    uint32_t pid;
-
-    uint32_t esp; // указатель стека (сохраняется при переключении)
-    uint32_t ebp;
-    uint32_t eip; // точка входа
-
-    uint32_t *stack_start; // выделенный стек ядра
-    uint32_t stack_size;
-
-    page_dict_t *page_dict;
-    //------------------------
-
-    task_state_t state;
-    uint32_t activation_time;
-
-    // потоки ввода
-    uint32_t input_sids[INPUT_CHANNELS];
-
-    // sse контекст
-    fpu_context_t *fpu_context;
-
-    // пользовательская куча, память
-    uint32_t brk;     // нижняя граница кучи (растёт вверх)
-    uint32_t brk_end; // замаплено до этого адреса
-    uint32_t _task_mmap_next;
-
-    linked_list_node_t *node;
-} __attribute__((packed)) task_t;
-
-_Static_assert(__builtin_offsetof(task_t, esp) == 4, "esp offset");
-_Static_assert(__builtin_offsetof(task_t, stack_start) == 16, "stack_start offset");
-_Static_assert(__builtin_offsetof(task_t, stack_size) == 20, "stack_size offset");
-_Static_assert(__builtin_offsetof(task_t, page_dict) == 24, "page_dict offset");
+#include "_task_struct.h"
 
 void goto_current_task(void);
 
-void scheduler_start(void);
-void scheduler_init(void (*kernel_task_entry)(void *), void *arg, uint32_t stack_size);
-void scheduler_tick(uint32_t time_milisec); // вызывается из прерывания таймера
+void tasks_start(void);
+void tasks_init(void (*kernel_task_entry)(void *), void *arg, uint32_t stack_size);
+void tasks_tick(uint32_t time_milisec); // вызывается из прерывания таймера
 
 void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size, uint32_t *input_sids);
 void task_yield(void);
@@ -87,8 +40,6 @@ void task_unlock(void);
 void task_set_state_waiting(uint32_t pid);
 void task_set_state_ready(uint32_t pid);
 
-task_t *task_get_next(void);
-void task_set_current(task_t *task);
 void task_wait_until(task_event_t *ev);
 void task_wait_for_input(uint32_t channel);
 bool_t task_input_get(uint32_t channel, void *out);
@@ -100,8 +51,6 @@ bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, 
 
 // extern task_t tasks[];
 extern task_t *current_task;
-extern volatile uint32_t need_reschedule;
-extern page_dict_t *kernel_page_dict;
 
 extern uint32_t task_sids_none[INPUT_CHANNELS];
 extern uint32_t task_sids_keyboard_only[INPUT_CHANNELS];

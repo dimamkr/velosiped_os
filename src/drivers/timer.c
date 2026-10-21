@@ -12,7 +12,7 @@ static volatile uint32_t timer_ticks_count = 0;
 void timer_top_callback(isr_data_t data)
 {
     timer_ticks_count++;
-    scheduler_tick(timer_get_time());
+    tasks_tick(timer_get_time());
 }
 
 static uint32_t timer_frequency;

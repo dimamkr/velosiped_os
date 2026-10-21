@@ -1,5 +1,6 @@
 #include "task_event.h"
 #include "task.h"
+#include "sched.h"
 
 extern task_t tasks[];
 
@@ -14,7 +15,7 @@ void task_event_add(task_event_t *this, uint32_t pid)
 {
     TASK_LOCKED_FUNCTION;
 
-    tasks[pid].state = TASK_WAITING;
+    sched_task_set_state(&tasks[pid], TASK_WAITING);
 
     linked_list_add_begin(&(this->front), &pid, sizeof(uint32_t));
 }
@@ -26,7 +27,7 @@ void task_event_flush(task_event_t *this)
     while (this->front)
     {
         uint32_t pid = *(uint32_t *)this->front->value;
-        tasks[pid].state = TASK_READY;
+        sched_task_set_state(&tasks[pid], TASK_READY);
         linked_list_erase(&(this->front), this->front);
     }
 }

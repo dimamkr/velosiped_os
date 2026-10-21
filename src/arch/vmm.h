@@ -5,6 +5,8 @@
 #include "types.h"
 #include "paging.h"
 
+extern page_dict_t *kernel_page_dict;
+
 void vmm_init(void);
 
 uint32_t vmm_vaddr_to_phys(void *virt_addr);

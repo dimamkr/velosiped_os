@@ -3,13 +3,13 @@
 #include "timer.h"
 #include "system.h"
 #include "konsole.h"
-#include "linked_list.h"
 #include "vmm.h"
 #include "elf.h"
 #include "bitmap.h"
 #include "int_worker.h"
 #include "tss.h"
 #include "sysenter.h"
+#include "sched.h"
 
 #define _STACK_TOP(task) (((uint32_t)task->stack_start + task->stack_size))
 
@@ -20,15 +20,15 @@ uint32_t task_sids_keyboard_mouse_only[INPUT_CHANNELS];
 
 task_t tasks[MAX_TASKS];
 bitmap_t *tasks_used_bitmap;
-uint32_t tasks_last_used_id;
+uint32_t tasks_pr_id;
 static uint32_t task_count;
-
-static linked_list_node_t *current_task_node; // хранит task_t*
-static bool skipped_scheduler_tick = false;
-static uint32_t locked = 0;
 
 task_t *current_task = NULL;
 task_t *kernel_task = NULL;
+task_t *lazy_task = NULL;
+
+static bool skipped_tasks_tick = false;
+static uint32_t locked = 0;
 volatile uint32_t need_reschedule;
 
 task_t *to_destroy_accumulator = NULL;
@@ -39,7 +39,7 @@ extern void goto_current_task(void);
 
 #pragma GCC optimize("no-optimize-sibling-calls")
 
-void lazy_task(void *_)
+void lazy_task_do(void *_)
 {
     (void)_;
 
@@ -49,27 +49,38 @@ void lazy_task(void *_)
     }
 }
 
-void scheduler_start()
+static inline uint32_t _tasks_get_free_id()
+{
+    tasks_pr_id = bitmap_alloc_interval(tasks_used_bitmap, tasks_pr_id, 1);
+    if (likely(tasks_pr_id != tasks_used_bitmap->bits_count))
+    {
+        return tasks_pr_id;
+    }
+
+    tasks_pr_id = bitmap_alloc_interval(tasks_used_bitmap, 0, 1);
+    ASSERT(tasks_pr_id != tasks_used_bitmap->bits_count);
+    return tasks_pr_id;
+}
+
+static inline void _tasks_erase(uint32_t pid)
+{
+    bitmap_clear_bit(tasks_used_bitmap, pid);
+}
+
+void tasks_erase_task(task_t *task)
+{
+    _tasks_erase(task->pid);
+}
+
+void tasks_start()
 {
     goto_current_task();
 }
 
-static inline uint32_t _tasks_get_free_id()
+// Обновление глобальных указателей
+static inline void task_set_current(task_t *task)
 {
-    tasks_last_used_id = bitmap_alloc_interval(tasks_used_bitmap, tasks_last_used_id, 1);
-    if (likely(tasks_last_used_id != tasks_used_bitmap->bits_count))
-    {
-        return tasks_last_used_id;
-    }
-
-    tasks_last_used_id = bitmap_alloc_interval(0, tasks_last_used_id, 1);
-    ASSERT(tasks_last_used_id != tasks_used_bitmap->bits_count);
-    return tasks_last_used_id;
-}
-
-static inline uint32_t _tasks_erase(uint32_t pid)
-{
-    bitmap_clear_bit(tasks_used_bitmap, pid);
+    current_task = task;
 }
 
 static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_dict, uint32_t *input_sids)
@@ -79,7 +90,7 @@ static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_d
     uint32_t pid = _tasks_get_free_id();
     task_t *task = &tasks[pid];
     task->pid = pid;
-    task->state = TASK_READY;
+    sched_task_set_state(task, TASK_READY);
 
     ++task_count;
 
@@ -205,7 +216,7 @@ static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack
 }
 
 // Инициализация планировщика и передача управления ему
-void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
+void tasks_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
 {
     for (int i = 0; i < INPUT_CHANNELS; ++i)
     {
@@ -220,36 +231,32 @@ void scheduler_init(void (*k_entry)(void *), void *arg, uint32_t stack_size)
     tasks_used_bitmap = bitmap_create(MAX_TASKS);
 
     // ВНИМАНИЕ ЛЕНИВАЯ ЗАДАЧА ИМЕЕТ НОМЕР СТРОГО 0
-    task_t *lazy = _task_init_kernel(lazy_task, NULL, STACK_SIZE_LARGE, task_sids_none);
-    lazy->node = linked_list_create_root_cycle(&lazy, sizeof(task_t *));
+    task_t *lazy = _task_init_kernel(lazy_task_do, NULL, STACK_SIZE_LARGE, task_sids_none);
+    sched_task_add_first(lazy);
     task_set_current(lazy);
 
+    lazy_task = lazy;
+
     task_create_kthread(k_entry, arg, stack_size, task_sids_keyboard_only);
-    kernel_task = &tasks[1];     // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
-    task_set_current(&tasks[1]); // задача ядра
+    kernel_task = &tasks[1];       // ВНИМАНИЕ ЗАДАЧА ЯДРА ИМЕЕТ НОМЕР СТРОГО 1
+    task_set_current(kernel_task); // задача ядра
 
     // ВНИМАНИЕ ЗАДАЧА int_worker ИМЕЕТ НОМЕР СТРОГО 2
     int_worker_init();
-}
-
-static inline void _task_create_node(task_t *task)
-{
-    linked_list_node_t *node = linked_list_add(current_task_node, &task, sizeof(task_t *));
-    task->node = node;
 }
 
 // создание потока ядра
 void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size, uint32_t *input_sids)
 {
     task_t *task = _task_init_kernel(entry, arg, stack_size, input_sids);
-    _task_create_node(task);
+    sched_task_add_new(task);
 }
 
 static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size,
                                       page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids)
 {
     task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top, input_sids);
-    _task_create_node(task);
+    sched_task_add_new(task);
 }
 
 // тут ввод
@@ -269,72 +276,14 @@ bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, 
     return true;
 }
 
-static inline void process_task_state(task_t *task, uint32_t time_milisec)
-{
-    // для пропуска ленивой задачи
-    if (task == &tasks[0])
-    {
-        task->state = TASK_WAITING;
-        return;
-    }
-
-    switch (task->state)
-    {
-    case TASK_SLEEPING:
-        if (time_milisec >= task->activation_time)
-        {
-            task->state = TASK_READY;
-        }
-        break;
-    case TASK_TERMINATED:
-        _tasks_erase(task->pid);
-        break;
-
-    default:
-        break;
-    }
-}
-
-// Поиск следующей готовой задачи а также отложенная обработка задач
-task_t *task_get_next()
-{
-    uint32_t time_milisec = timer_get_time();
-
-    linked_list_node_t *node = current_task->node;
-
-    do
-    {
-        node = node->right;
-        // Извлекаем указатель на task_t из узла (в узле хранится task_t**)
-        task_t *t = *(task_t **)node->value;
-
-        process_task_state(t, time_milisec);
-        if (t->state == TASK_READY || t->state == TASK_RUNNING)
-        {
-            return t;
-        }
-
-    } while (node != current_task_node);
-
-    // ничего не делающая задача
-    return &tasks[0];
-}
-
-// Обновление глобальных указателей
-void task_set_current(task_t *task)
-{
-    current_task = task;
-    current_task_node = task->node;
-}
-
 // Подготовка переключения
 static inline void task_switch_prepare_state(task_t *prev, task_t *next)
 {
-    if (prev->state == TASK_RUNNING)
+    if (sched_task_get_state(prev) == TASK_RUNNING)
     {
-        prev->state = TASK_READY;
+        sched_task_set_state(prev, TASK_READY);
     }
-    next->state = TASK_RUNNING;
+    sched_task_set_state(next, TASK_RUNNING);
 }
 
 // Добровольная передача управления
@@ -349,6 +298,7 @@ void task_destroy_from_accumulator()
 {
     task_t *acc = to_destroy_accumulator;
 
+    // TODO несогласованность переключения страниц со стеками в общем случае
     vmm_page_dict_switch(acc->page_dict, current_task->page_dict);
 
     if (acc->page_dict != kernel_page_dict)
@@ -368,7 +318,7 @@ void task_destroy_from_accumulator()
     _tasks_erase(acc->pid);
     task_count--;
 
-    linked_list_erase(&current_task_node, acc->node);
+    sched_task_erase(acc);
 
     to_destroy_accumulator = NULL;
 }
@@ -386,19 +336,19 @@ void task_exit()
     }
 
     to_destroy_accumulator = current_task;
-    to_destroy_accumulator->state = TASK_TERMINATED;
+    sched_task_set_state(to_destroy_accumulator, TASK_TERMINATED);
 
-    task_t *next = task_get_next();
+    task_t *next = sched_task_get_next(current_task);
     tss_entry.esp0 = _STACK_TOP(next);
 
     task_set_current(next);
-    next->state = TASK_RUNNING;
+    sched_task_set_state(next, TASK_RUNNING);
     goto_current_task();
 }
 
 void task_switch_prepare()
 {
-    task_t *next = task_get_next();
+    task_t *next = sched_task_get_next(current_task);
 
     // страницы ядра точно выделены
     vmm_page_dict_switch(current_task->page_dict, next->page_dict);
@@ -421,8 +371,8 @@ void task_switch_finish()
 // Блокировка задачи
 void task_sleep(uint32_t time_milisec)
 {
-    current_task->state = TASK_SLEEPING;
-    current_task->activation_time = timer_get_time() + time_milisec;
+    sched_task_set_state(current_task, TASK_SLEEPING);
+    current_task->sched.activation_time = timer_get_time() + time_milisec;
 
     task_yield();
 }
@@ -435,14 +385,14 @@ void task_lock()
 void task_unlock()
 {
     locked--;
-    if (locked == 0 && skipped_scheduler_tick)
+    if (locked == 0 && skipped_tasks_tick)
     {
         task_yield();
     }
 }
 
 //  Вызывается из прерывания таймера
-void scheduler_tick(uint32_t time_milisec)
+void tasks_tick(uint32_t time_milisec)
 {
     static uint32_t time_prev_activated = 0;
 
@@ -455,11 +405,11 @@ void scheduler_tick(uint32_t time_milisec)
 
     if (locked)
     {
-        skipped_scheduler_tick = true;
+        skipped_tasks_tick = true;
         return;
     }
 
-    task_t *next = task_get_next();
+    task_t *next = sched_task_get_next(current_task);
     if (next != current_task)
     {
         need_reschedule = 1;
@@ -515,9 +465,9 @@ void task_input_unregister(task_t *task, uint32_t channel)
 
 void task_set_state_waiting(uint32_t pid)
 {
-    tasks[pid].state = TASK_WAITING;
+    sched_task_set_state(&tasks[pid], TASK_WAITING);
 }
 void task_set_state_ready(uint32_t pid)
 {
-    tasks[pid].state = TASK_READY;
+    sched_task_set_state(&tasks[pid], TASK_READY);
 }
