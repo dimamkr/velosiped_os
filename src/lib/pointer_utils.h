@@ -1,6 +1,8 @@
 #ifndef PTR_UTILS
 #define PTR_UTILS
 
+#include "types.h"
+
 // СОГЛАШЕНИЕ О ВЫСОКОУРОВНЕВЫХ СТРУКТУРАХ ДАННЫХ
 // тип данных type_t
 // type_destroy - деструктор
@@ -35,5 +37,11 @@ static inline __attribute__((always_inline)) void __cleanup_4_autofree_ptr(void 
 // для обычной очистки (без деструктора)
 #define AUTOFREE_PTR(type) \
     __attribute__((cleanup(__cleanup_4_autofree_ptr))) type *
+
+#define container_of(cont_ptr, parent_type, cont_membr)                                            \
+    ({                                                                                             \
+        const typeof((((parent_type *)0)->cont_membr)) *__ptr_check = cont_ptr; /*проверка типов*/ \
+        (parent_type *)((uint8_t *)__ptr_check - __builtin_offsetof(parent_type, cont_membr));     \
+    })
 
 #endif
