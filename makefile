@@ -109,6 +109,7 @@ KERNEL_LDFLAGS = -m elf_i386 -T $(LINKER_SCRIPT) -nostdlib
 ACPICA_CFLAGS  = -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-sign-compare
 ACPICA_CFLAGS += -ffreestanding -nostdlib -fno-builtin
 ACPICA_CFLAGS += -I$(ACPICA_INCLUDE) -I$(ACPICA_DIR)/components
+ACPICA_CFLAGS += -O2 # ни в коем случае нельзя собирать с O0
 
 # ---- Пользовательские программы ----
 USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdinc -nostdlib -nostartfiles \
@@ -214,7 +215,7 @@ QEMU_FLAGS_DEBUG = -device ahci,id=ahci \
 	    -display sdl -vga std \
 		-monitor unix:/tmp/qemu-monitor.sock,server,nowait\
 		 -s -S -d int -D $(BUILD_LOGS_DIR)/interrupts.log\
-	    > $(QEMU_LOG) 2>&1 & echo $$! > /tmp/qemu.pid
+	    > $(QEMU_LOG)
 
 QEMU_LOG = $(BUILD_LOGS_DIR)/qemu.log
 
@@ -238,7 +239,7 @@ run: all
 
 run-debug: all | $(BUILD_LOGS_DIR)
 	@echo "Starting QEMU with GDB server (port 1234)..."
-	@(nohup $(QEMU) $(QEMU_FLAGS_DEBUG))
+	@setsid $(QEMU) $(QEMU_FLAGS_DEBUG) > $(QEMU_LOG) 2>&1 < /dev/null & echo $$! > /tmp/qemu.pid
 	@timeout=0; \
 	while ! nc -z localhost 1234 2>/dev/null; do \
 	    sleep 0.1; \
