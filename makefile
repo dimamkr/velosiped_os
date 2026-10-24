@@ -19,6 +19,8 @@ NASM    = nasm
 LD      = ld
 OBJCOPY = objcopy
 RM      = rm -rf
+AR = ar
+ARFLAGS = rcs
 
 # libgcc для 32-битных рантайм-хелперов (__udivdi3, __udivmoddi4 и т.п.)
 LIBGCC  = $(shell $(CC) -m32 -print-libgcc-file-name)
@@ -59,8 +61,8 @@ BUILD_DIR        = $(BUILD_DIR_ROOT)/$(BUILD_MODE)
 BUILD_BOOT_DIR   = $(BUILD_DIR)/boot
 BUILD_KERNEL_DIR = $(BUILD_DIR)/src
 BUILD_ACPI_DIR   = $(BUILD_KERNEL_DIR)/third_party/acpica
-BUILD_USER_BIN   = $(BUILD_DIR)/userspace/bin
-BUILD_USER_LIB =  $(BUILD_DIR)/userspace/lib
+BUILD_USER_BIN_DIR   = $(BUILD_DIR)/userspace/bin
+BUILD_USER_LIB_DIR =  $(BUILD_DIR)/userspace/lib
 BUILD_LOGS_DIR   = $(BUILD_DIR)/LOGS
 
 # ---- Picolibc ----
@@ -73,6 +75,8 @@ PICOLIBC_INCLUDE_DIR = $(PICOLIBC_INSTALL_DIR)/include
 PICOLIBC_LIB_DIR     = $(PICOLIBC_INSTALL_DIR)/lib
 PICOLIBC_LIBC        = $(PICOLIBC_LIB_DIR)/libc.a
 PICOLIBC_LIBM        = $(PICOLIBC_LIB_DIR)/libm.a
+
+USER_LIB = $(BUILD_USER_LIB_DIR)/libvelosiped.a
 
 # ============================================================
 #  Автоматический сбор include-путей
@@ -115,16 +119,16 @@ ACPICA_CFLAGS += -O2 # ни в коем случае нельзя собират
 USER_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdinc -nostdlib -nostartfiles \
                      -nodefaultlibs -static -no-pie -fno-pic -fno-builtin \
                      -fno-stack-protector -msse -mfpmath=sse \
-                     -I$(PICOLIBC_INCLUDE_DIR) \
-                     -I$(USER_INC_DIR) \
-                     -isystem $(GCC_INCLUDE_DIR) \
+                     -I $(abspath $(PICOLIBC_INCLUDE_DIR)) \
+                     -I $(abspath $(USER_INC_DIR)) \
+                     -isystem $(abspath $(GCC_INCLUDE_DIR)) \
                      -Wall -Wextra -Werror -MMD -MP
 USER_CFLAGS_RELEASE = $(USER_CFLAGS_COMMON) -O2
 USER_CFLAGS_DEBUG   = $(USER_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
 
 USER_NASM = -f elf32
 
-USER_LDFLAGS = -m elf_i386 -T $(USER_LINKER_SCRIPT) -nostdlib
+USER_LDFLAGS = -m elf_i386 -T $(abspath $(USER_LINKER_SCRIPT)) -nostdlib
 
 # объявление флагов для текущей сборки
 ifeq ($(BUILD_MODE),debug)
@@ -174,24 +178,24 @@ BOOT2_SRC = $(BOOT_SRC_DIR)/boot2.asm
 BOOT1_BIN = $(BUILD_BOOT_DIR)/boot1.bin
 BOOT2_BIN = $(BUILD_BOOT_DIR)/boot2.bin
 
-# ---- Пользовательские программы ----
-USER_C_SOURCES = $(wildcard $(USER_BIN_DIR)/*.c)
-USER_OBJECTS   = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.o,   $(USER_C_SOURCES))
-USER_BINARIES  = $(patsubst $(USER_BIN_DIR)/%.c, $(BUILD_USER_BIN)/%.elf, $(USER_C_SOURCES))
-
 # ---- Пользовательская lib ----
 USER_LIB_C_SOURCES := $(shell find $(USER_LIB_DIR) -name '*.c')
 USER_LIB_ASM_SOURCES := $(shell find $(USER_LIB_DIR) -name '*.asm')
 
+# ---- Пользовательские программы ----
+USER_PROG_NAMES := $(notdir $(shell find $(USER_BIN_DIR) -mindepth 1 -maxdepth 1 -type d))
+# список выходных .elf файлов по относ пути
+USER_BINARIES := $(addprefix $(BUILD_USER_BIN_DIR)/, $(addsuffix .elf, $(USER_PROG_NAMES)))
+
 # Зеркалируем относительные пути
-USER_LIB_C_OBJECTS   := $(patsubst $(USER_LIB_DIR)/%.c,   $(BUILD_USER_LIB)/%.o, $(USER_LIB_C_SOURCES))
-USER_LIB_ASM_OBJECTS := $(patsubst $(USER_LIB_DIR)/%.asm, $(BUILD_USER_LIB)/%.o, $(USER_LIB_ASM_SOURCES))
+USER_LIB_C_OBJECTS   := $(patsubst $(USER_LIB_DIR)/%.c,   $(BUILD_USER_LIB_DIR)/%.o, $(USER_LIB_C_SOURCES))
+USER_LIB_ASM_OBJECTS := $(patsubst $(USER_LIB_DIR)/%.asm, $(BUILD_USER_LIB_DIR)/%.o, $(USER_LIB_ASM_SOURCES))
 
 USER_LIB_OBJECTS = $(USER_LIB_C_OBJECTS) $(USER_LIB_ASM_OBJECTS)
 
 # ---- Зависимости ----
 KERNEL_DEPS = $(KERNEL_C_OBJECTS:.o=.d) $(ACPICA_OBJECTS:.o=.d)
-USER_DEPS   = $(USER_OBJECTS:.o=.d) $(USER_LIB_C_OBJECTS:.o=.d)
+USER_DEPS   = $(USER_LIB_C_OBJECTS:.o=.d)
 
 # ---- Образ ----
 IMAGE = $(BUILD_DIR)/myos.img
@@ -261,8 +265,8 @@ clean:
 #  Каталоги
 # ============================================================
 
-$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN) \
-$(BUILD_USER_LIB) $(BUILD_LOGS_DIR) $(BUILD_PICOLIBC_DIR):
+$(BUILD_DIR) $(BUILD_BOOT_DIR) $(BUILD_KERNEL_DIR) $(BUILD_ACPI_DIR) $(BUILD_USER_BIN_DIR) \
+$(BUILD_USER_LIB_DIR) $(BUILD_LOGS_DIR) $(BUILD_PICOLIBC_DIR):
 	@mkdir -p $@
 
 # ============================================================
@@ -337,35 +341,43 @@ picolibc_build: $(PICOLIBC_LIBC)
 #  Пользовательский lib
 # ============================================================
 
-$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.asm $(PICOLIBC_LIBC) | $(BUILD_USER_LIB)
+$(BUILD_USER_LIB_DIR)/%.o: $(USER_LIB_DIR)/%.asm $(PICOLIBC_LIBC) | $(BUILD_USER_LIB_DIR)
 	@mkdir -p $(dir $@)
 	@echo "  [UASM]   $<"
 	$(NASM) $(USER_NASM) -o $@ $<
 
-$(BUILD_USER_LIB)/%.o: $(USER_LIB_DIR)/%.c $(PICOLIBC_LIBC) | $(BUILD_USER_LIB)
+$(BUILD_USER_LIB_DIR)/%.o: $(USER_LIB_DIR)/%.c $(PICOLIBC_LIBC) | $(BUILD_USER_LIB_DIR)
 	@mkdir -p $(dir $@)
 	@echo "  [UCC]   $<"
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
+
+$(USER_LIB): $(USER_LIB_OBJECTS) | $(BUILD_USER_LIB_DIR)
+	$(AR) $(ARFLAGS) $@ $^
 
 # ============================================================
 #  Пользовательские программы
 # ============================================================
 
-$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.asm $(PICOLIBC_LIBC) | $(BUILD_USER_BIN)
-	@mkdir -p $(dir $@)
-	@echo "  [UASM]   $<"
-	$(NASM) $(USER_NASM) -o $@ $<
+# цель заставляющая мейк каждый раз заново выполнять то, что от нее зависит
+FORCE:
 
-$(BUILD_USER_BIN)/%.o: $(USER_BIN_DIR)/%.c $(PICOLIBC_LIBC) | $(BUILD_USER_BIN)
-	@mkdir -p $(dir $@)
-	@echo "  [UCC]   $<"
-	$(CC) $(USER_CFLAGS) -c -o $@ $<
+# главное правило: собираем каждый .elf, вызывая сабмейк в его папке
+$(USER_BINARIES): $(USER_LIB) FORCE | $(BUILD_USER_BIN_DIR)
+	@echo "  [UMAKE]  $(notdir $(basename $@))"
+	@$(MAKE) -C $(USER_BIN_DIR)/$(notdir $(basename $@)) \
+		CC="$(CC)" \
+		LD="$(LD)" \
+		NASM="$(NASM)" \
+		CFLAGS="$(USER_CFLAGS)" \
+		NASMFLAGS="$(USER_NASM)" \
+		LDFLAGS="$(USER_LDFLAGS)" \
+		LIBS="--start-group $(abspath $(USER_LIB)) $(abspath $(PICOLIBC_LIBC)) $(abspath $(PICOLIBC_LIBM)) $(LIBGCC) --end-group" \
+		PROG_NAME="$(notdir $(basename $@))" \
+		PROG_SRC_DIR="$(abspath $(USER_BIN_DIR)/$(notdir $(basename $@)))" \
+		PROG_TARGET="$(abspath $@)"
 
-# линкуется с lib
-$(BUILD_USER_BIN)/%.elf: $(BUILD_USER_BIN)/%.o $(USER_LIB_OBJECTS) \
-                         $(USER_LINKER_SCRIPT) $(PICOLIBC_LIBC)
-	@echo "  [ULD]   $@"
-	$(LD) $(USER_LDFLAGS) -o $@ $< $(USER_LIB_OBJECTS) $(PICOLIBC_LIBC) $(LIBGCC)
+# сборка всех пользовательских программ разом
+user_programs: $(USER_BINARIES)
 
 # ============================================================
 #  Диск
@@ -432,4 +444,4 @@ $(IMAGE): $(BOOT1_BIN) $(BOOT2_BIN) \
 
 # Не удалять промежуточные .o при ошибке — иначе .d теряются
 .PRECIOUS: $(KERNEL_C_OBJECTS) $(KERNEL_ASM_OBJECTS) $(ACPICA_OBJECTS) \
-           $(USER_OBJECTS) $(USER_LIB_OBJECTS)
+           $(USER_LIB_OBJECTS)
