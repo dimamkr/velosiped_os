@@ -115,8 +115,8 @@ static void update_modifiers(uint8_t scancode, bool pressed)
 static uint8_t scancode_to_keycode(uint8_t scancode, uint8_t modifiers)
 {
     // Отпускание игнорируем
-    if (scancode & 0x80)
-        return 0;
+    // if (scancode & 0x80)
+    //     return 0;
 
     bool shift = (modifiers & MOD_SHIFT) != 0;
     bool capslock = (modifiers & MOD_CAPSLOCK) != 0;
@@ -215,6 +215,8 @@ void keyboard_top_callback(isr_data_t data)
     }
 }
 
+// critical
+// unsafe
 // TODO разобраться и исправить логику
 void keyboard_bottom_callback(isr_data_t data)
 {
@@ -228,6 +230,10 @@ void keyboard_bottom_callback(isr_data_t data)
         update_modifiers(scancode, ev.pressed);
         ev.modifiers = current_modifiers;
         ev.keycode = scancode_to_keycode(scancode, current_modifiers);
+
+        // Отрезаем бит отпускания, чтобы получить чистый скан-код
+        uint8_t base_scancode = scancode & 0x7F;
+        ev.keycode = scancode_to_keycode(base_scancode, current_modifiers);
 
         if (ev.keycode != 0)
         {
