@@ -32,7 +32,7 @@ typedef struct struct_task
     fpu_context_t *fpu_context;
 
     // пользовательская куча, память
-    uint32_t brk;     // нижняя граница кучи (растёт вверх)
+    uint32_t brk;     // куча заканчивается тут
     uint32_t brk_end; // замаплено до этого адреса
     uint32_t _task_mmap_next;
 } task_t;

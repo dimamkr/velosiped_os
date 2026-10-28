@@ -13,28 +13,23 @@ int sys_brk(uint32_t new_brk, DECL_ARGS(5))
     UNUSD_ARGS(5)
     task_t *t = current_task;
 
-    // первый вызов — инициализация
-    if (t->brk == 0)
-    {
-        t->brk = USER_HEAP_START;
-        t->brk_end = USER_HEAP_START;
-    }
-
     if (new_brk == 0)
         return t->brk;
 
-    if (new_brk < USER_HEAP_START || new_brk > USER_HEAP_LIMIT)
+    uint32_t new_end = (new_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (new_brk < t->brk || new_end > USER_HEAP_LIMIT)
         return t->brk;
 
+    // critical
     // TODO уменьшение размера кучи
-
-    // маппим страницы до округлённого вверх new_brk
-    uint32_t new_end = (new_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
     if (new_end > t->brk_end)
     {
+        // маппим страницы до округлённого вверх new_brk
         uint32_t start = t->brk_end;
         uint32_t size = new_end - start;
+        // critical
+        // TODO написать выделение с занулением и сделать это в vmm
         page_dict_map_interval(t->page_dict, t->brk_end, size, PAGE_USER_FLAGS);
         t->brk_end = new_end;
     }

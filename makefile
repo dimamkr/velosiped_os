@@ -319,6 +319,7 @@ $(BUILD_PICOLIBC_DIR)/build.ninja: $(PICOLIBC_CROSS) | $(BUILD_PICOLIBC_DIR)
 	    --cross-file $(abspath $(PICOLIBC_CROSS)) \
 	    -Dpicocrt=false \
 	    -Dsemihost=false \
+		-Dinternal-heap=0 \
 	    -Dposix-console=false \
 	    -Dtests=false \
 	    -Dmultilib=false \
@@ -328,7 +329,7 @@ $(BUILD_PICOLIBC_DIR)/build.ninja: $(PICOLIBC_CROSS) | $(BUILD_PICOLIBC_DIR)
 	    -Denable-malloc=true \
 	    -Dprefix=$(abspath $(PICOLIBC_INSTALL_DIR)) \
 	    -Dincludedir=include \
-	    -Dlibdir=lib
+	    -Dlibdir=lib \
 
 $(PICOLIBC_LIBC): $(BUILD_PICOLIBC_DIR)/build.ninja
 	@echo "  [NINJA] picolibc build & install"
@@ -370,7 +371,7 @@ $(USER_BINARIES): $(USER_LIB) FORCE | $(BUILD_USER_BIN_DIR)
 		NASM="$(NASM)" \
 		CFLAGS="$(USER_CFLAGS)" \
 		NASMFLAGS="$(USER_NASM)" \
-		LDFLAGS="$(USER_LDFLAGS)" \
+		LDFLAGS="$(USER_LDFLAGS) --wrap=sbrk" \
 		LIBS="--start-group $(abspath $(USER_LIB)) $(abspath $(PICOLIBC_LIBC)) $(abspath $(PICOLIBC_LIBM)) $(LIBGCC) --end-group" \
 		PROG_NAME="$(notdir $(basename $@))" \
 		PROG_SRC_DIR="$(abspath $(USER_BIN_DIR)/$(notdir $(basename $@)))" \

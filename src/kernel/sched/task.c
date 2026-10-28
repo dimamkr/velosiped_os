@@ -132,11 +132,6 @@ static inline task_t *_task_init_prefix(uint32_t stack_size, page_dict_t *page_d
     // инициализация контекста fpu
     task->fpu_context = fpu_context_create();
 
-    // инициализация пользовательской кучи
-    task->brk = 0;
-    task->brk_end = 0;
-    task->_task_mmap_next = 0;
-
     return task;
 }
 
@@ -184,9 +179,14 @@ static inline task_t *_task_init_kernel(void (*entry)(void *), void *arg, uint32
 
 // пользовательский стек уже выделен и в нем уже лежат аргументы
 static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack_size,
-                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids)
+                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids, uint32_t brk_start)
 {
     task_t *task = _task_init_prefix(kernel_stack_size, page_dict, input_sids);
+
+    // инициализация пользовательской кучи
+    task->brk = brk_start;
+    task->brk_end = brk_start;
+    task->_task_mmap_next = 0;
 
     uint32_t *sp = (uint32_t *)_STACK_TOP(task);
 
@@ -253,9 +253,9 @@ void task_create_kthread(void (*entry)(void *), void *arg, uint32_t stack_size, 
 }
 
 static void _task_create_user_process(uint32_t user_entry, uint32_t kernel_stack_size,
-                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids)
+                                      page_dict_t *page_dict, uint32_t user_stack_top, uint32_t *input_sids, uint32_t brk_start)
 {
-    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top, input_sids);
+    task_t *task = _task_init_user(user_entry, kernel_stack_size, page_dict, user_stack_top, input_sids, brk_start);
     sched_task_add_new(task);
 }
 
@@ -264,15 +264,17 @@ bool_t task_create_user_process_from_elf(void *elf_data, int argc, char **argv, 
                                          uint32_t user_stack_size, uint32_t *input_sids)
 {
     uint32_t entry;
+    uint32_t end;
     page_dict_t *page_dict;
-    if (!elf_user_load(elf_data, &entry, &page_dict))
+    if (!elf_user_load(elf_data, &entry, &end, &page_dict))
     {
         return false;
     }
 
     uint32_t user_stack_top = vmm_user_stack_create(page_dict, argc, argv, user_stack_size);
 
-    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top, input_sids);
+    // начало кучи выровнено на 8 (требование picolibc)
+    _task_create_user_process(entry, kernel_stack_size, page_dict, user_stack_top, input_sids, (end + 7) & ~(8));
     return true;
 }
 
