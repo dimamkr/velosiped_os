@@ -1,6 +1,6 @@
 #include "_syscall_tools.h"
 #include "task.h"
-#include "paging.h"
+#include "vmm.h"
 #include "ram.h"
 #include "system.h"
 
@@ -17,20 +17,23 @@ int sys_brk(uint32_t new_brk, DECL_ARGS(5))
         return t->brk;
 
     uint32_t new_end = (new_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    if (new_brk < t->brk || new_end > USER_HEAP_LIMIT)
+    if (new_brk < current_task->brk_start || new_end > USER_HEAP_LIMIT)
         return t->brk;
 
-    // critical
-    // TODO уменьшение размера кучи
+    if (new_brk < t->brk && t->brk_end - new_end >= PAGE_SIZE)
+    {
+        uint32_t start = new_end;
+        uint32_t size = t->brk_end - new_end;
+        vmm_unmap_interval(start, size);
+        t->brk_end = new_end;
+    }
 
     if (new_end > t->brk_end)
     {
         // маппим страницы до округлённого вверх new_brk
         uint32_t start = t->brk_end;
         uint32_t size = new_end - start;
-        // critical
-        // TODO написать выделение с занулением и сделать это в vmm
-        page_dict_map_interval(t->page_dict, t->brk_end, size, PAGE_USER_FLAGS);
+        vmm_zmap_interval(t->brk_end, size, PAGE_USER_FLAGS);
         t->brk_end = new_end;
     }
 
@@ -76,7 +79,7 @@ int sys_mmap2(uint32_t addr, uint32_t len, uint32_t prot, uint32_t flags,
     if (addr < USER_MMAP_START || addr + len > USER_MMAP_LIMIT)
         return -1;
 
-    page_dict_map_interval(current_task->page_dict, addr, len, PAGE_USER_FLAGS);
+    vmm_zmap_interval(addr, len, PAGE_USER_FLAGS);
     return (int)addr;
 }
 

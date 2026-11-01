@@ -209,14 +209,11 @@ QEMU = qemu-system-i386
 QEMU_FLAGS_COMMON = -device ahci,id=ahci \
 	    -device ide-hd,drive=disk,bus=ahci.0 \
 	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
-	    -display sdl -vga std -m 256 -enable-kvm
+	    -display sdl -vga std -m 256
 
 QEMU_FLAGS_RELEASE = $(QEMU_FLAGS_COMMON) -enable-kvm
 
-QEMU_FLAGS_DEBUG = -device ahci,id=ahci \
-	    -device ide-hd,drive=disk,bus=ahci.0 \
-	    -drive format=raw,file=$(IMAGE),if=none,id=disk \
-	    -display sdl -vga std \
+QEMU_FLAGS_DEBUG = $(QEMU_FLAGS_COMMON) \
 		-monitor unix:/tmp/qemu-monitor.sock,server,nowait\
 		 -s -S -d int -D $(BUILD_LOGS_DIR)/interrupts.log\
 	    > $(QEMU_LOG)

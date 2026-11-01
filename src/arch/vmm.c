@@ -10,6 +10,8 @@
 page_dict_t *kernel_page_dict;
 extern task_t *current_task;
 
+// TODO перенести часть функци1 в .h и сделать static
+
 // обработчик page fault
 void page_fault_top_handler(isr_data_t registers)
 {
@@ -107,9 +109,31 @@ void *vmm_map_rw(uint32_t phys, uint32_t size)
     return vmm_map_special(phys, size, PAGE_PRESENT | PAGE_RW);
 }
 
-void vmm_unmap_page(void *virt_addr)
+void vmm_map_page(uint32_t virt_addr, uint32_t flags)
 {
-    page_dict_unmap_page(current_task->page_dict, (uint32_t)virt_addr);
+    page_dict_map_page(current_task->page_dict, virt_addr, flags);
+}
+
+void vmm_unmap_page(uint32_t virt_addr)
+{
+    page_dict_unmap_page(current_task->page_dict, virt_addr);
+}
+
+void vmm_map_interval(uint32_t virt_start, uint32_t size, uint32_t flags)
+{
+    page_dict_map_interval(current_task->page_dict, virt_start, size, flags);
+}
+
+void vmm_unmap_interval(uint32_t virt_start, uint32_t size)
+{
+    page_dict_unmap_interval(current_task->page_dict, virt_start, size);
+}
+
+void vmm_zmap_interval(uint32_t virt_start, uint32_t size, uint32_t flags)
+{
+    vmm_map_interval(virt_start, size, flags);
+    // TODO быстрый аналог memset
+    memset((void *)virt_start, 0, size);
 }
 
 // для создания процессов

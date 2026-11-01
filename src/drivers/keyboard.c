@@ -215,8 +215,8 @@ void keyboard_top_callback(isr_data_t data)
     }
 }
 
-// critical
-// unsafe
+// mcritical
+// munsafe
 // TODO разобраться и исправить логику
 void keyboard_bottom_callback(isr_data_t data)
 {

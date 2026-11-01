@@ -15,12 +15,16 @@ void *vmm_map_mmio(uint32_t phys, uint32_t size);
 void *vmm_map_framebuffer(uint32_t phys, uint32_t size);
 void *vmm_map_trampoline(uint32_t phys, uint32_t size);
 void *vmm_map_rw(uint32_t phys, uint32_t size);
+void vmm_map_page(uint32_t virt_addr, uint32_t flags);
+void vmm_unmap_page(uint32_t virt_addr);
+void vmm_map_interval(uint32_t virt_start, uint32_t size, uint32_t flags);
+void vmm_unmap_interval(uint32_t virt_start, uint32_t size);
+void vmm_zmap_interval(uint32_t virt_start, uint32_t size, uint32_t flags);
 
 page_dict_t *vmm_create_user(uint32_t size);
 page_dict_t *vmm_create_process_kernel_page_dict();
 // void vmm_create_process_memory_paging(page_dict_t *pd, uint32_t virt_start, uint32_t size, uint32_t align);
 // uint32_t vmm_create_process_stack_paging(page_dict_t *pd, uint32_t size, uint32_t align);
-void vmm_unmap_page(void *virt_addr);
 
 uint32_t vmm_user_stack_create(page_dict_t *page_dict, int argc, char **argv, uint32_t user_stack_size);
 

@@ -184,6 +184,7 @@ static inline task_t *_task_init_user(uint32_t user_entry, uint32_t kernel_stack
     task_t *task = _task_init_prefix(kernel_stack_size, page_dict, input_sids);
 
     // инициализация пользовательской кучи
+    task->brk_start = brk_start;
     task->brk = brk_start;
     task->brk_end = brk_start;
     task->_task_mmap_next = 0;
