@@ -309,14 +309,13 @@ bool_t terminal_print_path(argparse_command_t *command)
     if (!current_dir)
         return false;
 
-    konsole_printf("%s/", current_dir->filename);
+    konsole_printf("%s/", current_dir->header.filename);
 
     return true;
 }
 
 bool_t terminal_print_listdir(argparse_command_t *command)
 {
-    dynamic_array_t *listdir;
     char *pattern = NULL;
     bool_t ignore_case = false;
 
@@ -338,251 +337,189 @@ bool_t terminal_print_listdir(argparse_command_t *command)
         }
     }
 
-    listdir = vfs_find_files(current_dir, pattern, ignore_case);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (listdir == NULL)
+    if (result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(result));
+
         return false;
     }
 
-    // konsole_printf("%x\n", listdir);
+    vfs_file_t file_info;
+    uint32_t files_read;
 
-    if (listdir->elements_count != 0)
-        konsole_println("========");
-    else
+    for (vfs_search(searcher, &file_info, 1, &files_read);files_read > 0;vfs_search(searcher, &file_info, 1, &files_read))
     {
-        dynamic_array_destroy(listdir);
-        return false;
-    }
-
-    for (uint32_t i = 0; i < listdir->elements_count; i++)
-    {
-        vfs_file_t *file_info = dynamic_array_get_by_index(listdir, i);
-
-        konsole_printf("Filename: %s\n", file_info->filename);
+        konsole_printf("Filename: %s\n", file_info.header.filename);
 
         konsole_print("Attributes: ");
 
-        if (file_info->attributes & VFS_ATTRIBUTE_ARCHIVE)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_ARCHIVE)
             konsole_print("Archived ");
-        if (file_info->attributes & VFS_ATTRIBUTE_DIRECTORY)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_DIRECTORY)
             konsole_print("Directory ");
-        if (file_info->attributes & VFS_ATTRIBUTE_HIDDEN)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_HIDDEN)
             konsole_print("Hidden ");
-        if (file_info->attributes & VFS_ATTRIBUTE_READONLY)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_READONLY)
             konsole_print("Readonly ");
-        if (file_info->attributes & VFS_ATTRIBUTE_SYSTEM)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_SYSTEM)
             konsole_print("System ");
-        if (file_info->attributes & VFS_ATTRIBUTE_VOLUME_ID)
+        if (file_info.header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
             konsole_print("VolumeID ");
 
         konsole_println("");
 
         konsole_printf("Created at: %d-%d-%d %d:%d:%d\n",
-            file_info->creation_datetime.day,
-            file_info->creation_datetime.month,
-            file_info->creation_datetime.year,
-            file_info->creation_datetime.hour,
-            file_info->creation_datetime.minute,
-            file_info->creation_datetime.second);
+            file_info.header.creation_datetime.day,
+            file_info.header.creation_datetime.month,
+            file_info.header.creation_datetime.year,
+            file_info.header.creation_datetime.hour,
+            file_info.header.creation_datetime.minute,
+            file_info.header.creation_datetime.second);
 
         konsole_printf("Modified at: %d-%d-%d %d:%d:%d\n",
-            file_info->modify_datetime.day,
-            file_info->modify_datetime.month,
-            file_info->modify_datetime.year,
-            file_info->modify_datetime.hour,
-            file_info->modify_datetime.minute,
-            file_info->modify_datetime.second);
+            file_info.header.modify_datetime.day,
+            file_info.header.modify_datetime.month,
+            file_info.header.modify_datetime.year,
+            file_info.header.modify_datetime.hour,
+            file_info.header.modify_datetime.minute,
+            file_info.header.modify_datetime.second);
 
-        if (!(file_info->attributes & (VFS_ATTRIBUTE_DIRECTORY | VFS_ATTRIBUTE_VOLUME_ID)))
-            konsole_printf("Size: %d B\n", file_info->size);
+        if (!(file_info.header.attributes & (VFS_ATTRIBUTE_DIRECTORY | VFS_ATTRIBUTE_VOLUME_ID)))
+            konsole_printf("Size: %d B\n", file_info.header.size);
 
+        vfs_cleanup_file_obj(&file_info);
         konsole_println("========");
     }
 
-    vfs_destroy_files_array(listdir);
+    vfs_destroy_tree_searcher(searcher);
 
     return true;
 }
 
-vfs_file_t *terminal_resolve_filename(dynamic_array_t *files)
+vfs_file_t *terminal_resolve_filename(vfs_tree_searcher_t *searcher)
 {
     vfs_file_t *result = malloc(sizeof(vfs_file_t));
-    uint32_t choice = 0;
+    uint32_t choice = -1;
 
-    if (files->elements_count == 1)
-        memcpy(result, dynamic_array_get_top(files), sizeof(vfs_file_t));
-    else
+    vfs_file_t *buffer = malloc(sizeof(vfs_file_t) * TERMINAL_MAX_RESOLVE_BUFFER);
+    uint32_t buffer_size = TERMINAL_MAX_RESOLVE_BUFFER;
+    uint32_t buffer_read = 0;
+    uint32_t showed_files = 0;
+
+    while (true)
     {
-        konsole_println("Which one?");
+        vfs_result_e search_result = vfs_search(searcher, buffer + showed_files, TERMINAL_MAX_RESOLVE_BUFFER, &buffer_read);
 
-        for (uint32_t i = 0; i < files->elements_count; i++)
+        if (search_result != VFS_RESULT_OK)
         {
-            vfs_file_t *file = dynamic_array_get_by_index(files, i);
+            konsole_printf("Error: %s\n", vfs_get_result(search_result));
 
+            free(result);
+            free(buffer);
+            vfs_destroy_tree_searcher(searcher);
+
+            return NULL;
+        }
+
+        if (buffer_read == 0)
+        {
+            if (showed_files == 0)
+            {
+                free(result);
+                free(buffer);
+                vfs_destroy_tree_searcher(searcher);
+
+                konsole_println("Error: no such file or directory");
+
+                return NULL;
+            }
+            else
+                konsole_println("This is the last page");
+        }
+        else if (buffer_read == 1 && showed_files == 0)
+        {
+            memcpy(result, buffer, sizeof(vfs_file_t));
+            free(buffer);
+            vfs_destroy_tree_searcher(searcher);
+
+            return result;
+        }
+
+        if (showed_files == 0)
+            konsole_println("Which one?");
+
+        for (uint32_t i = showed_files;i < showed_files + buffer_read;i++)
+        {
             konsole_printf("[%d]: '%s' (%s), created at %d-%d-%d %d:%d:%d",
-                           i,
-                           file->filename,
-                           file->attributes & VFS_ATTRIBUTE_DIRECTORY ? "dir" : "file",
-                           file->creation_datetime.day,
-                           file->creation_datetime.month,
-                           file->creation_datetime.year,
-                           file->creation_datetime.hour,
-                           file->creation_datetime.minute,
-                           file->creation_datetime.second);
+                        i,
+                        buffer[i].header.filename,
+                        buffer[i].header.attributes & VFS_ATTRIBUTE_DIRECTORY ? "dir" : "file",
+                        buffer[i].header.creation_datetime.day,
+                        buffer[i].header.creation_datetime.month,
+                        buffer[i].header.creation_datetime.year,
+                        buffer[i].header.creation_datetime.hour,
+                        buffer[i].header.creation_datetime.minute,
+                        buffer[i].header.creation_datetime.second);
 
-            if (!(file->attributes & VFS_ATTRIBUTE_DIRECTORY))
-                konsole_printf(", size: %d B", file->size);
+            if (!(buffer[i].header.attributes & VFS_ATTRIBUTE_DIRECTORY))
+                konsole_printf(", size: %d B", buffer[i].header.size);
 
             konsole_println("");
         }
 
-        konsole_print("?>");
+        showed_files += buffer_read;
 
+        if (buffer_read == TERMINAL_MAX_RESOLVE_BUFFER)
+        {
+            buffer_size += TERMINAL_MAX_RESOLVE_BUFFER;
+            buffer = realloc(buffer, buffer_size * sizeof(vfs_file_t));
+            konsole_println("Press enter to next page");
+        }
+
+        konsole_print("?>");
         const char *choice_str = terminal_get_input_line();
 
         if (choice_str == NULL)
         {
             free(result);
             result = NULL;
+            break;
         }
+        else if (*choice_str == '\0')
+            continue;
         else
         {
             choice = strtoul(choice_str, NULL, 10);
 
-            if (choice != -1 && choice < files->elements_count)
-                memcpy(result, dynamic_array_get_by_index(files, choice), sizeof(vfs_file_t));
+            if (choice != -1 && choice < showed_files)
+            {
+                memcpy(result, buffer + choice, sizeof(vfs_file_t));
+                break;
+            }
             else
             {
                 konsole_println("Error: invalid option");
                 free(result);
                 result = NULL;
+                break;
             }
         }
     }
 
-    for (uint32_t i = 0; i < files->elements_count; i++)
+    for (uint32_t i = 0; i < showed_files; i++)
     {
         if (i == choice)
             continue;
-        vfs_file_t *file = dynamic_array_get_by_index(files, i);
-        vfs_cleanup_file_obj(file);
+        
+        vfs_cleanup_file_obj(buffer + i);
     }
 
-    dynamic_array_destroy(files);
-
-    return result;
-}
-
-bool_t terminal_view(argparse_command_t *command)
-{
-    if (!current_dir)
-    {
-        konsole_println("Error: root is empty");
-        return false;
-    }
-
-    uint32_t start_pos = 0;
-    uint32_t bytes_count = 0;
-    char *pattern = NULL;
-    bool_t hex = false;
-
-    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
-    {
-        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
-
-        if (arg->value == NULL)
-            pattern = arg->name;
-        else if (strcmp(arg->name, "start") == 0)
-            start_pos = strtoul(arg->value, NULL, 10);
-        else if (strcmp(arg->name, "bytes") == 0)
-            bytes_count = strtoul(arg->value, NULL, 10);
-        else if (strcmp(arg->name, "format") == 0)
-        {
-            if (strcmp(arg->value, "hex") == 0)
-                hex = true;
-            else if (strcmp(arg->value, "text") == 0)
-                hex = false;
-            else
-            {
-                konsole_println("Error: unknown format");
-                return false;
-            }
-        }
-    }
-
-    dynamic_array_t *files = vfs_find_files(current_dir, pattern, false);
-
-    if (files == NULL)
-    {
-        konsole_println("Error: filesystem error");
-        return false;
-    }
-
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such file");
-        dynamic_array_destroy(files);
-        return false;
-    }
-
-    vfs_file_t *file = terminal_resolve_filename(files);
-
-    if (file == NULL)
-    {
-        return false;
-    }
-    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
-    {
-        vfs_cleanup_file_obj(file);
-        free(file);
-        konsole_println("Error: it isn't file");
-        return false;
-    }
-    else if (file->size == 0)
-    {
-        vfs_cleanup_file_obj(file);
-        free(file);
-        return true;
-    }
-
-    uint32_t buffer_size = bytes_count == 0 ? file->size + 1 : min(bytes_count, file->size) + 1;
-    unsigned char *buffer = malloc(buffer_size);
-    buffer[buffer_size - 1] = '\0';
-
-    vfs_stream_t *stream = vfs_open(file, VFS_FLAG_READ);
-
-    if (start_pos > 0)
-        vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
-
-    if (stream == NULL)
-    {
-        vfs_cleanup_file_obj(file);
-        free(file);
-        konsole_println("Error: filesystem error");
-        return false;
-    }
-
-    vfs_read(stream, buffer, buffer_size - 1);
-
-    if (hex)
-    {
-        for (uint32_t i = 0; i < buffer_size - 1; i++)
-            konsole_printf("%x ", (uint32_t)buffer[i]);
-        konsole_println("");
-    }
-    else
-    {
-        konsole_println(buffer);
-    }
-
-    vfs_close(stream);
-    vfs_cleanup_file_obj(file);
-    free(file);
     free(buffer);
 
-    return true;
+    return result;
 }
 
 bool_t terminal_change_dir(argparse_command_t *command)
@@ -622,39 +559,174 @@ bool_t terminal_change_dir(argparse_command_t *command)
         return true;
     }
 
-    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (files == NULL)
+    if (searcher_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
         return false;
     }
 
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such directory");
-        dynamic_array_destroy(files);
-        return false;
-    }
-
-    vfs_file_t *dir = terminal_resolve_filename(files);
+    vfs_file_t *dir = terminal_resolve_filename(searcher);
 
     if (dir == NULL)
     {
         return false;
     }
-    if (!(dir->attributes & VFS_ATTRIBUTE_DIRECTORY))
+    if (!(dir->header.attributes & VFS_ATTRIBUTE_DIRECTORY))
     {
+        vfs_cleanup_file_obj(dir);
         free(dir);
         konsole_println("Error: it isn't directory");
+
         return false;
     }
 
     vfs_cleanup_file_obj(current_dir);
     vfs_copy_file_obj(current_dir, dir);
-
     vfs_cleanup_file_obj(dir);
     free(dir);
+
+    return true;
+}
+
+bool_t terminal_view(argparse_command_t *command)
+{
+    if (!current_dir)
+    {
+        konsole_println("Error: root is empty");
+        return false;
+    }
+
+    uint32_t start_pos = 0;
+    uint32_t bytes_count = 0;
+    char *pattern = NULL;
+    bool_t hex = false;
+    bool_t ignore_case = false;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == NULL)
+            pattern = arg->name;
+        else if (strcmp(arg->name, "start") == 0)
+            start_pos = strtoul(arg->value, NULL, 10);
+        else if (strcmp(arg->name, "bytes") == 0)
+            bytes_count = strtoul(arg->value, NULL, 10);
+        else if (strcmp(arg->name, "format") == 0)
+        {
+            if (strcmp(arg->value, "hex") == 0)
+                hex = true;
+            else if (strcmp(arg->value, "text") == 0)
+                hex = false;
+            else
+            {
+                konsole_println("Error: unknown format");
+                return false;
+            }
+        }
+        else if (strcmp(arg->name, "opt") == 0)
+        {
+            if (strcmp(arg->value, "ignore-case") == 0)
+                ignore_case = true;
+            else
+            {
+                konsole_printf("Error: invalid option '%s'\n", arg->value);
+                return false;
+            }
+        }
+    }
+
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+
+    if (searcher_result != VFS_RESULT_OK)
+    {
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
+        return false;
+    }
+
+    vfs_file_t *file = terminal_resolve_filename(searcher);
+
+    if (file == NULL)
+    {
+        return false;
+    }
+    if (file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
+    {
+        vfs_cleanup_file_obj(file);
+        free(file);
+        konsole_println("Error: it isn't file");
+
+        return false;
+    }
+    else if (file->header.size == 0)
+    {
+        vfs_cleanup_file_obj(file);
+        free(file);
+
+        return true;
+    }
+
+    vfs_stream_t *stream;
+    vfs_result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
+    vfs_cleanup_file_obj(file);
+    free(file);
+
+    if (open_result != VFS_RESULT_OK)
+    {
+        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+
+        return false;
+    }
+
+    uint32_t buffer_size = bytes_count == 0 ? file->header.size + 1 : min(bytes_count, file->header.size) + 1;
+    unsigned char *buffer = malloc(buffer_size);
+    buffer[buffer_size - 1] = '\0';
+
+    if (start_pos > 0)
+    {
+        vfs_result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+
+        if (seek_result != VFS_RESULT_OK)
+        {
+            vfs_close(stream);
+            free(buffer);
+
+            konsole_printf("Error: %s\n", vfs_get_result(seek_result));
+
+            return false;
+        }
+    }
+
+    vfs_result_e read_result = vfs_read(stream, buffer, buffer_size - 1, NULL);
+    if (read_result != VFS_RESULT_OK)
+    {
+        vfs_close(stream);
+        free(buffer);
+
+        konsole_printf("Error: %s\n", vfs_get_result(read_result));
+
+        return false;
+    }
+
+    if (hex)
+    {
+        for (uint32_t i = 0; i < buffer_size - 1; i++)
+            konsole_printf("%x ", (uint32_t)buffer[i]);
+        konsole_println("");
+    }
+    else
+    {
+        konsole_println(buffer);
+    }
+
+    vfs_close(stream);
+    free(buffer);
 
     return true;
 }
@@ -709,48 +781,55 @@ bool_t terminal_write(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (files == NULL)
+    if (searcher_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
         return false;
     }
 
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such file");
-        dynamic_array_destroy(files);
-        return false;
-    }
-
-    vfs_file_t *file = terminal_resolve_filename(files);
+    vfs_file_t *file = terminal_resolve_filename(searcher);
 
     if (file == NULL)
     {
         return false;
     }
-    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
+    if (file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
     {
         free(file);
         konsole_println("Error: it isn't file");
         return false;
     }
 
-    konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
+    vfs_stream_t *stream;
+    vfs_result_e open_result = vfs_open(file, flags, &stream);
+    vfs_cleanup_file_obj(file);
+    free(file);
 
-    vfs_stream_t *stream = vfs_open(file, flags);
-
-    if (stream == NULL)
+    if (open_result != VFS_RESULT_OK)
     {
-        vfs_cleanup_file_obj(file);
-        free(file);
-        konsole_println("Error: filesystem error");
+        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+
         return false;
     }
 
     if (start_pos > 0)
-        vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+    {
+        vfs_result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+
+        if (seek_result != VFS_RESULT_OK)
+        {
+            vfs_close(stream);
+            konsole_printf("Error: %s\n", vfs_get_result(seek_result));
+
+            return false;
+        }
+    }
+
+    konsole_println("Write text, press Ctrl+C on new line to exit...\n===================");
 
     const unsigned char *input_line;
 
@@ -806,7 +885,17 @@ bool_t terminal_write(argparse_command_t *command)
                     break;
             }
 
-            vfs_write(stream, buffer, buffer_ind);
+            vfs_result_e write_result = vfs_write(stream, buffer, buffer_ind, NULL);
+
+            if (write_result != VFS_RESULT_OK)
+            {
+                free(buffer);
+                vfs_close(stream);
+
+                konsole_printf("Error: %s\n", vfs_get_result(write_result));
+
+                return false;
+            }
         }
 
         free(buffer);
@@ -815,16 +904,31 @@ bool_t terminal_write(argparse_command_t *command)
     {
         while (input_line = terminal_get_input_line())
         {
-            vfs_write(stream, (void*)input_line, strlen(input_line));
-            vfs_write(stream, (void*)"\n", 1);
+            vfs_result_e write_result = vfs_write(stream, (void*)input_line, strlen(input_line), NULL);
+
+            if (write_result != VFS_RESULT_OK)
+            {
+                vfs_close(stream);
+                konsole_printf("Error: %s\n", vfs_get_result(write_result));
+
+                return false;
+            }
+
+            write_result = vfs_write(stream, (void*)"\n", 1, NULL);
+
+            if (write_result != VFS_RESULT_OK)
+            {
+                vfs_close(stream);
+                konsole_printf("Error: %s\n", vfs_get_result(write_result), NULL);
+
+                return false;
+            }
         }
     }
 
     konsole_println("===================");
 
     vfs_close(stream);
-    vfs_cleanup_file_obj(file);
-    free(file);
 
     konsole_println("Success");
 
@@ -874,9 +978,12 @@ bool_t terminal_newfile(argparse_command_t *command)
         return false;
     }
 
-    if (!vfs_newfile(current_dir, filename, attributes, NULL))
+    vfs_result_e newfile_result = vfs_newfile(current_dir, filename, attributes, NULL);
+
+    if (newfile_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: filesystem error");
+        konsole_printf("Error: %s\n", vfs_get_result(newfile_result));
+
         return false;
     }
 
@@ -922,9 +1029,12 @@ bool_t terminal_newdir(argparse_command_t *command)
         return false;
     }
 
-    if (!vfs_newdir(current_dir, dirname, attributes, NULL))
+    vfs_result_e newdir_result = vfs_newdir(current_dir, dirname, attributes, NULL);
+
+    if (newdir_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: filesystem error");
+        konsole_printf("Error: %s\n", vfs_get_result(newdir_result));
+
         return false;
     }
 
@@ -960,30 +1070,30 @@ bool_t terminal_remove(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (files == NULL)
+    if (searcher_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
         return false;
     }
 
-    if (files->elements_count == 0)
+    vfs_file_t file;
+    uint32_t files_read;
+
+    for (vfs_search(searcher, &file, 1, &files_read);files_read > 0;vfs_search(searcher, &file, 1, &files_read))
     {
-        konsole_println("Error: no files found");
-        dynamic_array_destroy(files);
-        return false;
+        vfs_result_e remove_result = vfs_remove(&file);
+
+        if (remove_result != VFS_RESULT_OK)
+            konsole_printf("Error: can't remove file '%s' (%s)\n", file.header.filename, vfs_get_result(remove_result));
+
+        vfs_cleanup_file_obj(&file);
     }
 
-    for (uint32_t i = 0; i < files->elements_count; i++)
-    {
-        vfs_file_t *file = dynamic_array_get_by_index(files, i);
-
-        if (!vfs_remove(file))
-            konsole_printf("Error: can not remove file '%s'\n", file->filename);
-    }
-
-    vfs_destroy_files_array(files);
+    vfs_destroy_tree_searcher(searcher);
 
     return true;
 }
@@ -1035,9 +1145,12 @@ bool_t terminal_mount(argparse_command_t *command)
         return false;
     }
 
-    if (vfs_mount_partition(disk_id, partition_num, mountpoint) == NULL)
+    vfs_result_e mount_result = vfs_mount_partition(disk_id, partition_num, mountpoint);
+
+    if (mount_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: filesystem error");
+        konsole_printf("Error: %s\n", vfs_get_result(mount_result));
+
         return false;
     }
 
@@ -1079,9 +1192,12 @@ bool_t terminal_umount(argparse_command_t *command)
 
     if (disk_id != 0xFF && partition_num != 0xFF)
     {
-        if (!vfs_unmount_partition(disk_id, partition_num, 2))
+        vfs_result_e umount_result = vfs_unmount_partition(disk_id, partition_num, VFS_DEFAULT_UMOUNT_THRESHOLD);
+
+        if (umount_result != VFS_RESULT_OK)
         {
-            konsole_println("Error: filesystem error");
+            konsole_printf("Error: %s\n", vfs_get_result(umount_result));
+
             return false;
         }
 
@@ -1128,32 +1244,27 @@ bool_t terminal_change_root(argparse_command_t *command)
         return false;
     }
 
-    dynamic_array_t *files = vfs_find_files(current_dir, pattern, ignore_case);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (files == NULL)
+    if (searcher_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
         return false;
     }
 
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such directory");
-        dynamic_array_destroy(files);
-        return false;
-    }
-
-    vfs_file_t *dir = terminal_resolve_filename(files);
+    vfs_file_t *dir = terminal_resolve_filename(searcher);
 
     if (dir == NULL)
-    {
-        konsole_println("Error: no such file");
         return false;
-    }
-    if (!(dir->attributes & VFS_ATTRIBUTE_DIRECTORY))
+
+    if (!(dir->header.attributes & VFS_ATTRIBUTE_DIRECTORY))
     {
+        vfs_cleanup_file_obj(dir);
         free(dir);
         konsole_println("Error: it isn't directory");
+
         return false;
     }
 
@@ -1168,15 +1279,22 @@ bool_t terminal_change_root(argparse_command_t *command)
     if (current_dir == NULL)
     {
         current_dir = malloc(sizeof(vfs_file_t));
-        vfs_copy_file_obj(current_dir, root);
+
+        vfs_result_e copy_result = vfs_copy_file_obj(current_dir, root);
+
+        if (copy_result != VFS_RESULT_OK)
+        {
+            vfs_cleanup_file_obj(root);
+            free(root);
+            free(current_dir);
+
+            konsole_printf("Error: %s\n", vfs_get_result(copy_result));
+
+            return false;
+        }
     }
 
     return true;
-}
-
-void foo(void *arg)
-{
-    konsole_println(arg);
 }
 
 bool_t terminal_exec(argparse_command_t *command)
@@ -1211,39 +1329,52 @@ bool_t terminal_exec(argparse_command_t *command)
         }
     }
 
-    dynamic_array_t *files = vfs_find_files(current_dir, file_name, false);
+    vfs_tree_searcher_t *searcher;
+    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, file_name, false, &searcher);
 
-    if (files == NULL)
+    if (searcher_result != VFS_RESULT_OK)
     {
-        konsole_println("Error: disk error");
+        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+
         return false;
     }
 
-    if (files->elements_count == 0)
-    {
-        konsole_println("Error: No such file");
-        dynamic_array_destroy(files);
-        return false;
-    }
-
-    AUTOFREE_PTR(vfs_file_t) file = terminal_resolve_filename(files);
+    vfs_file_t *file = terminal_resolve_filename(searcher);
 
     if (file == NULL)
-    {
         return false;
-    }
-    if (file->attributes & VFS_ATTRIBUTE_DIRECTORY)
+    if (file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
     {
+        vfs_cleanup_file_obj(file);
+        free(file);
         konsole_println("Error: it isn't file");
+
         return false;
     }
 
-    AUTOFREE_PTR(void)
-    buff = malloc(file->size + 1);
+    AUTOFREE_PTR(void) buff = malloc(file->header.size + 1);
 
-    vfs_stream_t *stream = vfs_open(file, VFS_FLAG_READ);
-    vfs_read(stream, buff, file->size);
+    vfs_stream_t *stream;
+    vfs_result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
+    vfs_cleanup_file_obj(file);
+    free(file);
+
+    if (open_result != VFS_RESULT_OK)
+    {
+        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+
+        return false;
+    }
+
+    vfs_result_e read_result = vfs_read(stream, buff, file->header.size, NULL);
     vfs_close(stream);
+
+    if (read_result != VFS_RESULT_OK)
+    {
+        konsole_printf("Error: %s\n", vfs_get_result(read_result));
+
+        return false;
+    }
 
     // elf_print_info(buff);
 
@@ -1296,14 +1427,27 @@ bool_t terminal_mount_root()
     if (bootable_partition_id == -1)
         return false;
 
-    root = malloc(sizeof(vfs_file_t));
-    vfs_file_t *new_root = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
-    if (new_root == NULL)
+    vfs_result_e result = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
+
+    if (result != VFS_RESULT_OK)
     {
-        free(root);
+        konsole_printf("Can't mount root: %s\n", vfs_get_result(result));
+
         return false;
     }
-    vfs_copy_file_obj(root, new_root);
+
+    dynamic_array_t *roots = vfs_search_mountpoints("ROOT", false);
+
+    if (roots->elements_count == 0)
+    {
+        dynamic_array_destroy(roots);
+
+        return false;
+    }
+
+    root = malloc(sizeof(vfs_file_t));
+    vfs_copy_file_obj(root, dynamic_array_get_bottom(roots));
+    vfs_destroy_files_array(roots);
 
     current_dir = malloc(sizeof(vfs_file_t));
     vfs_copy_file_obj(current_dir, root);
@@ -1347,20 +1491,20 @@ void terminal_init()
     terminal_register_command_handler("datetime", terminal_print_datetime);
     terminal_register_command_handler("disks", terminal_print_disks);
     terminal_register_command_handler("ls", terminal_print_listdir);
-    terminal_register_command_handler("view", terminal_view);
     terminal_register_command_handler("cd", terminal_change_dir);
+    terminal_register_command_handler("view", terminal_view);
     terminal_register_command_handler("write", terminal_write);
     terminal_register_command_handler("newfile", terminal_newfile);
     terminal_register_command_handler("newdir", terminal_newdir);
     terminal_register_command_handler("rm", terminal_remove);
+    terminal_register_command_handler("fsleave", terminal_fsleave);
+    terminal_register_command_handler("mount", terminal_mount);
+    terminal_register_command_handler("umount", terminal_umount);
+    terminal_register_command_handler("chroot", terminal_change_root);
     terminal_register_command_handler("exec", terminal_exec);
     terminal_register_command_handler("poweroff", terminal_poweroff);
     terminal_register_command_handler("reboot", terminal_reboot);
     terminal_register_command_handler("dbg", terminal_dbg);
-    terminal_register_command_handler("mount", terminal_mount);
-    terminal_register_command_handler("umount", terminal_umount);
-    terminal_register_command_handler("chroot", terminal_change_root);
-    terminal_register_command_handler("fsleave", terminal_fsleave);
 }
 
 void terminal_main_loop()

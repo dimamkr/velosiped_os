@@ -9,10 +9,6 @@ section .text
 align 4096
 sysenter_handler_entry:
     ; грузим стек
-    ; TODO: подумать
-
-    cli ; без стека прерывания вызовут GP
-    ; это не решает проблему, но есть лишь 1 такт на то, чтобы прерывание вызывало GP
 
     mov [_sysenter_system_var], eax
     mov eax, [current_task]
