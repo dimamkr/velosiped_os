@@ -77,9 +77,10 @@ static inline int sys_read(volatile int fd, volatile void *buf, volatile unsigne
     return _sysenter3(SYS_READ, fd, (int)buf, len);
 }
 
-// __attribute__((noreturn)) void sys_exit(volatile int code)
-// {
-//     _sysenter6(SYS_EXIT, code, 0, 0, 0, 0, 0);
+// TODO решить проблему с корелляцией имен с picolibc
+//  __attribute__((noreturn)) void sys_exit(volatile int code)
+//  {
+//      _sysenter6(SYS_EXIT, code, 0, 0, 0, 0, 0);
 
 //     while (1)
 //         asm volatile("pause");
@@ -129,9 +130,9 @@ __attribute__((always_inline)) static inline int sys_kill(int pid, int sig)
 
 /* new_brk == 0 — узнать текущий brk, иначе установить новый.
    Возвращает актуальный brk (или старый, если new_brk вне допустимого диапазона). */
-__attribute__((always_inline)) static inline int sys_brk(void *new_brk)
+__attribute__((always_inline)) static inline int sys_brk(int new_brk)
 {
-    return _sysenter6(SYS_BRK, (int)new_brk, 0, 0, 0, 0, 0);
+    return _sysenter6(SYS_BRK, new_brk, 0, 0, 0, 0, 0);
 }
 
 __attribute__((always_inline)) static inline int sys_mmap2(void *addr, unsigned len,

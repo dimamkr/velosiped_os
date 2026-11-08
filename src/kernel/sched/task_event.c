@@ -37,6 +37,7 @@ void task_event_destroy(task_event_t *this)
     TASK_LOCKED_FUNCTION;
 
     linked_list_destroy(&this->front);
+    free(this);
 }
 
 void task_event_erase(task_event_t *this, uint32_t pid)
