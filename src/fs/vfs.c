@@ -417,6 +417,8 @@ vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern
     vfs_tree_searcher_t *tree = malloc(sizeof(vfs_tree_searcher_t));
     memset(tree, '\0', sizeof(vfs_tree_searcher_t));
 
+    tree->ignore_case = ignore_case;
+
     // если путь начинается со слеша, нам надо поискать точки монтирования с таким названием
     if (pattern[0] == '/')
     {
