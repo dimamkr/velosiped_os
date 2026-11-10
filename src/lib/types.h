@@ -15,6 +15,12 @@ typedef unsigned long long uint64_t;
 typedef signed long long int64_t;
 typedef uint16_t wchar_t;
 
+// __size_t__ = size_t из <stddef.h>
+#ifndef __size_t__
+typedef __SIZE_TYPE__ size_t;
+#define __size_t__ 1
+#endif
+
 typedef bool bool_t;
 
 #define NULL ((void *)0)
