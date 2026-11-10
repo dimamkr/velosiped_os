@@ -19,7 +19,7 @@
 #include "mouse.h"
 #include "power.h"
 #include "sysenter.h"
-#include "vfs.h"
+#include "fs_drivers_init.h"
 #include "input_manager.h"
 #include "sys_time.h"
 #include "sse.h"
@@ -98,8 +98,8 @@ void kernel_main_task(void *_)
 
     disk_init();
 
-    PRINT_INIT("VFS");
-    vfs_init();
+    PRINT_INIT("FS");
+    fs_drivers_init();
     PRINT_OK;
 
     power_init();

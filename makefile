@@ -101,7 +101,7 @@ KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
                        $(KERNEL_INCLUDES) \
                        -Werror -MMD -MP
 KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
-KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer
+KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O2 -fno-omit-frame-pointer
 
 KERNEL_NASM_COMMON = -f elf32
 KERNEL_NASM_RELEASE = $(KERNEL_NASM_COMMON)
@@ -224,7 +224,7 @@ QEMU_LOG = $(BUILD_LOGS_DIR)/qemu.log
 #  Основные цели
 # ============================================================
 
-.PHONY: all release run build-debug debug run-debug clean picolibc_build
+.PHONY: all release run build-debug debug run-debug clean picolibc_build image rebuild-image
 
 # парсер по словам определит флаги
 debug: build-debug
@@ -257,6 +257,14 @@ run-debug: all | $(BUILD_LOGS_DIR)
 clean:
 	@echo "🧹 Cleaning..."
 	$(RM) $(BUILD_DIR_ROOT)
+
+image: $(IMAGE)
+	@echo "✅ Image ready: $<"
+
+rebuild-image:
+	@echo "♻️  Forcing image rebuild..."
+	@$(RM) $(IMAGE)
+	@$(MAKE) --no-print-directory image
 
 # ============================================================
 #  Каталоги

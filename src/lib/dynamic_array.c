@@ -119,8 +119,7 @@ void dynamic_array_push_front(dynamic_array_t *array, void *element)
 
 void dynamic_array_pop_back(dynamic_array_t *array)
 {
-    if (array->elements_count == 0)
-        return;
+    ASSERT(array->elements_count != 0);
 
     array->end = (array->end - 1) & (array->size - 1);
     array->elements_count--;
@@ -129,16 +128,56 @@ void dynamic_array_pop_back(dynamic_array_t *array)
         array_shrink_(array);
 }
 
+void dynamic_array_pop_back_many(dynamic_array_t *array, uint32_t count)
+{
+    ASSERT(count <= array->elements_count);
+
+    array->end = (array->end - count) & (array->size - 1);
+    array->elements_count -= count;
+
+    if (array->size > 1 && array->elements_count * 4 < array->size)
+        array_shrink_(array);
+}
+
 void dynamic_array_pop_front(dynamic_array_t *array)
 {
-    if (array->elements_count == 0)
-        return;
+    ASSERT(array->elements_count != 0);
 
     array->start = (array->start + 1) & (array->size - 1);
     array->elements_count--;
 
     if (array->size > 1 && array->elements_count * 4 < array->size)
         array_shrink_(array);
+}
+
+void dynamic_array_pop_front_many(dynamic_array_t *array, uint32_t count)
+{
+    ASSERT(count <= array->elements_count);
+
+    array->start = (array->start + count) & (array->size - 1);
+    array->elements_count -= count;
+
+    if (array->size > 1 && array->elements_count * 4 < array->size)
+        array_shrink_(array);
+}
+
+// копирование отрезка [left, right] в буффер
+void dynamic_array_copy_to(dynamic_array_t *array, uint32_t left, uint32_t right, void *buffer)
+{
+    ASSERT(left < array->elements_count);
+    ASSERT(right < array->elements_count);
+    ASSERT(left <= right);
+
+    uint32_t real_lindex = (array->start + left + 1) & (array->size - 1);
+    uint32_t real_rindex = (real_lindex + (right - left)) & (array->size - 1);
+
+    if (real_lindex <= real_rindex)
+        memcpy(buffer, array->buffer + real_lindex, (right - left + 1) * array->size_of_element);
+    else
+    {
+        memcpy(buffer, array->buffer + real_lindex, array->size - real_lindex);
+        memcpy(buffer, array->buffer, real_rindex + 1);
+    }
 }
 
 void dynamic_array_clear(dynamic_array_t *array)

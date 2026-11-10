@@ -7,6 +7,9 @@
 #include "mbr.h"
 #include "string.h"
 #include "heap.h"
+#include "vfs.h"
+
+#define FAT32_DEFAULT_SECTOR_SIZE 512
 
 #define FAT32_BAD_CLUSTER 0x0FFFFFF7
 #define FAT32_EMPTY_CLUSTER 0x00000000
@@ -64,6 +67,7 @@ typedef struct {
 
 typedef struct {
     uint8_t disk_id;
+    uint8_t partition_num;
     uint8_t sectors_per_cluster;
     uint16_t fsinfo_sector;
     uint32_t root_cluster;
@@ -138,37 +142,70 @@ typedef struct {
 } fat32_basic_file_info_t;
 
 typedef struct {
+    fat32_info_t info;
+    fat32_position_t position;
+    bool_t read_finished;
+
+    fat32_basic_file_info_t **retention_buffer;
+    uint32_t retention_index;
+    uint32_t retention_size;
+} fat32_directory_reader_t;
+
+typedef struct {
+    fat32_info_t info;
+    fat32_basic_file_info_t *file;
+    fat32_position_t position;
+    uint32_t index;
+    uint8_t flags;
+} fat32_stream_t;
+
+typedef struct {
     char name [8];
     char extension [3];
 } fat32_dos_filename_t;
 
-bool_t fat32_read_initial_sector_sync(fat32_info_t *fat_info, fat32_initial_sector_t *init_sector);
-bool_t fat32_write_initial_sector_sync(fat32_info_t *fat_info, fat32_initial_sector_t *init_sector);
-bool_t fat32_get_info_sync(fat32_info_t *fat_info);
-bool_t fat32_get_bootable_partition_info_sync(fat32_info_t *info);
+bool_t fat32_read_initial_sector(fat32_info_t *info, fat32_initial_sector_t *init_sector);
+bool_t fat32_write_initial_sector(fat32_info_t *info, fat32_initial_sector_t *init_sector);
+
+fat32_info_t *fat32_allocate_info_object();
+void fat32_release_info_object(fat32_info_t *info);
+vfs_result_e fat32_get_info(uint8_t disk_id, uint8_t partition_num, fat32_info_t *info);
+vfs_result_e fat32_get_info_header(fat32_info_t *info, vfs_info_header_t *header);
+vfs_result_e fat32_mount(fat32_info_t *info, char *mountpoint, fat32_basic_file_info_t **_file);
 uint32_t fat32_fat_at_sync(fat32_info_t *info, uint32_t fat_index);
 bool_t fat32_fat_write_sync(fat32_info_t *info, uint32_t fat_index, uint32_t value);
 bool_t fat32_read_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *buffer);
 bool_t fat32_write_cluster_sync(fat32_info_t *info, uint32_t cluster_num, void *buffer);
 void fat32_next_cluster_sync(fat32_info_t *info, fat32_position_t *position);
-dynamic_array_t *fat32_read_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info);
-bool_t fat32_read_file(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
-void fat32_mount(fat32_info_t *info, const char *dir_name, fat32_basic_file_info_t *result);
-dynamic_array_t *fat32_find_files(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *pattern, bool_t ignore_case);
+fat32_basic_file_info_t *fat32_allocate_file_object();
+fat32_basic_file_info_t *fat32_copy_file_object(fat32_basic_file_info_t *file);
+void fat32_release_file_object(fat32_basic_file_info_t *file);
+void fat32_destroy_files_list(dynamic_array_t *list);
+vfs_result_e fat32_open_directory(fat32_info_t *info, fat32_basic_file_info_t *dir, fat32_directory_reader_t **_result, uint32_t iterator_quant_size);
+vfs_result_e fat32_read_directory(fat32_directory_reader_t *reader, fat32_basic_file_info_t **_buffer, uint32_t buffer_size, uint32_t *read_size);
+void fat32_close_directory(fat32_directory_reader_t *reader);
+vfs_result_e fat32_read_file(fat32_stream_t *stream, void *buffer, uint32_t buffer_size, uint32_t *read_size);
 bool_t fat32_read_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
 bool_t fat32_write_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);
 uint32_t fat32_take_new_cluster_sync(fat32_info_t *info, uint32_t prev_cluster);
 bool_t fat32_release_clusters_sync(fat32_info_t *info, uint32_t start_cluster);
 bool_t fat32_update_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
-bool_t fat32_write_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info, uint32_t start_position, void *buffer, uint32_t buffer_size);
-bool_t fat32_erase_file_sync(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+vfs_result_e fat32_write_file(fat32_stream_t *stream, void *buffer, uint32_t buffer_size, uint32_t *bytes_wrote);
+vfs_result_e fat32_erase_file(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 dynamic_array_t *fat32_split_filename_to_lfn(const char *filename, uint32_t checksum);
-uint8_t get_lfn_checksum(const unsigned char *dos_filename, const unsigned char *dos_extension);
-fat32_dos_filename_t fat32_get_dos_filename(dynamic_array_t *directory_files, const char *filename);
-void fat32_destroy_files_list(dynamic_array_t *list);
-bool_t fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint8_t attributes, fat32_basic_file_info_t *result);
-bool_t fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint8_t attributes, fat32_basic_file_info_t *result);
+uint8_t fat32_get_lfn_checksum(fat32_dos_filename_t dos_filename);
+fat32_dos_filename_t fat32_get_dos_filename(fat32_info_t *info, fat32_basic_file_info_t *dir, const char *filename);
+vfs_result_e fat32_create_file(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *filename, uint32_t attributes, fat32_basic_file_info_t **_result);
+vfs_result_e fat32_get_file_parameters(fat32_info_t *info, fat32_basic_file_info_t *file, vfs_file_header_t *header);
+vfs_result_e fat32_set_file_parameters(fat32_info_t *info, fat32_basic_file_info_t *file, vfs_file_header_t *header);
+vfs_result_e fat32_open_file(fat32_info_t *info, fat32_basic_file_info_t *file, uint8_t flags, fat32_stream_t **_stream);
+void fat32_close_file(fat32_stream_t *stream);
+vfs_result_e fat32_seek(fat32_stream_t *stream, int offset, uint8_t mode);
+uint32_t fat32_tell(fat32_stream_t *stream);
+vfs_result_e fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint32_t attributes, fat32_basic_file_info_t **_result);
 bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
-bool_t fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+vfs_result_e fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+
+extern const vfs_platform_specific_methods_t fat32_methods;
 
 #endif

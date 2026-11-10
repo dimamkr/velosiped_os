@@ -1,83 +1,82 @@
 #include "vfs.h"
-#include "konsole.h"
 
 
 static hash_table_t *mountpoints;
 static hash_table_t *mountpoints_rev;
 
+static const char* vfs_status_table [] = {
+    [VFS_RESULT_OK] = "Ok",
+    [VFS_RESULT_INVALID_HANDLE] = "Invalid handle",
+    [VFS_RESULT_INVALID_FILENAME] = "Invalid filename",
+    [VFS_RESULT_DISK_ERROR] = "Disk error",
+    [VFS_RESULT_INVALID_DISK_ID] = "Invalid disk ID",
+    [VFS_RESULT_INVALID_PARTITION_NUM] = "Invalid partition num",
+    [VFS_RESULT_NO_FILESYSTEM] = "No filesystem",
+    [VFS_RESULT_MOUNTPOINT_ALREADY_EXISTS] = "Mountpoint already exists",
+    [VFS_RESULT_MOUNTPOINT_NOT_EXISTS] = "Mountpoint not exists",
+    [VFS_RESULT_PARTITION_ALREADY_MOUNTED] = "Partition already mounted",
+    [VFS_RESULT_INVALID_PARAMETER] = "Invalid parameter",
+    [VFS_RESULT_INVALID_METHOD] = "Invalid method",
+    [VFS_RESULT_EMPTY_PATH] = "Path is empty",
+    [VFS_RESULT_FILESYSTEM_MISMATCH] = "Filesystem mismatch",
+    [VFS_RESULT_FILE_ALREADY_EXISTS] = "File already exists",
+    [VFS_RESULT_NOT_WRITABLE] = "Stream is not writable",
+    [VFS_RESULT_NOT_READABLE] = "Stream is not readable",
+    [VFS_RESULT_FILESYSTEM_IS_BUSY] = "Filesystem is busy"
+};
 
-static inline uint32_t vfs_convert_attributes_from_fat32(uint8_t fat_attributes)
+static const vfs_platform_specific_methods_t *vfs_platform_table [256] = {NULL};
+
+const char *vfs_get_result(vfs_result_e result)
 {
-    return (uint32_t)fat_attributes; // наши аттрибуты совместимы с fat32
-}
-
-// объекты файлов должны создаваться такими функциями (не руками)
-// или нужно учитывать reference counter самому
-static inline bool_t vfs_fill_file_obj_from_fat32(vfs_file_t *file)
-{
-    file->filename = file->fat32.filename;
-    file->size = file->fat32.size;
-    datetime_datetime_from_fat(&(file->fat32.creation_datetime), &(file->creation_datetime));
-    datetime_datetime_from_fat(&(file->fat32.last_modify_datetime), &(file->modify_datetime));
-    file->attributes = vfs_convert_attributes_from_fat32(file->fat32.attributes);
-
-    if (!RC_TAKE(file->info))
-        return false;
-
-    return true;
-}
-
-bool_t vfs_update_file_obj(vfs_file_t *file)
-{
-    switch (file->info->filesystem)
-    {
-        case VFS_FS_FAT32:
-        {
-            file->size = file->fat32.size;
-            datetime_datetime_from_fat(&(file->fat32.creation_datetime), &(file->creation_datetime));
-            datetime_datetime_from_fat(&(file->fat32.last_modify_datetime), &(file->modify_datetime));
-            file->attributes = vfs_convert_attributes_from_fat32(file->fat32.attributes);
-            file->filename = file->fat32.filename;
-
-            break;
-        }
-    }
-
-    return true;
+    return vfs_status_table[result];
 }
 
 // объекты файлов должны очищаться этой функцией
 void vfs_cleanup_file_obj(vfs_file_t *file)
 {
-    free(file->filename);
+    file->info->methods->release_file_object(file->_file);
+
     RC_RELEASE(file->info);
 }
 
 static void vfs_info_cleanup_routine(void *_info)
 {
-    free(_info);
+    vfs_info_t *info = _info;
+
+    info->methods->release_info_object(info->_info);
+
+    free(info);
 }
 
-bool_t vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
+vfs_result_e vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
 {
-    switch (src->info->filesystem)
-    {
-        case VFS_FS_FAT32:
-        {
-            memcpy(dst, src, sizeof(vfs_file_t));
-            dst->filename = dst->fat32.filename = strdup(src->filename);
-        }
-    }
+    if (dst == NULL || src == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+
+    dst->_file = src->info->methods->copy_file_object(src->_file);
 
     if (!RC_TAKE(src->info))
     {
-        if (dst != NULL)
-            free(dst->filename);
+        src->info->methods->release_file_object(dst->_file);
 
-        return false;
+        return VFS_RESULT_NO_FILESYSTEM;
     }
 
-    return true;
+    dst->info = src->info;
+
+    vfs_result_e status = dst->info->methods->get_file_parameters(dst->info->_info, dst->_file, &(dst->header));
+
+    if (status != VFS_RESULT_OK)
+    {
+        dst->info->methods->release_file_object(dst->_file);
+        RC_RELEASE(dst->info);
+        dst->info = NULL;
+
+        return status;
+    }
+
+    return VFS_RESULT_OK;
 }
 
 void vfs_destroy_files_array(dynamic_array_t *files)
@@ -92,70 +91,94 @@ void vfs_destroy_files_array(dynamic_array_t *files)
     dynamic_array_destroy(files);
 }
 
-
-vfs_file_t *vfs_mount_partition(uint8_t disk_id, uint8_t partition_id, char *mountpoint)
+vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *mountpoint)
 {
-    uint16_t key = MAKEWORD(disk_id, partition_id);
+    const vfs_platform_specific_methods_t *methods = vfs_detect_platform(disk_id, partition_num);
 
-    if (partition_id > 4 || \
-        hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1) != NULL || \
-        hash_table_get(mountpoints_rev, &key, sizeof(uint16_t)) != NULL)
-        return NULL;
+    if (methods == NULL)
+        return VFS_RESULT_FILESYSTEM_MISMATCH;
 
-    mbr_t mbr_info;
+    if (hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1) != NULL)
+        return VFS_RESULT_MOUNTPOINT_ALREADY_EXISTS;
 
-    if (!mbr_read_sync(disk_id, &mbr_info))
-        return NULL;
+    uint16_t key = MAKEWORD(disk_id, partition_num);
 
-    vfs_info_t *info = NULL;
-    vfs_file_t *result = NULL;
+    if (hash_table_get(mountpoints_rev, &key, sizeof(uint16_t)) != NULL)
+        return VFS_RESULT_PARTITION_ALREADY_MOUNTED;
 
-    switch (mbr_info.partitions[partition_id].partition_type)
+    vfs_info_t *info = malloc(sizeof(vfs_info_t));
+    vfs_file_t *file = malloc(sizeof(vfs_file_t));
+
+    RC_INIT(info, vfs_info_cleanup_routine);
+
+    info->methods = methods;
+    info->_info = methods->allocate_info_object();
+    vfs_result_e result = methods->get_info(disk_id, partition_num, info->_info);
+
+    if (result != VFS_RESULT_OK)
     {
-        case MBR_PARTITION_FAT32_LBA:
-        {
-            info = malloc(sizeof(vfs_info_t));
-            result = malloc(sizeof(vfs_file_t));
+        free(info);
+        free(file);
 
-            RC_INIT(info, vfs_info_cleanup_routine);
-
-            info->filesystem = VFS_FS_FAT32;
-            info->disk_id = disk_id;
-            info->partition_id = partition_id;
-
-            info->fat32.disk_id = disk_id;
-            info->fat32.partition_start = mbr_info.partitions[partition_id].start_lba;
-
-            fat32_get_info_sync(&(info->fat32));
-            fat32_mount(&(info->fat32), mountpoint, &(result->fat32));
-
-            result->info = info;
-            vfs_fill_file_obj_from_fat32(result);
-
-            hash_table_insert(mountpoints, mountpoint, strlen(mountpoint) + 1, result, sizeof(vfs_file_t));
-            hash_table_insert(mountpoints_rev, &key, sizeof(uint16_t), mountpoint, strlen(mountpoint) + 1);
-
-            break;
-        }
+        return result;
     }
 
-    return result;
+    result = methods->get_info_header(info->_info, &(info->header));
+
+    if (result != VFS_RESULT_OK)
+    {
+        free(info);
+        free(file);
+        methods->release_info_object(info->_info);
+
+        return result;
+    }
+
+    file->info = info;
+    RC_TAKE(info);
+
+    result = methods->mount(info->_info, mountpoint, &(file->_file));
+
+    if (result != VFS_RESULT_OK)
+    {
+        methods->release_info_object(info->_info);
+        free(file);
+        free(info);
+
+        return result;
+    }
+
+    result = methods->get_file_parameters(info->_info, file->_file, &(file->header));
+
+    if (result != VFS_RESULT_OK)
+    {
+        methods->release_file_object(file->_file);
+        methods->release_info_object(info->_info);
+        free(file);
+        free(info);
+
+        return result;
+    }
+
+    hash_table_insert(mountpoints, mountpoint, strlen(mountpoint) + 1, file, sizeof(vfs_file_t));
+    hash_table_insert(mountpoints_rev, &key, sizeof(uint16_t), mountpoint, strlen(mountpoint) + 1);
+
+    return VFS_RESULT_OK;
 }
 
-
-bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold)
+vfs_result_e vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold)
 {
     uint16_t key = MAKEWORD(disk_id, partition_id);
 
     char *mountpoint = hash_table_get(mountpoints_rev, &key, sizeof(uint16_t));
 
     if (mountpoint == NULL)
-        return false;
+        return VFS_RESULT_MOUNTPOINT_NOT_EXISTS;
 
     vfs_file_t *mp = hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1);
 
     if (!RC_DESTROY_IF_LESS(mp->info, threshold))
-        return false;
+        return VFS_RESULT_FILESYSTEM_IS_BUSY;
 
     disk_flush_cache_sync(disk_id);
     vfs_cleanup_file_obj(mp);
@@ -163,9 +186,8 @@ bool_t vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t thr
     hash_table_erase(mountpoints, mountpoint, strlen(mountpoint) + 1);
     hash_table_erase(mountpoints_rev, &key, sizeof(uint16_t));
 
-    return true;
+    return VFS_RESULT_OK;
 }
-
 
 dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case)
 {
@@ -183,7 +205,7 @@ dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case)
 
                 dynamic_array_push_back(results, mp);
 
-                if (!vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results)))
+                if (vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results)) != VFS_RESULT_OK)
                     dynamic_array_pop_back(results);
             }
         }
@@ -200,249 +222,428 @@ void vfs_unmount_partitions_by_name(const char *mountpoint, bool_t ignore_case)
     {
         vfs_file_t *mp = dynamic_array_get_by_index(partitions, i);
 
-        vfs_unmount_partition(mp->info->disk_id, mp->info->partition_id, 3);
+        vfs_unmount_partition(mp->info->header.disk_id, mp->info->header.partition_num, VFS_DEFAULT_UMOUNT_THRESHOLD + 1);
     }
 
     vfs_destroy_files_array(partitions);
 }
 
-// TODO: сделать штуку типа FindFirstFile, FindNextFile вместо этого
-dynamic_array_t *vfs_find_files_in_directory(vfs_file_t *directory, const char *_pattern, bool_t ignore_case)
+vfs_result_e vfs_open_directory(vfs_file_t *directory, uint32_t iterator_quant_size, const char *pattern, bool_t ignore_case, vfs_directory_reader_t **_result)
 {
     if (directory == NULL)
-        return dynamic_array_create(sizeof(vfs_file_t));
+        return VFS_RESULT_INVALID_HANDLE;
+    else if (_result == NULL || iterator_quant_size == 0 || !(directory->header.attributes & VFS_ATTRIBUTE_DIRECTORY))
+        return VFS_RESULT_INVALID_PARAMETER;
 
-    if (_pattern == NULL)
-        _pattern = "*";
+    vfs_directory_reader_t *reader = malloc(sizeof(vfs_directory_reader_t));
+    vfs_result_e result = directory->info->methods->open_directory(directory->info->_info, directory->_file, &(reader->_reader), iterator_quant_size);
 
-    char *pattern = strdup(_pattern);
-    uint32_t pattern_length = strlen(pattern);
-
-    // удаляем лишние слеши в конце
-
-    if (pattern[pattern_length - 1] == '/')
-        pattern[pattern_length - 1] = '\0';
-
-    // Разбиваем паттерн по слешу
-
-    uint32_t depth = 1;
-
-    for (char *i = pattern;*i;i++)
+    if (result != VFS_RESULT_OK)
     {
-        if (*i == '/')
-            depth++;
+        free(reader);
+
+        return result;
     }
 
-    char *last_index = pattern;
-    char **path = malloc(sizeof(char*) * depth);
-    uint32_t arr_ind = 0;
+    reader->directory = malloc(sizeof(vfs_file_t));
+    result = vfs_copy_file_obj(reader->directory, directory);
 
-    for (char *i = pattern;*i;i++)
+    if (result != VFS_RESULT_OK)
     {
-        if (*i == '/')  
-        {
-            *i = '\0';
-            path[arr_ind++] = last_index;
-            last_index = i + 1;
-        }
+        directory->info->methods->close_directory(reader->_reader);
+        free(reader);
+
+        return result;
     }
 
-    path[arr_ind] = last_index;
+    if (pattern != NULL)
+        reader->pattern = strdup(pattern);
+    reader->ignore_case = ignore_case;
+    reader->retention_buffer = malloc(iterator_quant_size * sizeof(vfs_file_t)); // unsafe (переполнение)
+    reader->retention_buffer_size = iterator_quant_size;
+    reader->retention_buffer_index = iterator_quant_size;
 
-    // идем по слоям, поддерживаем количество элементов в текущем слое и считаем следующий
-    // в каждый момент времени в очереди хранится только два слоя
+    *_result = reader;
 
-    dynamic_array_t *search_queue = dynamic_array_create(sizeof(vfs_file_t));
-    uint32_t layer_length = 1;
-    uint32_t pattern_ind = 0;
-
-    dynamic_array_push_back(search_queue, directory);
-
-    while (search_queue->elements_count != 0 && pattern_ind < depth)
-    {
-        dynamic_array_t *all_files;
-        vfs_file_t *current_dir = dynamic_array_get_bottom(search_queue);
-
-        if (current_dir->attributes & VFS_ATTRIBUTE_DIRECTORY)
-        {
-            switch (directory->info->filesystem)
-            {
-                case VFS_FS_FAT32:
-                {
-                    all_files = fat32_read_directory(&(directory->info->fat32), &(current_dir->fat32));
-
-                    if (!all_files)
-                    {
-                        vfs_destroy_files_array(search_queue);
-                        free(path);
-                        free(pattern);
-
-                        return NULL;
-                    }
-
-                    for (uint32_t i = 0;i < all_files->elements_count;i++)
-                    {
-                        fat32_basic_file_info_t *file = dynamic_array_get_by_index(all_files, i);
-
-                        if (is_matching_pattern(file->filename, path[pattern_ind], ignore_case))
-                        {
-                            vfs_file_t new_file;
-                            memcpy(&(new_file.fat32), file, sizeof(fat32_basic_file_info_t));
-                            new_file.info = directory->info;
-
-                            if (!vfs_fill_file_obj_from_fat32(&new_file))
-                            {
-                                free(file->filename);
-                                continue;
-                            }
-
-                            if ((new_file.attributes & VFS_ATTRIBUTE_DIRECTORY) && (new_file.fat32.cluster_num == 0))
-                                new_file.fat32.cluster_num = 2; // костыль
-
-                            dynamic_array_push_back(search_queue, &new_file);
-                        }
-                        else
-                            free(file->filename);
-                    }
-
-                    dynamic_array_destroy(all_files);
-
-                    break;
-                }
-            }
-        }
-
-        dynamic_array_pop_front(search_queue);
-        layer_length--;
-
-        if (layer_length == 0)
-        {
-            layer_length = search_queue->elements_count;
-            pattern_ind++;
-        }
-    }
-
-    free(pattern);
-    free(path);
-
-    return search_queue;
+    return VFS_RESULT_OK;
 }
 
-
-dynamic_array_t *vfs_find_files(vfs_file_t *directory, const char *_pattern, bool_t ignore_case)
+// эта функция - основа большей функции для рекурсивного поиска файлов
+vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
 {
-    if (_pattern == NULL)
-        return vfs_find_files_in_directory(directory, _pattern, ignore_case);
-    
-    char *pattern = strdup(_pattern);
-    char *pattern_start = pattern;
+    if (reader == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+    if (buffer == NULL)
+        return VFS_RESULT_INVALID_PARAMETER;
 
-    uint32_t pattern_length = strlen(pattern);
+    const vfs_platform_specific_methods_t *methods = reader->directory->info->methods;
 
-    char *root_name = NULL;
-    bool_t return_mountpoints = false;
+    uint32_t files_elapsed = buffer_size;
 
-    if (pattern[0] == '/') // если начинается со слеша, то нужно выполнить для всех точек монтирования с таким именем
+    vfs_file_t tmp_file;
+    tmp_file.info = reader->directory->info;
+
+    // обрабатываем остаток файлов от прошлого поиска (retention)
+
+    for (;reader->retention_buffer_index < reader->retention_buffer_size;reader->retention_buffer_index++)
     {
-        pattern_start++;
-        root_name = pattern_start;
+        if (files_elapsed == 0)
+            break;
 
-        uint32_t pattern_start_ind = strchr(pattern_start, '/');
-
-        if (pattern_start_ind != -1)
+        tmp_file._file = reader->retention_buffer[reader->retention_buffer_index];
+            
+        if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != VFS_RESULT_OK)
         {
-            pattern_start += pattern_start_ind;
-            *pattern_start = '\0';
+            methods->release_file_object(tmp_file._file);
 
-            pattern_start++;
+            continue;
+        }
+
+        RC_TAKE(tmp_file.info);
+
+        if (reader->pattern == NULL || is_matching_pattern(tmp_file.header.filename, reader->pattern, reader->ignore_case))
+        {
+            memcpy(&(buffer[buffer_size - files_elapsed]), &tmp_file, sizeof(vfs_file_t));
+            files_elapsed--;
         }
         else
-            return_mountpoints = true;
+            vfs_cleanup_file_obj(&tmp_file);
     }
 
-    dynamic_array_t *result = NULL;
+    *read_size = buffer_size - files_elapsed;
 
-    if (root_name != NULL)
+    // обрабатываем основную часть большими кусками
+
+    uint32_t quants_elapsed = files_elapsed / reader->retention_buffer_size + !!(files_elapsed % reader->retention_buffer_size);
+
+    vfs_platform_specific_file_ptr *buffer_ps = malloc(sizeof(vfs_platform_specific_file_ptr) * quants_elapsed * reader->retention_buffer_size); // unsafe
+    uint32_t read_size_ps = 0;
+    uint32_t buffer_ps_ind = 0;
+    
+    while (files_elapsed != 0)
     {
-        result = dynamic_array_create(sizeof(vfs_file_t));
+        vfs_result_e result = methods->read_directory(reader->_reader, buffer_ps, quants_elapsed * reader->retention_buffer_size, &read_size_ps);
 
-        dynamic_array_t *mountpoints_found = vfs_search_mountpoints(root_name, ignore_case);
-
-        for (uint32_t i = 0;i < mountpoints_found->elements_count;i++)
+        if (result != VFS_RESULT_OK)
         {
-            vfs_file_t *mp = dynamic_array_get_by_index(mountpoints_found, i);
+            free(buffer_ps);
 
-            if (!return_mountpoints)
+            return result;
+        }
+        if (read_size_ps == 0)
+            break;
+
+        for (buffer_ps_ind = 0;buffer_ps_ind < read_size_ps;buffer_ps_ind++)
+        {
+            if (files_elapsed == 0)
+                break;
+
+            tmp_file._file = buffer_ps[buffer_ps_ind];
+            
+            if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != VFS_RESULT_OK)
             {
-                dynamic_array_t *search_results = vfs_find_files_in_directory(mp, pattern_start, ignore_case);
+                methods->release_file_object(tmp_file._file);
 
-                if (!result)
-                    result = search_results;
-                else
-                {
-                    if (result->elements_count < search_results->elements_count)
-                    {
-                        void *_ = result;
-                        result = search_results;
-                        search_results = _;
-                    }
+                continue;
+            }
 
-                    for (uint32_t i = 0;i < search_results->elements_count;i++)
-                        dynamic_array_push_back(result, dynamic_array_get_by_index(search_results, i));
-                    
-                    dynamic_array_destroy(search_results);
-                }
+            RC_TAKE(tmp_file.info);
+
+            if (reader->pattern == NULL || is_matching_pattern(tmp_file.header.filename, reader->pattern, reader->ignore_case))
+            {
+                memcpy(&(buffer[buffer_size - files_elapsed]), &tmp_file, sizeof(vfs_file_t));
+                files_elapsed--;
             }
             else
-            {
-                dynamic_array_push_back(result, mp);
-                vfs_copy_file_obj(dynamic_array_get_top(result), dynamic_array_get_top(result));
-            }
+                vfs_cleanup_file_obj(&tmp_file);
         }
 
-        vfs_destroy_files_array(mountpoints_found);
+        if (files_elapsed == 0)
+            break;
+
+        quants_elapsed = files_elapsed / reader->retention_buffer_size + !!(files_elapsed % reader->retention_buffer_size);
+        buffer_ps = realloc(buffer_ps, sizeof(vfs_platform_specific_file_ptr) * quants_elapsed * reader->retention_buffer_size);
+    }
+
+    *read_size = buffer_size - files_elapsed;
+
+    // если чтение прочитало все, что можно, то остатка быть не может
+
+    if (files_elapsed > 0)
+        reader->retention_buffer_index = reader->retention_buffer_size;
+    else
+    {
+        // остаток кладем в retention
+        // (если мы не покрыли весь запрос прошлым остатком)
+
+        uint32_t retention_size = read_size_ps - buffer_ps_ind;
+
+        if (retention_size > 0)
+        {
+            reader->retention_buffer_index = reader->retention_buffer_size - retention_size;
+            memcpy(reader->retention_buffer + reader->retention_buffer_index, buffer_ps + buffer_ps_ind, retention_size * sizeof(vfs_platform_specific_file_ptr));
+        }
+    }
+
+    free(buffer_ps);
+
+    return VFS_RESULT_OK;
+}
+
+void vfs_close_directory(vfs_directory_reader_t *reader)
+{
+    if (reader == NULL)
+        return;
+
+    const vfs_platform_specific_methods_t *methods = reader->directory->info->methods;
+
+    for (uint32_t i = reader->retention_buffer_index;i < reader->retention_buffer_size;i++)
+        methods->release_file_object(reader->retention_buffer + i);
+
+    methods->close_directory(reader->_reader);
+
+    vfs_cleanup_file_obj(reader->directory);
+    if (reader->pattern != NULL)
+        free(reader->pattern);
+
+    free(reader);
+}
+
+vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern, bool_t ignore_case, vfs_tree_searcher_t **_searcher)
+{
+    if (pattern == NULL)
+        pattern = "*";
+
+    vfs_tree_searcher_t *tree = malloc(sizeof(vfs_tree_searcher_t));
+    memset(tree, '\0', sizeof(vfs_tree_searcher_t));
+
+    tree->ignore_case = ignore_case;
+
+    // если путь начинается со слеша, нам надо поискать точки монтирования с таким названием
+    if (pattern[0] == '/')
+    {
+        pattern++;
+        const uint32_t right_index_num = strchr(pattern, '/');
+        char *right_index = (right_index_num == -1) ? NULL : (char*)pattern + right_index_num;
+        if (right_index != NULL)
+            *right_index = '\0';
+
+        tree->roots = vfs_search_mountpoints(pattern, ignore_case);
+
+        if (right_index != NULL)
+            pattern = right_index + 1;
+        else
+            pattern += strlen(pattern);
+    }
+    else if (directory == NULL)
+    {
+        free(tree);
+
+        return VFS_RESULT_INVALID_PARAMETER;
     }
     else
-        result = vfs_find_files_in_directory(directory, pattern_start, ignore_case);
-
-    return result;
-}
-
-
-vfs_stream_t *vfs_open(vfs_file_t *file, uint8_t flags)
-{
-    vfs_stream_t *result = NULL;
-
-    // проверяем запрещенные комбинации флагов
-    if ((flags & VFS_FLAG_READ) & (flags & VFS_FLAG_OVERWRITE) || \
-        (flags & VFS_FLAG_READ) & (flags & VFS_FLAG_APPEND) || \
-        (flags & VFS_FLAG_OVERWRITE) & (flags & VFS_FLAG_APPEND))
-        return NULL;
-
-    switch (file->info->filesystem)
     {
-        case VFS_FS_FAT32:
+        tree->roots = dynamic_array_create(sizeof(vfs_file_t));
+        dynamic_array_push_back(tree->roots, directory);
+        
+        vfs_result_e result = vfs_copy_file_obj(dynamic_array_get_top(tree->roots), directory);
+
+        if (result != VFS_RESULT_OK)
         {
-            result = malloc(sizeof(vfs_stream_t));
-            memset(result, 0, sizeof(vfs_stream_t));
+            vfs_destroy_files_array(tree->roots);
+            free(tree);
 
-            result->file = malloc(sizeof(vfs_file_t));
-            vfs_copy_file_obj(result->file, file);
-
-            result->flags = flags;
-
-            if (flags & VFS_FLAG_APPEND)
-                result->position = result->file->fat32.size;
-            else if (flags & VFS_FLAG_OVERWRITE)
-                vfs_erase(result->file);
-
-            break;
+            return result;
         }
     }
 
-    return result;
+    if (pattern[0] != '\0')
+    {
+        uint32_t path_depth = 1;
+
+        for (const char *i = pattern;*i;i++)
+            if (*i == '/')
+                path_depth++;
+
+        tree->subpatterns = malloc(sizeof(char*) * path_depth);
+        tree->pattern = strdup(pattern);
+
+        char *last_index = tree->pattern;
+        uint32_t subpattern_index = 0;
+
+        for (char *i = last_index;*i;i++)
+            if (*i == '/')
+            {
+                *i = '\0';
+                tree->subpatterns[subpattern_index++] = last_index;
+                last_index = i + 1;
+            }
+
+        tree->subpatterns[subpattern_index] = last_index;
+
+        tree->layers_stack = malloc(sizeof(vfs_directory_reader_t*) * path_depth);
+        memset(tree->layers_stack, '\0', sizeof(vfs_directory_reader_t*) * path_depth);
+        tree->path_depth = path_depth;
+    }
+
+    *_searcher = tree;
+
+    return VFS_RESULT_OK;
 }
 
+vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
+{
+    if (searcher == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+
+    if (searcher->path_depth == 0)
+    {
+        uint32_t files_to_copy = min(buffer_size, searcher->roots->elements_count);
+
+        if (files_to_copy > 0)
+            dynamic_array_copy_to(searcher->roots, 0, files_to_copy - 1, buffer);
+        dynamic_array_pop_front_many(searcher->roots, files_to_copy);
+
+        *read_size = files_to_copy;
+    }
+    else
+    {
+        uint32_t level = 0;
+        for (;level < searcher->path_depth;level++)
+            if (searcher->layers_stack[level] == NULL)
+                break;
+
+        uint32_t files_elapsed = buffer_size;
+
+        while (files_elapsed > 0)
+        {
+            bool_t exit_without_read = false;
+
+            while (level < searcher->path_depth)
+            {
+                if (level == 0)
+                {
+                    if (searcher->roots->elements_count == 0)
+                    {
+                        exit_without_read = true;
+                        break;
+                    }
+                        
+                    vfs_file_t *current_dir = dynamic_array_get_top(searcher->roots);
+                    vfs_result_e result = vfs_open_directory(current_dir, VFS_ITERATOR_DEFAULT_QUANT_SIZE, searcher->subpatterns[level], searcher->ignore_case, searcher->layers_stack + level);
+
+                    vfs_cleanup_file_obj(current_dir);
+                    dynamic_array_pop_front(searcher->roots);
+
+                    if (result != VFS_RESULT_OK)
+                        continue;
+
+                    level++;
+                }
+                else
+                {
+                    vfs_file_t current_dir;
+                    uint32_t read_size;
+                    vfs_result_e result = vfs_read_directory(searcher->layers_stack[level-1], &current_dir, 1, &read_size);
+
+                    if (result != VFS_RESULT_OK)
+                        continue;
+
+                    if (read_size == 0)
+                    {
+                        vfs_close_directory(searcher->layers_stack[level-1]);
+                        searcher->layers_stack[level-1] = NULL;
+                        level--;
+
+                        continue;
+                    }
+
+                    result = vfs_open_directory(&current_dir, VFS_ITERATOR_DEFAULT_QUANT_SIZE, searcher->subpatterns[level], searcher->ignore_case, searcher->layers_stack + level);
+                    vfs_cleanup_file_obj(&current_dir);
+
+                    if (result != VFS_RESULT_OK)
+                        continue;
+
+                    level++;
+                }
+            }
+
+            if (exit_without_read)
+                break;
+
+            uint32_t files_copied;
+            vfs_result_e result = vfs_read_directory(searcher->layers_stack[searcher->path_depth-1], buffer + buffer_size - files_elapsed, files_elapsed, &files_copied);
+
+            if (result != VFS_RESULT_OK || files_copied < files_elapsed)
+            {
+                vfs_close_directory(searcher->layers_stack[searcher->path_depth-1]);
+                searcher->layers_stack[searcher->path_depth-1] = NULL;
+                level--;
+            }
+
+            if (result == VFS_RESULT_OK)
+                files_elapsed -= files_copied;
+        }
+
+        *read_size = buffer_size - files_elapsed;
+    }
+
+    return VFS_RESULT_OK;
+}
+
+void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher)
+{
+    if (searcher == NULL)
+        return;
+
+    for (uint32_t i = 0;i < searcher->path_depth;i++)
+    {
+        if (searcher->layers_stack[i] == NULL)
+            break;
+
+        vfs_close_directory(searcher->layers_stack[i]);
+    }
+
+    vfs_destroy_files_array(searcher->roots);
+    free(searcher->layers_stack);
+    free(searcher->subpatterns);
+    free(searcher->pattern);
+
+    free(searcher);
+}
+
+vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)
+{
+    if (file == NULL || file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
+        return VFS_RESULT_INVALID_HANDLE;
+
+    vfs_stream_t *stream = malloc(sizeof(vfs_stream_t));
+    vfs_result_e result = file->info->methods->open_file(file->info->_info, file->_file, flags, &(stream->_stream));
+
+    if (result != VFS_RESULT_OK)
+    {
+        free(stream);
+
+        return result;
+    }
+
+    stream->flags = flags;
+    stream->file = malloc(sizeof(vfs_file_t));
+    result = vfs_copy_file_obj(stream->file, file);
+
+    if (result != VFS_RESULT_OK)
+    {
+        free(stream->file);
+        file->info->methods->close_file(stream->_stream);
+        free(stream);
+
+        return result;
+    }
+
+    *_stream = stream;
+
+    return result;
+}
 
 bool_t vfs_is_filename_allowed(const char *filename)
 {
@@ -463,131 +664,148 @@ bool_t vfs_is_filename_allowed(const char *filename)
     return true;
 }
 
-
-bool_t vfs_erase(vfs_file_t *file)
+vfs_result_e vfs_erase(vfs_file_t *file)
 {
-    switch (file->info->filesystem)
-    {
-        case VFS_FS_FAT32:
-        {
-            if (!fat32_erase_file_sync(&(file->info->fat32), &(file->fat32)) || \
-                !vfs_update_file_obj(file))
-                return false;
+    vfs_result_e result = file->info->methods->erase_file(file->info->_info, file->_file);
 
-            break;
-        }
-    }
+    if (result != VFS_RESULT_OK)
+        return result;
 
-    return true;
+    return file->info->methods->get_file_parameters(file->info->_info, file->_file, &(file->header));
 }
 
-
-bool_t vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t *file)
+vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_file)
 {
+    if (dir == NULL || filename == NULL)
+        return VFS_RESULT_INVALID_PARAMETER;
     if (!vfs_is_filename_allowed(filename))
-        return false;
+        return VFS_RESULT_INVALID_FILENAME;
 
-    switch (dir->info->filesystem)
+    // не проверяем запрещенные комбинации аттрибутов,
+    // так как по идее это должен проверить внутренний блок
+
+    vfs_file_t *file = malloc(sizeof(vfs_file_t));
+    file->info = dir->info;
+
+    if (!RC_TAKE(file->info))
     {
-        case VFS_FS_FAT32:
-        {
-            if (!fat32_create_file(&(dir->info->fat32), &(dir->fat32), filename, attributes, file != NULL ? &(file->fat32) : NULL))
-                return false;
+        dir->info->methods->release_file_object(file->_file);
+        free(file);
 
-            if (file)
-            {
-                file->info = dir->info;
-
-                if (!vfs_fill_file_obj_from_fat32(file))
-                {
-                    free(file->fat32.filename);
-                    return false;
-                }
-            }
-
-            break;
-        }
+        return VFS_RESULT_NO_FILESYSTEM;
     }
 
-    return true;
+    vfs_result_e result = dir->info->methods->create_file(dir->info->_info, dir->_file, filename, attributes, &(file->_file));
+
+    if (result != VFS_RESULT_OK)
+    {
+        RC_RELEASE(file->info);
+        free(file);
+
+        return result;
+    }
+
+    result = file->info->methods->get_file_parameters(file->info->_info, file->_file, &(file->header));
+
+    if (result != VFS_RESULT_OK)
+    {
+        vfs_cleanup_file_obj(file);
+        free(file);
+
+        return result;
+    }
+
+    if (_file)
+        *_file = file;
+
+    return VFS_RESULT_OK;
 }
 
-
-bool_t vfs_newdir(vfs_file_t *dir, const char *dirname, uint32_t attributes, vfs_file_t *new_dir)
+vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_new_dir)
 {
-    if (!vfs_is_filename_allowed(dirname))
-        return false;
+    if (dir == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+    if (filename == NULL)
+        return VFS_RESULT_INVALID_PARAMETER;
+    if (!vfs_is_filename_allowed(filename))
+        return VFS_RESULT_INVALID_FILENAME;
 
-    switch (dir->info->filesystem)
+    vfs_file_t *new_dir = malloc(sizeof(vfs_file_t));
+    new_dir->info = dir->info;
+
+    if (!RC_TAKE(new_dir->info))
     {
-        case VFS_FS_FAT32:
-        {
-            if (!fat32_create_directory(&(dir->info->fat32), &(dir->fat32), dirname, attributes, new_dir != NULL ? &(new_dir->fat32) : NULL))
-                return false;
+        dir->info->methods->release_file_object(new_dir->_file);
+        free(new_dir);
 
-            if (new_dir)
-            {
-                new_dir->info = dir->info;
-
-                if (!vfs_fill_file_obj_from_fat32(new_dir))
-                {
-                    free(new_dir->fat32.filename);
-                    return false;
-                }
-            }
-            
-            break;
-        }
+        return VFS_RESULT_NO_FILESYSTEM;
     }
 
-    return true;
+    vfs_result_e result = dir->info->methods->create_directory(dir->info->_info, dir->_file, filename, attributes, &(new_dir->_file));
+
+    if (result != VFS_RESULT_OK)
+    {
+        RC_RELEASE(new_dir->info);
+        free(new_dir);
+
+        return result;
+    }
+
+    result = new_dir->info->methods->get_file_parameters(new_dir->info->_info, new_dir->_file, &(new_dir->header));
+
+    if (result != VFS_RESULT_OK)
+    {
+        vfs_cleanup_file_obj(new_dir);
+        free(new_dir);
+
+        return result;
+    }
+
+    if (_new_dir)
+        *_new_dir = new_dir;
+
+    return VFS_RESULT_OK;
 }
 
-
-bool_t vfs_remove(vfs_file_t *file)
+vfs_result_e vfs_remove(vfs_file_t *file)
 {
-    switch (file->info->filesystem)
-    {
-        case VFS_FS_FAT32:
-        {
-            if (!fat32_remove_file(&(file->info->fat32), &(file->fat32)))
-                return false;
+    if (file == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
 
-            break;
-        }
-    }
-
-    return true;
+    return file->info->methods->remove_file(file->info->_info, file->_file);
 }
-
 
 uint32_t vfs_tell(vfs_stream_t *stream)
 {
-    return stream->position;
+    if (stream == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+    
+    return stream->file->info->methods->tell(stream->_stream);
 }
 
-
-void vfs_seek(vfs_stream_t *stream, int offset, uint8_t mode)
+vfs_result_e vfs_seek(vfs_stream_t *stream, int offset, uint8_t mode) // unsafe (offset int, но tell - unsigned int)
 {
-    switch (mode)
-    {
-        case VFS_SEEK_MODE_START:
-            stream->position = offset;
-            break;
+    if (stream == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
 
-        case VFS_SEEK_MODE_END:
-            stream->position = stream->file->size - offset;
-            break;
-
-        case VFS_SEEK_MODE_CURRENT:
-            stream->position = (int)(stream->position) + offset;
-    }
+    return stream->file->info->methods->seek(stream->_stream, offset, mode);
 }
 
+vfs_result_e vfs_read(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_read)
+{
+    return stream->file->info->methods->read_file(stream->_stream, buffer, bytes, bytes_read);
+}
+
+vfs_result_e vfs_write(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_wrote)
+{
+    return stream->file->info->methods->write_file(stream->_stream, buffer, bytes, bytes_wrote);
+}
 
 void vfs_close(vfs_stream_t *stream)
 {
-    disk_flush_cache_sync(stream->file->info->disk_id);
+    disk_flush_cache_sync(stream->file->info->header.disk_id);
+
+    stream->file->info->methods->close_file(stream->_stream);
 
     vfs_cleanup_file_obj(stream->file);
     free(stream->file);
@@ -595,50 +813,44 @@ void vfs_close(vfs_stream_t *stream)
     free(stream);
 }
 
-// TODO: сделать, чтобы fat32 нормально читал по фиксированному количеству байтов, а то щас очень долго n^2
-// сделать такие же потоки, как тут
-bool_t vfs_read(vfs_stream_t *stream, void *buffer, uint32_t bytes)
+const vfs_platform_specific_methods_t *vfs_detect_platform(uint8_t disk_id, uint8_t partition_num)
 {
-    if (!(stream->flags & VFS_FLAG_READ))
-        return false;
-    
-    switch (stream->file->info->filesystem)
+    if (disk_id == 0xFF)
+        return vfs_platform_table[0xFF]; // специальный случай для ram_fs
+    if (partition_num >= 4)
+        return NULL;
+
+    dynamic_array_t *disks = disk_enumerate_disks();
+    bool_t found = false;
+
+    for (uint32_t i = 0;i < disks->elements_count;i++)
     {
-        case VFS_FS_FAT32:
+        ata_basic_identify_data_t *data = dynamic_array_get_by_index(disks, i);
+
+        if (data->port_num == disk_id)
         {
-            if (!fat32_read_file(&(stream->file->info->fat32), &(stream->file->fat32), stream->position, buffer, min(bytes, stream->file->size - stream->position)))
-                return false;
-
-            stream->position += bytes;
-
-            return true;
+            found = true;
+            break;
         }
     }
 
-    return false;
+    dynamic_array_destroy(disks);
+
+    if (!found)
+        return NULL;
+
+    mbr_t mbr;
+    mbr_read_sync(disk_id, &mbr);
+
+    if (mbr.partitions[partition_num].partition_type == MBR_PARTITION_UNUSED)
+        return NULL;
+    
+    return vfs_platform_table[mbr.partitions[partition_num].partition_type];
 }
 
-
-bool_t vfs_write(vfs_stream_t *stream, void *buffer, uint32_t bytes)
+void vfs_register_platform(uint8_t type, const vfs_platform_specific_methods_t *methods)
 {
-    if (!(stream->flags & VFS_FLAG_WRITE))
-        return false;
-    
-    switch (stream->file->info->filesystem)
-    {
-        case VFS_FS_FAT32:
-        {
-            if (!fat32_write_file_sync(&(stream->file->info->fat32), &(stream->file->fat32), stream->position, buffer, bytes))
-                return false;
-
-            stream->position += bytes;
-            vfs_update_file_obj(stream->file);
-
-            return true;
-        }
-    }
-
-    return false;
+    vfs_platform_table[type] = methods;
 }
 
 void vfs_init()
