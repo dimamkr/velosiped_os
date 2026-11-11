@@ -1303,6 +1303,7 @@ vfs_result_e fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t 
     }
 
     fat32_file_record_t *special_records = malloc(info->sectors_per_cluster * FAT32_DEFAULT_SECTOR_SIZE);
+    memset(special_records, '\0', info->sectors_per_cluster * FAT32_DEFAULT_SECTOR_SIZE);
 
     special_records[0].attributes = FAT32_ATTRIBUTE_DIRECTORY;
     special_records[0].creation_date = new_dir->creation_datetime.date;

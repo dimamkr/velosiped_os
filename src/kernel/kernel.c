@@ -102,7 +102,9 @@ void kernel_main_task(void *_)
     fs_drivers_init();
     PRINT_OK;
 
+#ifndef DEBUG
     power_init();
+#endif
 
     PRINT_INIT("mouse");
     mouse_init();

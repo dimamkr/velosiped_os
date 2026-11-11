@@ -101,7 +101,7 @@ KERNEL_CFLAGS_COMMON = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin \
                        $(KERNEL_INCLUDES) \
                        -Werror -MMD -MP
 KERNEL_CFLAGS_RELEASE = $(KERNEL_CFLAGS_COMMON) -O2
-KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O2 -fno-omit-frame-pointer
+KERNEL_CFLAGS_DEBUG   = $(KERNEL_CFLAGS_COMMON) -g -O0 -fno-omit-frame-pointer -DDEBUG
 
 KERNEL_NASM_COMMON = -f elf32
 KERNEL_NASM_RELEASE = $(KERNEL_NASM_COMMON)
