@@ -58,7 +58,8 @@ typedef enum {
     VFS_RESULT_FILE_ALREADY_EXISTS,
     VFS_RESULT_NOT_WRITABLE,
     VFS_RESULT_NOT_READABLE,
-    VFS_RESULT_FILESYSTEM_IS_BUSY
+    VFS_RESULT_FILESYSTEM_IS_BUSY,
+    VFS_RESULT_FILE_NOT_FOUND
 } vfs_result_e;
 
 
@@ -103,6 +104,7 @@ typedef struct {
     vfs_result_e (*open_directory) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr dir, vfs_platform_specific_directory_reader_ptr *result, uint32_t iterator_quant_size);
     vfs_result_e (*read_directory) (vfs_platform_specific_directory_reader_ptr dir_reader, vfs_platform_specific_file_ptr *buffer, uint32_t buffer_size, uint32_t *read_size);
     void (*close_directory) (vfs_platform_specific_directory_reader_ptr dir_reader);
+    vfs_result_e (*get_file_by_name) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr dir, const char *filename, vfs_platform_specific_file_ptr *result);
 
     // методы для работы с файлами
     vfs_result_e (*create_file) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr dir, const char *filename, uint32_t attributes, vfs_platform_specific_file_ptr *result);
@@ -182,6 +184,7 @@ void vfs_close_directory(vfs_directory_reader_t *reader);
 vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern, bool_t ignore_case, vfs_tree_searcher_t **_searcher);
 vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size);
 void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher);
+vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs_file_t **file);
 vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream);
 bool_t vfs_is_filename_allowed(const char *filename);
 vfs_result_e vfs_erase(vfs_file_t *file);

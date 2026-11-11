@@ -22,7 +22,8 @@ static const char* vfs_status_table [] = {
     [VFS_RESULT_FILE_ALREADY_EXISTS] = "File already exists",
     [VFS_RESULT_NOT_WRITABLE] = "Stream is not writable",
     [VFS_RESULT_NOT_READABLE] = "Stream is not readable",
-    [VFS_RESULT_FILESYSTEM_IS_BUSY] = "Filesystem is busy"
+    [VFS_RESULT_FILESYSTEM_IS_BUSY] = "Filesystem is busy",
+    [VFS_RESULT_FILE_NOT_FOUND] = "File not found"
 };
 
 static const vfs_platform_specific_methods_t *vfs_platform_table [256] = {NULL};
@@ -612,9 +613,145 @@ void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher)
     free(searcher);
 }
 
-vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path)
+vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs_file_t **file)
 {
-    // TODO
+    if (current_dir == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+    if (path == NULL)
+        return VFS_RESULT_INVALID_PARAMETER;
+
+    char *path_buff = strdup(path);
+    char *last_sym = path_buff;
+
+    vfs_file_t *dir = malloc(sizeof(vfs_file_t));
+    bool_t return_mp = false;
+
+    if (*path_buff == '/')
+    {
+        uint32_t next_symbol = strchr(path_buff + 1, '/') + 1;
+
+        if (next_symbol == 0)
+        {
+            return_mp = true;
+            next_symbol = strlen(path_buff);
+        }
+
+        path_buff[next_symbol] = '\0';
+        last_sym = path_buff + next_symbol + 1;
+
+        dynamic_array_t *mp = vfs_search_mountpoints(path_buff + 1, false);
+
+        if (mp->elements_count > 0)
+        {
+            vfs_result_e result = vfs_copy_file_obj(dir, dynamic_array_get_top(mp));
+
+            if (result != VFS_RESULT_OK)
+            {
+                free(dir);
+
+                return result;
+            }
+        }
+        else
+        {
+            free(dir);
+
+            return VFS_RESULT_FILE_NOT_FOUND;
+        }
+    }
+    else
+    {
+        vfs_result_e result = vfs_copy_file_obj(dir, current_dir);
+
+        if (result != VFS_RESULT_OK)
+        {
+            free(dir);
+            free(path_buff);
+
+            return result;
+        }
+    }
+
+    const vfs_platform_specific_methods_t *methods = dir->info->methods;
+    
+    vfs_file_t new_file;
+    bool_t end_cycle = false;
+    
+    if (!return_mp)
+    {
+        for (char *i = last_sym;;i++)
+        {
+            if (*i == '\0')
+                end_cycle = true;
+            if (*i == '/')
+                *i = '\0';
+
+            if (*i == '\0')
+            {
+                if (!(dir->header.attributes & VFS_ATTRIBUTE_DIRECTORY))
+                {
+                    vfs_cleanup_file_obj(dir);
+                    free(path_buff);
+
+                    return VFS_RESULT_FILE_NOT_FOUND;
+                }
+
+                vfs_result_e result = methods->get_file_by_name(dir->info->_info, dir->_file, last_sym, &(new_file._file));
+
+                if (result != VFS_RESULT_OK)
+                {
+                    vfs_cleanup_file_obj(dir);
+                    free(path_buff);
+
+                    return result;
+                }
+
+                result = methods->get_file_parameters(dir->info->_info, new_file._file, &(new_file.header));
+
+                if (result != VFS_RESULT_OK)
+                {
+                    vfs_cleanup_file_obj(dir);
+                    methods->release_file_object(new_file._file);
+                    free(path_buff);
+
+                    return result;
+                }
+
+                new_file.info = dir->info;
+
+                if (!RC_TAKE(dir->info))
+                {
+                    vfs_cleanup_file_obj(dir);
+                    methods->release_file_object(new_file._file);
+                    free(path_buff);
+
+                    return VFS_RESULT_NO_FILESYSTEM;
+                }
+
+                vfs_cleanup_file_obj(dir);
+                result = vfs_copy_file_obj(dir, &new_file);
+
+                if (result != VFS_RESULT_OK)
+                {
+                    vfs_cleanup_file_obj(&new_file);
+                    free(path_buff);
+
+                    return result;
+                }
+
+                last_sym = i + 1;
+            }
+
+            if (end_cycle)
+                break;
+        }
+    }
+    
+    *file = dir;
+
+    free(path_buff);
+
+    return VFS_RESULT_OK;
 }
 
 vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)

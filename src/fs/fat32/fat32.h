@@ -183,6 +183,7 @@ void fat32_release_file_object(fat32_basic_file_info_t *file);
 void fat32_destroy_files_list(dynamic_array_t *list);
 vfs_result_e fat32_open_directory(fat32_info_t *info, fat32_basic_file_info_t *dir, fat32_directory_reader_t **_result, uint32_t iterator_quant_size);
 vfs_result_e fat32_read_directory(fat32_directory_reader_t *reader, fat32_basic_file_info_t **_buffer, uint32_t buffer_size, uint32_t *read_size);
+vfs_result_e fat32_get_file_by_name(fat32_info_t *info, fat32_basic_file_info_t *dir, const char *filename, fat32_basic_file_info_t **_file);
 void fat32_close_directory(fat32_directory_reader_t *reader);
 vfs_result_e fat32_read_file(fat32_stream_t *stream, void *buffer, uint32_t buffer_size, uint32_t *read_size);
 bool_t fat32_read_fsinfo_sync(fat32_info_t *info, fat32_fsinfo_t *fsinfo);

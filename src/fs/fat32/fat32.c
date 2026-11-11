@@ -16,6 +16,7 @@ const vfs_platform_specific_methods_t fat32_methods = {
     .open_directory = (void*)fat32_open_directory,
     .read_directory = (void*)fat32_read_directory,
     .close_directory = (void*)fat32_close_directory,
+    .get_file_by_name = (void*)fat32_get_file_by_name,
 
     .create_file = (void*)fat32_create_file,
     .set_file_parameters = (void*)fat32_set_file_parameters,
@@ -235,6 +236,8 @@ void fat32_destroy_files_list(dynamic_array_t *list)
 
 vfs_result_e fat32_open_directory(fat32_info_t *info, fat32_basic_file_info_t *dir, fat32_directory_reader_t **_result, uint32_t iterator_quant_size)
 {
+    (void)iterator_quant_size;
+
     fat32_directory_reader_t *reader = malloc(sizeof(fat32_directory_reader_t));
 
     memcpy(&(reader->info), info, sizeof(fat32_info_t));
@@ -249,8 +252,8 @@ vfs_result_e fat32_open_directory(fat32_info_t *info, fat32_basic_file_info_t *d
         return VFS_RESULT_DISK_ERROR;
     }
 
-    reader->retention_size = reader->retention_index = iterator_quant_size;
-    reader->retention_buffer = malloc(sizeof(fat32_basic_file_info_t) * iterator_quant_size);
+    reader->retention_size = reader->retention_index = 0;
+    reader->retention_buffer = malloc(sizeof(fat32_basic_file_info_t) * (FAT32_DEFAULT_SECTOR_SIZE * info->sectors_per_cluster / 32));
 
     *_result = reader;
 
@@ -261,13 +264,6 @@ vfs_result_e fat32_read_directory(fat32_directory_reader_t *reader, fat32_basic_
 {
     uint32_t files_elapsed = buffer_size;
 
-    if (reader->read_finished)
-    {
-        *read_size = 0;
-
-        return VFS_RESULT_OK;
-    }
-
     // покрываем часть из остатка
 
     uint32_t files_can_be_covered = min(buffer_size, reader->retention_size - reader->retention_index);
@@ -276,9 +272,15 @@ vfs_result_e fat32_read_directory(fat32_directory_reader_t *reader, fat32_basic_
 
     files_elapsed -= files_can_be_covered;
 
+    if (reader->retention_index == reader->retention_size)
+        reader->retention_index = reader->retention_size = 0;
+
+    *read_size = buffer_size - files_elapsed;
+
     // читаем папку
 
-    uint32_t retention_last_index = 0;
+    if (reader->read_finished)
+        return VFS_RESULT_OK;
 
     dynamic_array_t *lfn_entries = dynamic_array_create(sizeof(fat32_lfn_record_t));
     uint32_t first_lfn_entry_cluster = 0;
@@ -436,6 +438,38 @@ void fat32_close_directory(fat32_directory_reader_t *reader)
     free(reader->retention_buffer);
 
     free(reader);
+}
+
+vfs_result_e fat32_get_file_by_name(fat32_info_t *info, fat32_basic_file_info_t *dir, const char *filename, fat32_basic_file_info_t **_file)
+{
+    fat32_directory_reader_t *reader;
+    vfs_result_e result = fat32_open_directory(info, dir, &reader, VFS_ITERATOR_DEFAULT_QUANT_SIZE);
+
+    if (result != VFS_RESULT_OK)
+        return result;
+
+    fat32_basic_file_info_t *file;
+    uint32_t files_read = 0;
+    for (result = fat32_read_directory(reader, &file, 1, &files_read);result == VFS_RESULT_OK && files_read > 0;result = fat32_read_directory(reader, &file, 1, &files_read))
+    {
+        if (strcmp(file->filename, filename) == 0)
+            break;
+
+        fat32_release_file_object(file);
+        file = NULL;
+    }
+    
+    fat32_close_directory(reader);
+
+    if (result != VFS_RESULT_OK)
+        return result;
+
+    if (file != NULL)
+        *_file = file;
+    else
+        return VFS_RESULT_FILE_NOT_FOUND;
+
+    return VFS_RESULT_OK;
 }
 
 vfs_result_e fat32_read_file(fat32_stream_t *stream, void *buffer, uint32_t buffer_size, uint32_t *read_size)
