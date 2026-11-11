@@ -612,6 +612,11 @@ void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher)
     free(searcher);
 }
 
+vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path)
+{
+    // TODO
+}
+
 vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)
 {
     if (file == NULL || file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)

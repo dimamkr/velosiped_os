@@ -2,7 +2,7 @@
 #include "keyboard.h"
 #include "argparse.h"
 
-#define TERMINAL_MAX_RESOLVE_BUFFER 2
+#define TERMINAL_MAX_RESOLVE_BUFFER 25
 
 typedef bool_t (*terminal_command_handler_cb)(argparse_command_t *);
 

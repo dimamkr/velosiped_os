@@ -304,6 +304,81 @@ bool_t terminal_print_disks(argparse_command_t *command)
     return true;
 }
 
+bool_t terminal_readmbr(argparse_command_t *command)
+{
+    uint8_t disk_id = 0xFF;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == 0)
+            disk_id = strtoul(arg->name, NULL, 10);
+    }
+
+    if (disk_id == 0xFF)
+    {
+        konsole_println("Error: disk is not specified");
+
+        return false;
+    }
+
+    dynamic_array_t *disks = disk_enumerate_disks();
+    bool_t found = false;
+
+    for (uint32_t i = 0;i < disks->elements_count;i++)
+    {
+        ata_basic_identify_data_t *info = dynamic_array_get_by_index(disks, i);
+
+        if (info->port_num == disk_id)
+        {
+            found = true;
+            break;
+        }
+    }
+
+    dynamic_array_destroy(disks);
+
+    if (!found)
+    {
+        konsole_println("Error: disk not found");
+
+        return false;
+    }
+
+    mbr_t *mbr = malloc(sizeof(mbr_t));
+    
+    if (!mbr_read_sync(disk_id, mbr))
+    {
+        free(mbr);
+        konsole_println("Error: disk error");
+
+        return false;
+    }
+
+    konsole_println("========");
+
+    for (uint8_t i = 0;i < 4;i++)
+    {
+        if (mbr->partitions[i].partition_type != MBR_PARTITION_UNUSED)
+        {
+            konsole_printf("Partition num: %d\nType: %s\nStart sector: %d\nTotal sectors: %d\nBootable: %d\n",
+                i,
+                mbr_get_partition_type(mbr->partitions[i].partition_type),
+                mbr->partitions[i].start_lba,
+                mbr->partitions[i].total_sectors,
+                mbr->partitions[i].boot_indicator == 0x80
+            );
+
+            konsole_println("========");
+        }
+    }
+
+    free(mbr);
+
+    return true;
+}
+
 bool_t terminal_print_path(argparse_command_t *command)
 {
     if (!current_dir)
@@ -1490,6 +1565,7 @@ void terminal_init()
     terminal_register_command_handler("ticks", terminal_print_ticks);
     terminal_register_command_handler("datetime", terminal_print_datetime);
     terminal_register_command_handler("disks", terminal_print_disks);
+    terminal_register_command_handler("readmbr", terminal_readmbr);
     terminal_register_command_handler("ls", terminal_print_listdir);
     terminal_register_command_handler("cd", terminal_change_dir);
     terminal_register_command_handler("view", terminal_view);
