@@ -1,6 +1,5 @@
 #include "vfs.h"
 
-
 static hash_table_t *mountpoints;
 static hash_table_t *mountpoints_rev;
 
@@ -643,14 +642,9 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
 
         if (mp->elements_count > 0)
         {
-            vfs_result_e result = vfs_copy_file_obj(dir, dynamic_array_get_top(mp));
+            memcpy(dir, dynamic_array_get_top(mp), sizeof(vfs_file_t));
 
-            if (result != VFS_RESULT_OK)
-            {
-                free(dir);
-
-                return result;
-            }
+            dynamic_array_destroy(mp);
         }
         else
         {
@@ -729,15 +723,7 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
                 }
 
                 vfs_cleanup_file_obj(dir);
-                result = vfs_copy_file_obj(dir, &new_file);
-
-                if (result != VFS_RESULT_OK)
-                {
-                    vfs_cleanup_file_obj(&new_file);
-                    free(path_buff);
-
-                    return result;
-                }
+                memcpy(dir, &new_file, sizeof(vfs_file_t));
 
                 last_sym = i + 1;
             }
@@ -752,6 +738,18 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
     free(path_buff);
 
     return VFS_RESULT_OK;
+}
+
+vfs_result_e vfs_move_file(vfs_file_t *dst_file, vfs_file_t *src_file)
+{
+    if (dst_file == NULL || src_file == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+    if (dst_file->info != src_file->info)
+        return VFS_RESULT_INVALID_METHOD;
+
+    const vfs_platform_specific_methods_t *methods = dst_file->info->methods;
+
+    return methods->move_file(dst_file->info->_info, dst_file->_file, src_file->_file);
 }
 
 vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)

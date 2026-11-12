@@ -113,6 +113,7 @@ typedef struct {
     vfs_result_e (*open_file) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr file, uint8_t flags, vfs_platform_specific_stream_ptr *result);
     vfs_result_e (*erase_file) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr file);
     vfs_result_e (*remove_file) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr file);
+    vfs_result_e (*move_file) (vfs_platform_specific_info_ptr info, vfs_platform_specific_file_ptr dst, vfs_platform_specific_file_ptr src);
     vfs_result_e (*seek) (vfs_platform_specific_stream_ptr stream, int offset, uint8_t mode);
     uint32_t (*tell) (vfs_platform_specific_stream_ptr stream);
     vfs_result_e (*write_file) (vfs_platform_specific_stream_ptr stream, void *buffer, uint32_t buffer_size, uint32_t *bytes_wrote);
@@ -185,12 +186,14 @@ vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern
 vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size);
 void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher);
 vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs_file_t **file);
+vfs_result_e vfs_link_file(vfs_file_t *dst_file, vfs_file_t *src_file);
 vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream);
 bool_t vfs_is_filename_allowed(const char *filename);
 vfs_result_e vfs_erase(vfs_file_t *file);
 vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_file);
 vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_new_dir);
 vfs_result_e vfs_remove(vfs_file_t *file);
+vfs_result_e vfs_move_file(vfs_file_t *dst_file, vfs_file_t *src_file);
 uint32_t vfs_tell(vfs_stream_t *stream);
 vfs_result_e vfs_seek(vfs_stream_t *stream, int offset, uint8_t mode);
 vfs_result_e vfs_read(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_read);

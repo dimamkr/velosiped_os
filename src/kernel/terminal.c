@@ -1173,6 +1173,118 @@ bool_t terminal_remove(argparse_command_t *command)
     return true;
 }
 
+bool_t terminal_move(argparse_command_t *command)
+{
+    if (!current_dir)
+        konsole_println("Error: root is empty");
+
+    const char *path_src;
+    char *path_dst;
+
+    for (uint32_t i = 0; i < command->arguments->elements_count; i++)
+    {
+        argparse_argument_t *arg = dynamic_array_get_by_index(command->arguments, i);
+
+        if (arg->value == 0)
+        {
+            if (i == 0)
+                path_src = arg->name;
+            else if (i == 1)
+                path_dst = arg->name;
+            else
+            {
+                konsole_println("Error: invalid argument");
+
+                return false;
+            }
+        }
+    }
+
+    vfs_file_t *file_src, *file_dst;
+
+    vfs_result_e result = vfs_get_file_by_path(current_dir, path_src, &file_src);
+
+    if (result != VFS_RESULT_OK)
+    {
+        konsole_printf("Error: %s\n", vfs_get_result(result));
+
+        return false;
+    }
+
+    path_dst = strdup(path_dst);
+    uint32_t delim_index = strchr_r(path_dst, '/');
+
+    vfs_file_t *creation_dir;
+
+    if (delim_index != -1)
+    {
+        path_dst[delim_index] = '\0';
+
+        result = vfs_get_file_by_path(current_dir, path_dst, &creation_dir);
+
+        if (result != VFS_RESULT_OK)
+        {
+            free(path_dst);
+            vfs_cleanup_file_obj(file_src);
+            konsole_printf("Error: %s\n", vfs_get_result(result));
+
+            return false;
+        }
+    }
+    else
+    {
+        creation_dir = malloc(sizeof(vfs_file_t));
+        result = vfs_copy_file_obj(creation_dir, current_dir);
+
+        if (result != VFS_RESULT_OK)
+        {
+            free(path_dst);
+            free(creation_dir);
+            vfs_cleanup_file_obj(file_src);
+            konsole_printf("Error: %s\n", vfs_get_result(result));
+
+            return false;
+        }
+    }
+
+    result = vfs_newfile(creation_dir, path_dst + delim_index + 1, file_src->header.attributes, &file_dst);
+    vfs_cleanup_file_obj(creation_dir);
+
+    if (result != VFS_RESULT_OK)
+    {
+        free(path_dst);
+        vfs_cleanup_file_obj(file_src);
+
+        konsole_printf("Error: %s\n", vfs_get_result(result));
+
+        return false;
+    }
+
+    result = vfs_move_file(file_dst, file_src);
+
+    if (result != VFS_RESULT_OK)
+    {   
+        vfs_result_e remove_result = vfs_remove(file_dst);
+
+        if (remove_result != VFS_RESULT_OK)
+            konsole_printf("Error (while handling below): %s\n", vfs_get_result(remove_result));
+
+        free(path_dst);
+        vfs_cleanup_file_obj(file_src);
+        vfs_cleanup_file_obj(file_dst);
+
+        konsole_printf("Error: %s\n", vfs_get_result(result));
+
+        return false;
+    }
+
+    free(path_dst);
+    vfs_cleanup_file_obj(file_src);
+    vfs_cleanup_file_obj(file_dst);
+
+    return true;
+}
+
 bool_t terminal_fsleave(argparse_command_t *command)
 {
     if (root != NULL)
@@ -1573,6 +1685,7 @@ void terminal_init()
     terminal_register_command_handler("newfile", terminal_newfile);
     terminal_register_command_handler("newdir", terminal_newdir);
     terminal_register_command_handler("rm", terminal_remove);
+    terminal_register_command_handler("move", terminal_move);
     terminal_register_command_handler("fsleave", terminal_fsleave);
     terminal_register_command_handler("mount", terminal_mount);
     terminal_register_command_handler("umount", terminal_umount);

@@ -24,6 +24,7 @@ const vfs_platform_specific_methods_t fat32_methods = {
     .open_file = (void*)fat32_open_file,
     .erase_file = (void*)fat32_erase_file,
     .remove_file = (void*)fat32_remove_file,
+    .move_file = (void*)fat32_move_file,
     .seek = (void*)fat32_seek,
     .tell = (void*)fat32_tell,
     .write_file = (void*)fat32_write_file,
@@ -1388,8 +1389,38 @@ vfs_result_e fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t 
     return VFS_RESULT_OK;
 }
 
-bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info)
+vfs_result_e fat32_move_file(fat32_info_t *info, fat32_basic_file_info_t *dst, fat32_basic_file_info_t *src)
 {
+    if (info == NULL || dst == NULL || src == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+
+    uint32_t old_cluster_num, old_size, old_attributes;
+
+    old_cluster_num = dst->cluster_num;
+    old_size = dst->size;
+    old_attributes = dst->attributes;
+
+    dst->cluster_num = src->cluster_num;
+    dst->size = src->size;
+    dst->attributes = src->attributes;
+    
+    if (!fat32_update_directory_entry(info, dst))
+    {
+        dst->cluster_num = old_cluster_num;
+        dst->size = old_size;
+        dst->attributes = old_attributes;
+
+        return VFS_RESULT_DISK_ERROR;
+    }
+
+    return fat32_remove_hardlink(info, src);
+}
+
+vfs_result_e fat32_remove_hardlink(fat32_info_t *info, fat32_basic_file_info_t *file_info)
+{
+    if (info == NULL || file_info == NULL)
+        return VFS_RESULT_INVALID_HANDLE;
+
     uint32_t start_index = file_info->first_entry_index;
     fat32_position_t position = {0};
     position.cluster_num = file_info->first_entry_cluster_num;
@@ -1401,7 +1432,7 @@ bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t 
     for (;!FAT32_HAS_READING_ERROR(position);fat32_next_cluster_sync(info, &position))
     {
         if (!fat32_read_cluster_sync(info, position.cluster_num, buffer))
-            return false;
+            return VFS_RESULT_DISK_ERROR;
 
         bool_t non_lfn_entry = false;
         
@@ -1416,16 +1447,16 @@ bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t 
         }
 
         if (!fat32_write_cluster_sync(info, position.cluster_num, buffer))
-            return false;
+            return VFS_RESULT_DISK_ERROR;
 
         if (non_lfn_entry)
             break;
     }
 
     if (FAT32_HAS_READING_ERROR(position))
-        return false;
+        return VFS_RESULT_DISK_ERROR;
     
-    return true;
+    return VFS_RESULT_OK;
 }
 
 vfs_result_e fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info)
@@ -1438,8 +1469,5 @@ vfs_result_e fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file
     if (result != VFS_RESULT_OK)
         return result;
 
-    if (!fat32_remove_directory_entry(info, file_info))
-        return VFS_RESULT_DISK_ERROR;
-
-    return VFS_RESULT_OK;
+    return fat32_remove_hardlink(info, file_info);
 }

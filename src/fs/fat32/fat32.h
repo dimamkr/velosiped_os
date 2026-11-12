@@ -204,7 +204,8 @@ void fat32_close_file(fat32_stream_t *stream);
 vfs_result_e fat32_seek(fat32_stream_t *stream, int offset, uint8_t mode);
 uint32_t fat32_tell(fat32_stream_t *stream);
 vfs_result_e fat32_create_directory(fat32_info_t *info, fat32_basic_file_info_t *dir_info, const char *dirname, uint32_t attributes, fat32_basic_file_info_t **_result);
-bool_t fat32_remove_directory_entry(fat32_info_t *info, fat32_basic_file_info_t *file_info);
+vfs_result_e fat32_move_file(fat32_info_t *info, fat32_basic_file_info_t *dst, fat32_basic_file_info_t *src);
+vfs_result_e fat32_remove_hardlink(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 vfs_result_e fat32_remove_file(fat32_info_t *info, fat32_basic_file_info_t *file_info);
 
 extern const vfs_platform_specific_methods_t fat32_methods;
