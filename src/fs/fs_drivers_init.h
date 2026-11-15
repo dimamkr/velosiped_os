@@ -3,6 +3,7 @@
 
 #include <fat32.h>
 #include <vfs.h>
+#include <fd.h>
 
 void fs_drivers_init();
 

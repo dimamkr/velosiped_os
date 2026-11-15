@@ -413,11 +413,11 @@ bool_t terminal_print_listdir(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(result));
+        konsole_printf("Error: %s\n", results_get(result));
 
         return false;
     }
@@ -486,11 +486,11 @@ vfs_file_t *terminal_resolve_filename(vfs_tree_searcher_t *searcher)
 
     while (true)
     {
-        vfs_result_e search_result = vfs_search(searcher, buffer + showed_files, TERMINAL_MAX_RESOLVE_BUFFER, &buffer_read);
+        result_e search_result = vfs_search(searcher, buffer + showed_files, TERMINAL_MAX_RESOLVE_BUFFER, &buffer_read);
 
-        if (search_result != VFS_RESULT_OK)
+        if (search_result != RESULT_OK)
         {
-            konsole_printf("Error: %s\n", vfs_get_result(search_result));
+            konsole_printf("Error: %s\n", results_get(search_result));
 
             free(result);
             free(buffer);
@@ -635,11 +635,11 @@ bool_t terminal_change_dir(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -716,11 +716,11 @@ bool_t terminal_view(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -748,13 +748,13 @@ bool_t terminal_view(argparse_command_t *command)
     }
 
     vfs_stream_t *stream;
-    vfs_result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
+    result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
     vfs_cleanup_file_obj(file);
     free(file);
 
-    if (open_result != VFS_RESULT_OK)
+    if (open_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+        konsole_printf("Error: %s\n", results_get(open_result));
 
         return false;
     }
@@ -765,26 +765,26 @@ bool_t terminal_view(argparse_command_t *command)
 
     if (start_pos > 0)
     {
-        vfs_result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+        result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
 
-        if (seek_result != VFS_RESULT_OK)
+        if (seek_result != RESULT_OK)
         {
             vfs_close(stream);
             free(buffer);
 
-            konsole_printf("Error: %s\n", vfs_get_result(seek_result));
+            konsole_printf("Error: %s\n", results_get(seek_result));
 
             return false;
         }
     }
 
-    vfs_result_e read_result = vfs_read(stream, buffer, buffer_size - 1, NULL);
-    if (read_result != VFS_RESULT_OK)
+    result_e read_result = vfs_read(stream, buffer, buffer_size - 1, NULL);
+    if (read_result != RESULT_OK)
     {
         vfs_close(stream);
         free(buffer);
 
-        konsole_printf("Error: %s\n", vfs_get_result(read_result));
+        konsole_printf("Error: %s\n", results_get(read_result));
 
         return false;
     }
@@ -857,11 +857,11 @@ bool_t terminal_write(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -880,25 +880,25 @@ bool_t terminal_write(argparse_command_t *command)
     }
 
     vfs_stream_t *stream;
-    vfs_result_e open_result = vfs_open(file, flags, &stream);
+    result_e open_result = vfs_open(file, flags, &stream);
     vfs_cleanup_file_obj(file);
     free(file);
 
-    if (open_result != VFS_RESULT_OK)
+    if (open_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+        konsole_printf("Error: %s\n", results_get(open_result));
 
         return false;
     }
 
     if (start_pos > 0)
     {
-        vfs_result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
+        result_e seek_result = vfs_seek(stream, start_pos, VFS_SEEK_MODE_START);
 
-        if (seek_result != VFS_RESULT_OK)
+        if (seek_result != RESULT_OK)
         {
             vfs_close(stream);
-            konsole_printf("Error: %s\n", vfs_get_result(seek_result));
+            konsole_printf("Error: %s\n", results_get(seek_result));
 
             return false;
         }
@@ -960,14 +960,14 @@ bool_t terminal_write(argparse_command_t *command)
                     break;
             }
 
-            vfs_result_e write_result = vfs_write(stream, buffer, buffer_ind, NULL);
+            result_e write_result = vfs_write(stream, buffer, buffer_ind, NULL);
 
-            if (write_result != VFS_RESULT_OK)
+            if (write_result != RESULT_OK)
             {
                 free(buffer);
                 vfs_close(stream);
 
-                konsole_printf("Error: %s\n", vfs_get_result(write_result));
+                konsole_printf("Error: %s\n", results_get(write_result));
 
                 return false;
             }
@@ -979,22 +979,22 @@ bool_t terminal_write(argparse_command_t *command)
     {
         while (input_line = terminal_get_input_line())
         {
-            vfs_result_e write_result = vfs_write(stream, (void*)input_line, strlen(input_line), NULL);
+            result_e write_result = vfs_write(stream, (void*)input_line, strlen(input_line), NULL);
 
-            if (write_result != VFS_RESULT_OK)
+            if (write_result != RESULT_OK)
             {
                 vfs_close(stream);
-                konsole_printf("Error: %s\n", vfs_get_result(write_result));
+                konsole_printf("Error: %s\n", results_get(write_result));
 
                 return false;
             }
 
             write_result = vfs_write(stream, (void*)"\n", 1, NULL);
 
-            if (write_result != VFS_RESULT_OK)
+            if (write_result != RESULT_OK)
             {
                 vfs_close(stream);
-                konsole_printf("Error: %s\n", vfs_get_result(write_result), NULL);
+                konsole_printf("Error: %s\n", results_get(write_result), NULL);
 
                 return false;
             }
@@ -1053,11 +1053,11 @@ bool_t terminal_newfile(argparse_command_t *command)
         return false;
     }
 
-    vfs_result_e newfile_result = vfs_newfile(current_dir, filename, attributes, NULL);
+    result_e newfile_result = vfs_newfile(current_dir, filename, attributes, NULL);
 
-    if (newfile_result != VFS_RESULT_OK)
+    if (newfile_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(newfile_result));
+        konsole_printf("Error: %s\n", results_get(newfile_result));
 
         return false;
     }
@@ -1104,11 +1104,11 @@ bool_t terminal_newdir(argparse_command_t *command)
         return false;
     }
 
-    vfs_result_e newdir_result = vfs_newdir(current_dir, dirname, attributes, NULL);
+    result_e newdir_result = vfs_newdir(current_dir, dirname, attributes, NULL);
 
-    if (newdir_result != VFS_RESULT_OK)
+    if (newdir_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(newdir_result));
+        konsole_printf("Error: %s\n", results_get(newdir_result));
 
         return false;
     }
@@ -1146,11 +1146,11 @@ bool_t terminal_remove(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -1160,10 +1160,10 @@ bool_t terminal_remove(argparse_command_t *command)
 
     for (vfs_search(searcher, &file, 1, &files_read);files_read > 0;vfs_search(searcher, &file, 1, &files_read))
     {
-        vfs_result_e remove_result = vfs_remove(&file);
+        result_e remove_result = vfs_remove(&file);
 
-        if (remove_result != VFS_RESULT_OK)
-            konsole_printf("Error: can't remove file '%s' (%s)\n", file.header.filename, vfs_get_result(remove_result));
+        if (remove_result != RESULT_OK)
+            konsole_printf("Error: can't remove file '%s' (%s)\n", file.header.filename, results_get(remove_result));
 
         vfs_cleanup_file_obj(&file);
     }
@@ -1202,11 +1202,11 @@ bool_t terminal_move(argparse_command_t *command)
 
     vfs_file_t *file_src, *file_dst;
 
-    vfs_result_e result = vfs_get_file_by_path(current_dir, path_src, &file_src);
+    result_e result = vfs_get_file_by_path(current_dir, path_src, &file_src);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(result));
+        konsole_printf("Error: %s\n", results_get(result));
 
         return false;
     }
@@ -1222,11 +1222,11 @@ bool_t terminal_move(argparse_command_t *command)
 
         result = vfs_get_file_by_path(current_dir, path_dst, &creation_dir);
 
-        if (result != VFS_RESULT_OK)
+        if (result != RESULT_OK)
         {
             free(path_dst);
             vfs_cleanup_file_obj(file_src);
-            konsole_printf("Error: %s\n", vfs_get_result(result));
+            konsole_printf("Error: %s\n", results_get(result));
 
             return false;
         }
@@ -1236,12 +1236,12 @@ bool_t terminal_move(argparse_command_t *command)
         creation_dir = malloc(sizeof(vfs_file_t));
         result = vfs_copy_file_obj(creation_dir, current_dir);
 
-        if (result != VFS_RESULT_OK)
+        if (result != RESULT_OK)
         {
             free(path_dst);
             free(creation_dir);
             vfs_cleanup_file_obj(file_src);
-            konsole_printf("Error: %s\n", vfs_get_result(result));
+            konsole_printf("Error: %s\n", results_get(result));
 
             return false;
         }
@@ -1250,30 +1250,30 @@ bool_t terminal_move(argparse_command_t *command)
     result = vfs_newfile(creation_dir, path_dst + delim_index + 1, file_src->header.attributes, &file_dst);
     vfs_cleanup_file_obj(creation_dir);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(path_dst);
         vfs_cleanup_file_obj(file_src);
 
-        konsole_printf("Error: %s\n", vfs_get_result(result));
+        konsole_printf("Error: %s\n", results_get(result));
 
         return false;
     }
 
     result = vfs_move_file(file_dst, file_src);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {   
-        vfs_result_e remove_result = vfs_remove(file_dst);
+        result_e remove_result = vfs_remove(file_dst);
 
-        if (remove_result != VFS_RESULT_OK)
-            konsole_printf("Error (while handling below): %s\n", vfs_get_result(remove_result));
+        if (remove_result != RESULT_OK)
+            konsole_printf("Error (while handling below): %s\n", results_get(remove_result));
 
         free(path_dst);
         vfs_cleanup_file_obj(file_src);
         vfs_cleanup_file_obj(file_dst);
 
-        konsole_printf("Error: %s\n", vfs_get_result(result));
+        konsole_printf("Error: %s\n", results_get(result));
 
         return false;
     }
@@ -1332,11 +1332,11 @@ bool_t terminal_mount(argparse_command_t *command)
         return false;
     }
 
-    vfs_result_e mount_result = vfs_mount_partition(disk_id, partition_num, mountpoint);
+    result_e mount_result = vfs_mount_partition(disk_id, partition_num, mountpoint);
 
-    if (mount_result != VFS_RESULT_OK)
+    if (mount_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(mount_result));
+        konsole_printf("Error: %s\n", results_get(mount_result));
 
         return false;
     }
@@ -1379,11 +1379,11 @@ bool_t terminal_umount(argparse_command_t *command)
 
     if (disk_id != 0xFF && partition_num != 0xFF)
     {
-        vfs_result_e umount_result = vfs_unmount_partition(disk_id, partition_num, VFS_DEFAULT_UMOUNT_THRESHOLD);
+        result_e umount_result = vfs_unmount_partition(disk_id, partition_num, VFS_DEFAULT_UMOUNT_THRESHOLD);
 
-        if (umount_result != VFS_RESULT_OK)
+        if (umount_result != RESULT_OK)
         {
-            konsole_printf("Error: %s\n", vfs_get_result(umount_result));
+            konsole_printf("Error: %s\n", results_get(umount_result));
 
             return false;
         }
@@ -1432,11 +1432,11 @@ bool_t terminal_change_root(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, pattern, ignore_case, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -1467,15 +1467,15 @@ bool_t terminal_change_root(argparse_command_t *command)
     {
         current_dir = malloc(sizeof(vfs_file_t));
 
-        vfs_result_e copy_result = vfs_copy_file_obj(current_dir, root);
+        result_e copy_result = vfs_copy_file_obj(current_dir, root);
 
-        if (copy_result != VFS_RESULT_OK)
+        if (copy_result != RESULT_OK)
         {
             vfs_cleanup_file_obj(root);
             free(root);
             free(current_dir);
 
-            konsole_printf("Error: %s\n", vfs_get_result(copy_result));
+            konsole_printf("Error: %s\n", results_get(copy_result));
 
             return false;
         }
@@ -1517,11 +1517,11 @@ bool_t terminal_exec(argparse_command_t *command)
     }
 
     vfs_tree_searcher_t *searcher;
-    vfs_result_e searcher_result = vfs_create_tree_searcher(current_dir, file_name, false, &searcher);
+    result_e searcher_result = vfs_create_tree_searcher(current_dir, file_name, false, &searcher);
 
-    if (searcher_result != VFS_RESULT_OK)
+    if (searcher_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(searcher_result));
+        konsole_printf("Error: %s\n", results_get(searcher_result));
 
         return false;
     }
@@ -1542,23 +1542,23 @@ bool_t terminal_exec(argparse_command_t *command)
     AUTOFREE_PTR(void) buff = malloc(file->header.size + 1);
 
     vfs_stream_t *stream;
-    vfs_result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
+    result_e open_result = vfs_open(file, VFS_FLAG_READ, &stream);
     vfs_cleanup_file_obj(file);
     free(file);
 
-    if (open_result != VFS_RESULT_OK)
+    if (open_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(open_result));
+        konsole_printf("Error: %s\n", results_get(open_result));
 
         return false;
     }
 
-    vfs_result_e read_result = vfs_read(stream, buff, file->header.size, NULL);
+    result_e read_result = vfs_read(stream, buff, file->header.size, NULL);
     vfs_close(stream);
 
-    if (read_result != VFS_RESULT_OK)
+    if (read_result != RESULT_OK)
     {
-        konsole_printf("Error: %s\n", vfs_get_result(read_result));
+        konsole_printf("Error: %s\n", results_get(read_result));
 
         return false;
     }
@@ -1614,11 +1614,11 @@ bool_t terminal_mount_root()
     if (bootable_partition_id == -1)
         return false;
 
-    vfs_result_e result = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
+    result_e result = vfs_mount_partition(boot_disk_id, bootable_partition_id, "ROOT");
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
-        konsole_printf("Can't mount root: %s\n", vfs_get_result(result));
+        konsole_printf("Can't mount root: %s\n", results_get(result));
 
         return false;
     }

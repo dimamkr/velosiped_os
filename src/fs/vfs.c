@@ -3,34 +3,7 @@
 static hash_table_t *mountpoints;
 static hash_table_t *mountpoints_rev;
 
-static const char* vfs_status_table [] = {
-    [VFS_RESULT_OK] = "Ok",
-    [VFS_RESULT_INVALID_HANDLE] = "Invalid handle",
-    [VFS_RESULT_INVALID_FILENAME] = "Invalid filename",
-    [VFS_RESULT_DISK_ERROR] = "Disk error",
-    [VFS_RESULT_INVALID_DISK_ID] = "Invalid disk ID",
-    [VFS_RESULT_INVALID_PARTITION_NUM] = "Invalid partition num",
-    [VFS_RESULT_NO_FILESYSTEM] = "No filesystem",
-    [VFS_RESULT_MOUNTPOINT_ALREADY_EXISTS] = "Mountpoint already exists",
-    [VFS_RESULT_MOUNTPOINT_NOT_EXISTS] = "Mountpoint not exists",
-    [VFS_RESULT_PARTITION_ALREADY_MOUNTED] = "Partition already mounted",
-    [VFS_RESULT_INVALID_PARAMETER] = "Invalid parameter",
-    [VFS_RESULT_INVALID_METHOD] = "Invalid method",
-    [VFS_RESULT_EMPTY_PATH] = "Path is empty",
-    [VFS_RESULT_FILESYSTEM_MISMATCH] = "Filesystem mismatch",
-    [VFS_RESULT_FILE_ALREADY_EXISTS] = "File already exists",
-    [VFS_RESULT_NOT_WRITABLE] = "Stream is not writable",
-    [VFS_RESULT_NOT_READABLE] = "Stream is not readable",
-    [VFS_RESULT_FILESYSTEM_IS_BUSY] = "Filesystem is busy",
-    [VFS_RESULT_FILE_NOT_FOUND] = "File not found"
-};
-
 static const vfs_platform_specific_methods_t *vfs_platform_table [256] = {NULL};
-
-const char *vfs_get_result(vfs_result_e result)
-{
-    return vfs_status_table[result];
-}
 
 // объекты файлов должны очищаться этой функцией
 void vfs_cleanup_file_obj(vfs_file_t *file)
@@ -49,10 +22,10 @@ static void vfs_info_cleanup_routine(void *_info)
     free(info);
 }
 
-vfs_result_e vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
+result_e vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
 {
     if (dst == NULL || src == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
 
     dst->_file = src->info->methods->copy_file_object(src->_file);
 
@@ -60,14 +33,14 @@ vfs_result_e vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
     {
         src->info->methods->release_file_object(dst->_file);
 
-        return VFS_RESULT_NO_FILESYSTEM;
+        return RESULT_NO_FILESYSTEM;
     }
 
     dst->info = src->info;
 
-    vfs_result_e status = dst->info->methods->get_file_parameters(dst->info->_info, dst->_file, &(dst->header));
+    result_e status = dst->info->methods->get_file_parameters(dst->info->_info, dst->_file, &(dst->header));
 
-    if (status != VFS_RESULT_OK)
+    if (status != RESULT_OK)
     {
         dst->info->methods->release_file_object(dst->_file);
         RC_RELEASE(dst->info);
@@ -76,7 +49,7 @@ vfs_result_e vfs_copy_file_obj(vfs_file_t *dst, const vfs_file_t *src)
         return status;
     }
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
 void vfs_destroy_files_array(dynamic_array_t *files)
@@ -91,20 +64,20 @@ void vfs_destroy_files_array(dynamic_array_t *files)
     dynamic_array_destroy(files);
 }
 
-vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *mountpoint)
+result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *mountpoint)
 {
     const vfs_platform_specific_methods_t *methods = vfs_detect_platform(disk_id, partition_num);
 
     if (methods == NULL)
-        return VFS_RESULT_FILESYSTEM_MISMATCH;
+        return RESULT_FILESYSTEM_MISMATCH;
 
     if (hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1) != NULL)
-        return VFS_RESULT_MOUNTPOINT_ALREADY_EXISTS;
+        return RESULT_MOUNTPOINT_ALREADY_EXISTS;
 
     uint16_t key = MAKEWORD(disk_id, partition_num);
 
     if (hash_table_get(mountpoints_rev, &key, sizeof(uint16_t)) != NULL)
-        return VFS_RESULT_PARTITION_ALREADY_MOUNTED;
+        return RESULT_PARTITION_ALREADY_MOUNTED;
 
     vfs_info_t *info = malloc(sizeof(vfs_info_t));
     vfs_file_t *file = malloc(sizeof(vfs_file_t));
@@ -113,9 +86,9 @@ vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *m
 
     info->methods = methods;
     info->_info = methods->allocate_info_object();
-    vfs_result_e result = methods->get_info(disk_id, partition_num, info->_info);
+    result_e result = methods->get_info(disk_id, partition_num, info->_info);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(info);
         free(file);
@@ -125,7 +98,7 @@ vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *m
 
     result = methods->get_info_header(info->_info, &(info->header));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(info);
         free(file);
@@ -139,7 +112,7 @@ vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *m
 
     result = methods->mount(info->_info, mountpoint, &(file->_file));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         methods->release_info_object(info->_info);
         free(file);
@@ -150,7 +123,7 @@ vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *m
 
     result = methods->get_file_parameters(info->_info, file->_file, &(file->header));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         methods->release_file_object(file->_file);
         methods->release_info_object(info->_info);
@@ -163,22 +136,22 @@ vfs_result_e vfs_mount_partition(uint8_t disk_id, uint8_t partition_num, char *m
     hash_table_insert(mountpoints, mountpoint, strlen(mountpoint) + 1, file, sizeof(vfs_file_t));
     hash_table_insert(mountpoints_rev, &key, sizeof(uint16_t), mountpoint, strlen(mountpoint) + 1);
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
-vfs_result_e vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold)
+result_e vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32_t threshold)
 {
     uint16_t key = MAKEWORD(disk_id, partition_id);
 
     char *mountpoint = hash_table_get(mountpoints_rev, &key, sizeof(uint16_t));
 
     if (mountpoint == NULL)
-        return VFS_RESULT_MOUNTPOINT_NOT_EXISTS;
+        return RESULT_MOUNTPOINT_NOT_FOUND;
 
     vfs_file_t *mp = hash_table_get(mountpoints, mountpoint, strlen(mountpoint) + 1);
 
     if (!RC_DESTROY_IF_LESS(mp->info, threshold))
-        return VFS_RESULT_FILESYSTEM_IS_BUSY;
+        return RESULT_BUSY;
 
     disk_flush_cache_sync(disk_id);
     vfs_cleanup_file_obj(mp);
@@ -186,7 +159,7 @@ vfs_result_e vfs_unmount_partition(uint8_t disk_id, uint8_t partition_id, uint32
     hash_table_erase(mountpoints, mountpoint, strlen(mountpoint) + 1);
     hash_table_erase(mountpoints_rev, &key, sizeof(uint16_t));
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
 dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case)
@@ -205,7 +178,7 @@ dynamic_array_t *vfs_search_mountpoints(const char *pattern, bool_t ignore_case)
 
                 dynamic_array_push_back(results, mp);
 
-                if (vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results)) != VFS_RESULT_OK)
+                if (vfs_copy_file_obj(dynamic_array_get_top(results), dynamic_array_get_top(results)) != RESULT_OK)
                     dynamic_array_pop_back(results);
             }
         }
@@ -228,17 +201,17 @@ void vfs_unmount_partitions_by_name(const char *mountpoint, bool_t ignore_case)
     vfs_destroy_files_array(partitions);
 }
 
-vfs_result_e vfs_open_directory(vfs_file_t *directory, uint32_t iterator_quant_size, const char *pattern, bool_t ignore_case, vfs_directory_reader_t **_result)
+result_e vfs_open_directory(vfs_file_t *directory, uint32_t iterator_quant_size, const char *pattern, bool_t ignore_case, vfs_directory_reader_t **_result)
 {
     if (directory == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     else if (_result == NULL || iterator_quant_size == 0 || !(directory->header.attributes & VFS_ATTRIBUTE_DIRECTORY))
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
 
     vfs_directory_reader_t *reader = malloc(sizeof(vfs_directory_reader_t));
-    vfs_result_e result = directory->info->methods->open_directory(directory->info->_info, directory->_file, &(reader->_reader), iterator_quant_size);
+    result_e result = directory->info->methods->open_directory(directory->info->_info, directory->_file, &(reader->_reader), iterator_quant_size);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(reader);
 
@@ -248,7 +221,7 @@ vfs_result_e vfs_open_directory(vfs_file_t *directory, uint32_t iterator_quant_s
     reader->directory = malloc(sizeof(vfs_file_t));
     result = vfs_copy_file_obj(reader->directory, directory);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         directory->info->methods->close_directory(reader->_reader);
         free(reader);
@@ -265,16 +238,16 @@ vfs_result_e vfs_open_directory(vfs_file_t *directory, uint32_t iterator_quant_s
 
     *_result = reader;
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
 // эта функция - основа большей функции для рекурсивного поиска файлов
-vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
+result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
 {
     if (reader == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     if (buffer == NULL)
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
 
     const vfs_platform_specific_methods_t *methods = reader->directory->info->methods;
 
@@ -292,7 +265,7 @@ vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buff
 
         tmp_file._file = reader->retention_buffer[reader->retention_buffer_index];
             
-        if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != VFS_RESULT_OK)
+        if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != RESULT_OK)
         {
             methods->release_file_object(tmp_file._file);
 
@@ -322,9 +295,9 @@ vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buff
     
     while (files_elapsed != 0)
     {
-        vfs_result_e result = methods->read_directory(reader->_reader, buffer_ps, quants_elapsed * reader->retention_buffer_size, &read_size_ps);
+        result_e result = methods->read_directory(reader->_reader, buffer_ps, quants_elapsed * reader->retention_buffer_size, &read_size_ps);
 
-        if (result != VFS_RESULT_OK)
+        if (result != RESULT_OK)
         {
             free(buffer_ps);
 
@@ -340,7 +313,7 @@ vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buff
 
             tmp_file._file = buffer_ps[buffer_ps_ind];
             
-            if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != VFS_RESULT_OK)
+            if (methods->get_file_parameters(tmp_file.info, tmp_file._file, &(tmp_file.header)) != RESULT_OK)
             {
                 methods->release_file_object(tmp_file._file);
 
@@ -387,7 +360,7 @@ vfs_result_e vfs_read_directory(vfs_directory_reader_t *reader, vfs_file_t *buff
 
     free(buffer_ps);
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
 void vfs_close_directory(vfs_directory_reader_t *reader)
@@ -409,7 +382,7 @@ void vfs_close_directory(vfs_directory_reader_t *reader)
     free(reader);
 }
 
-vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern, bool_t ignore_case, vfs_tree_searcher_t **_searcher)
+result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern, bool_t ignore_case, vfs_tree_searcher_t **_searcher)
 {
     if (pattern == NULL)
         pattern = "*";
@@ -439,16 +412,16 @@ vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern
     {
         free(tree);
 
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
     }
     else
     {
         tree->roots = dynamic_array_create(sizeof(vfs_file_t));
         dynamic_array_push_back(tree->roots, directory);
         
-        vfs_result_e result = vfs_copy_file_obj(dynamic_array_get_top(tree->roots), directory);
+        result_e result = vfs_copy_file_obj(dynamic_array_get_top(tree->roots), directory);
 
-        if (result != VFS_RESULT_OK)
+        if (result != RESULT_OK)
         {
             vfs_destroy_files_array(tree->roots);
             free(tree);
@@ -488,13 +461,13 @@ vfs_result_e vfs_create_tree_searcher(vfs_file_t *directory, const char *pattern
 
     *_searcher = tree;
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
-vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
+result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint32_t buffer_size, uint32_t *read_size)
 {
     if (searcher == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
 
     if (searcher->path_depth == 0)
     {
@@ -530,12 +503,12 @@ vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint3
                     }
                         
                     vfs_file_t *current_dir = dynamic_array_get_top(searcher->roots);
-                    vfs_result_e result = vfs_open_directory(current_dir, VFS_ITERATOR_DEFAULT_QUANT_SIZE, searcher->subpatterns[level], searcher->ignore_case, searcher->layers_stack + level);
+                    result_e result = vfs_open_directory(current_dir, VFS_ITERATOR_DEFAULT_QUANT_SIZE, searcher->subpatterns[level], searcher->ignore_case, searcher->layers_stack + level);
 
                     vfs_cleanup_file_obj(current_dir);
                     dynamic_array_pop_front(searcher->roots);
 
-                    if (result != VFS_RESULT_OK)
+                    if (result != RESULT_OK)
                         continue;
 
                     level++;
@@ -544,9 +517,9 @@ vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint3
                 {
                     vfs_file_t current_dir;
                     uint32_t read_size;
-                    vfs_result_e result = vfs_read_directory(searcher->layers_stack[level-1], &current_dir, 1, &read_size);
+                    result_e result = vfs_read_directory(searcher->layers_stack[level-1], &current_dir, 1, &read_size);
 
-                    if (result != VFS_RESULT_OK)
+                    if (result != RESULT_OK)
                         continue;
 
                     if (read_size == 0)
@@ -561,7 +534,7 @@ vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint3
                     result = vfs_open_directory(&current_dir, VFS_ITERATOR_DEFAULT_QUANT_SIZE, searcher->subpatterns[level], searcher->ignore_case, searcher->layers_stack + level);
                     vfs_cleanup_file_obj(&current_dir);
 
-                    if (result != VFS_RESULT_OK)
+                    if (result != RESULT_OK)
                         continue;
 
                     level++;
@@ -572,23 +545,23 @@ vfs_result_e vfs_search(vfs_tree_searcher_t *searcher, vfs_file_t *buffer, uint3
                 break;
 
             uint32_t files_copied;
-            vfs_result_e result = vfs_read_directory(searcher->layers_stack[searcher->path_depth-1], buffer + buffer_size - files_elapsed, files_elapsed, &files_copied);
+            result_e result = vfs_read_directory(searcher->layers_stack[searcher->path_depth-1], buffer + buffer_size - files_elapsed, files_elapsed, &files_copied);
 
-            if (result != VFS_RESULT_OK || files_copied < files_elapsed)
+            if (result != RESULT_OK || files_copied < files_elapsed)
             {
                 vfs_close_directory(searcher->layers_stack[searcher->path_depth-1]);
                 searcher->layers_stack[searcher->path_depth-1] = NULL;
                 level--;
             }
 
-            if (result == VFS_RESULT_OK)
+            if (result == RESULT_OK)
                 files_elapsed -= files_copied;
         }
 
         *read_size = buffer_size - files_elapsed;
     }
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
 void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher)
@@ -612,12 +585,12 @@ void vfs_destroy_tree_searcher(vfs_tree_searcher_t *searcher)
     free(searcher);
 }
 
-vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs_file_t **file)
+result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs_file_t **file)
 {
     if (current_dir == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     if (path == NULL)
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
 
     char *path_buff = strdup(path);
     char *last_sym = path_buff;
@@ -650,14 +623,14 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
         {
             free(dir);
 
-            return VFS_RESULT_FILE_NOT_FOUND;
+            return RESULT_FILE_NOT_FOUND;
         }
     }
     else
     {
-        vfs_result_e result = vfs_copy_file_obj(dir, current_dir);
+        result_e result = vfs_copy_file_obj(dir, current_dir);
 
-        if (result != VFS_RESULT_OK)
+        if (result != RESULT_OK)
         {
             free(dir);
             free(path_buff);
@@ -687,12 +660,12 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
                     vfs_cleanup_file_obj(dir);
                     free(path_buff);
 
-                    return VFS_RESULT_FILE_NOT_FOUND;
+                    return RESULT_FILE_NOT_FOUND;
                 }
 
-                vfs_result_e result = methods->get_file_by_name(dir->info->_info, dir->_file, last_sym, &(new_file._file));
+                result_e result = methods->get_file_by_name(dir->info->_info, dir->_file, last_sym, &(new_file._file));
 
-                if (result != VFS_RESULT_OK)
+                if (result != RESULT_OK)
                 {
                     vfs_cleanup_file_obj(dir);
                     free(path_buff);
@@ -702,7 +675,7 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
 
                 result = methods->get_file_parameters(dir->info->_info, new_file._file, &(new_file.header));
 
-                if (result != VFS_RESULT_OK)
+                if (result != RESULT_OK)
                 {
                     vfs_cleanup_file_obj(dir);
                     methods->release_file_object(new_file._file);
@@ -719,7 +692,7 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
                     methods->release_file_object(new_file._file);
                     free(path_buff);
 
-                    return VFS_RESULT_NO_FILESYSTEM;
+                    return RESULT_NO_FILESYSTEM;
                 }
 
                 vfs_cleanup_file_obj(dir);
@@ -737,30 +710,30 @@ vfs_result_e vfs_get_file_by_path(vfs_file_t *current_dir, const char *path, vfs
 
     free(path_buff);
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
-vfs_result_e vfs_move_file(vfs_file_t *dst_file, vfs_file_t *src_file)
+result_e vfs_move_file(vfs_file_t *dst_file, vfs_file_t *src_file)
 {
     if (dst_file == NULL || src_file == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     if (dst_file->info != src_file->info)
-        return VFS_RESULT_INVALID_METHOD;
+        return RESULT_INVALID_METHOD;
 
     const vfs_platform_specific_methods_t *methods = dst_file->info->methods;
 
     return methods->move_file(dst_file->info->_info, dst_file->_file, src_file->_file);
 }
 
-vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)
+result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)
 {
     if (file == NULL || file->header.attributes & VFS_ATTRIBUTE_DIRECTORY || file->header.attributes & VFS_ATTRIBUTE_VOLUME_ID)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
 
     vfs_stream_t *stream = malloc(sizeof(vfs_stream_t));
-    vfs_result_e result = file->info->methods->open_file(file->info->_info, file->_file, flags, &(stream->_stream));
+    result_e result = file->info->methods->open_file(file->info->_info, file->_file, flags, &(stream->_stream));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(stream);
 
@@ -771,7 +744,7 @@ vfs_result_e vfs_open(vfs_file_t *file, uint8_t flags, vfs_stream_t **_stream)
     stream->file = malloc(sizeof(vfs_file_t));
     result = vfs_copy_file_obj(stream->file, file);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         free(stream->file);
         file->info->methods->close_file(stream->_stream);
@@ -804,22 +777,22 @@ bool_t vfs_is_filename_allowed(const char *filename)
     return true;
 }
 
-vfs_result_e vfs_erase(vfs_file_t *file)
+result_e vfs_erase(vfs_file_t *file)
 {
-    vfs_result_e result = file->info->methods->erase_file(file->info->_info, file->_file);
+    result_e result = file->info->methods->erase_file(file->info->_info, file->_file);
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
         return result;
 
     return file->info->methods->get_file_parameters(file->info->_info, file->_file, &(file->header));
 }
 
-vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_file)
+result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_file)
 {
     if (dir == NULL || filename == NULL)
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
     if (!vfs_is_filename_allowed(filename))
-        return VFS_RESULT_INVALID_FILENAME;
+        return RESULT_INVALID_FILENAME;
 
     // не проверяем запрещенные комбинации аттрибутов,
     // так как по идее это должен проверить внутренний блок
@@ -832,12 +805,12 @@ vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attribu
         dir->info->methods->release_file_object(file->_file);
         free(file);
 
-        return VFS_RESULT_NO_FILESYSTEM;
+        return RESULT_NO_FILESYSTEM;
     }
 
-    vfs_result_e result = dir->info->methods->create_file(dir->info->_info, dir->_file, filename, attributes, &(file->_file));
+    result_e result = dir->info->methods->create_file(dir->info->_info, dir->_file, filename, attributes, &(file->_file));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         RC_RELEASE(file->info);
         free(file);
@@ -847,7 +820,7 @@ vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attribu
 
     result = file->info->methods->get_file_parameters(file->info->_info, file->_file, &(file->header));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         vfs_cleanup_file_obj(file);
         free(file);
@@ -858,17 +831,17 @@ vfs_result_e vfs_newfile(vfs_file_t *dir, const char *filename, uint32_t attribu
     if (_file)
         *_file = file;
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
-vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_new_dir)
+result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attributes, vfs_file_t **_new_dir)
 {
     if (dir == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     if (filename == NULL)
-        return VFS_RESULT_INVALID_PARAMETER;
+        return RESULT_INVALID_PARAMETER;
     if (!vfs_is_filename_allowed(filename))
-        return VFS_RESULT_INVALID_FILENAME;
+        return RESULT_INVALID_FILENAME;
 
     vfs_file_t *new_dir = malloc(sizeof(vfs_file_t));
     new_dir->info = dir->info;
@@ -878,12 +851,12 @@ vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attribut
         dir->info->methods->release_file_object(new_dir->_file);
         free(new_dir);
 
-        return VFS_RESULT_NO_FILESYSTEM;
+        return RESULT_NO_FILESYSTEM;
     }
 
-    vfs_result_e result = dir->info->methods->create_directory(dir->info->_info, dir->_file, filename, attributes, &(new_dir->_file));
+    result_e result = dir->info->methods->create_directory(dir->info->_info, dir->_file, filename, attributes, &(new_dir->_file));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         RC_RELEASE(new_dir->info);
         free(new_dir);
@@ -893,7 +866,7 @@ vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attribut
 
     result = new_dir->info->methods->get_file_parameters(new_dir->info->_info, new_dir->_file, &(new_dir->header));
 
-    if (result != VFS_RESULT_OK)
+    if (result != RESULT_OK)
     {
         vfs_cleanup_file_obj(new_dir);
         free(new_dir);
@@ -904,13 +877,13 @@ vfs_result_e vfs_newdir(vfs_file_t *dir, const char *filename, uint32_t attribut
     if (_new_dir)
         *_new_dir = new_dir;
 
-    return VFS_RESULT_OK;
+    return RESULT_OK;
 }
 
-vfs_result_e vfs_remove(vfs_file_t *file)
+result_e vfs_remove(vfs_file_t *file)
 {
     if (file == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
 
     return file->info->methods->remove_file(file->info->_info, file->_file);
 }
@@ -918,25 +891,25 @@ vfs_result_e vfs_remove(vfs_file_t *file)
 uint32_t vfs_tell(vfs_stream_t *stream)
 {
     if (stream == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
     
     return stream->file->info->methods->tell(stream->_stream);
 }
 
-vfs_result_e vfs_seek(vfs_stream_t *stream, int offset, uint8_t mode) // unsafe (offset int, но tell - unsigned int)
+result_e vfs_seek(vfs_stream_t *stream, int offset, uint8_t mode) // unsafe (offset int, но tell - unsigned int)
 {
     if (stream == NULL)
-        return VFS_RESULT_INVALID_HANDLE;
+        return RESULT_INVALID_HANDLE;
 
     return stream->file->info->methods->seek(stream->_stream, offset, mode);
 }
 
-vfs_result_e vfs_read(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_read)
+result_e vfs_read(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_read)
 {
     return stream->file->info->methods->read_file(stream->_stream, buffer, bytes, bytes_read);
 }
 
-vfs_result_e vfs_write(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_wrote)
+result_e vfs_write(vfs_stream_t *stream, void *buffer, uint32_t bytes, uint32_t *bytes_wrote)
 {
     return stream->file->info->methods->write_file(stream->_stream, buffer, bytes, bytes_wrote);
 }
@@ -952,6 +925,8 @@ void vfs_close(vfs_stream_t *stream)
 
     free(stream);
 }
+
+// платформы
 
 const vfs_platform_specific_methods_t *vfs_detect_platform(uint8_t disk_id, uint8_t partition_num)
 {
@@ -992,6 +967,33 @@ void vfs_register_platform(uint8_t type, const vfs_platform_specific_methods_t *
 {
     vfs_platform_table[type] = methods;
 }
+
+// Описание методов для FD
+
+// TODO В этом методе возможно только открытие файлов по абсолютному пути,
+// для относительного нужно добавить cwd в процесс 
+static result_e vfs_open_fd(const char *name, uint8_t flags, vfs_stream_t **stream)
+{
+    vfs_file_t *file;
+
+    result_e result = vfs_get_file_by_path(NULL, name, &file);
+
+    if (result != RESULT_OK)
+        return result;
+
+    return vfs_open(file, flags, stream);
+}
+
+const fd_methods_t vfs_methods_table_fd = {
+    .open = (void*)vfs_open_fd,
+    .close = (void*)vfs_close,
+    .read = (void*)vfs_read,
+    .write = (void*)vfs_write,
+    .seek = (void*)vfs_seek,
+    .tell = (void*)vfs_tell
+};
+
+// INIT
 
 void vfs_init()
 {
